@@ -44,7 +44,7 @@ type
     top: pointer    # pointer to the last of the stack
     bottom: pointer # pointer to the first of the stack
 
-  # Tasking
+  # Tasking - internal
   # --------------------------------------------------------------------
 
   TaskDeque[T] = object
@@ -65,6 +65,31 @@ type
     first: Atomic[int]
     pad2: array[CacheLineSize-sizeof(int), byte]
     last: Atomic[int]
+
+  # Tasking - user-facing
+  # --------------------------------------------------------------------
+
+  Task[T] = object of RootObj
+    ## User tasks inherit from this.
+    ## Highly-experimental, inheritance from value types
+    ## might blow in your face.
+    ##
+    ## Plus user task is recursive:
+    ## type ComputePiTask = object of Task[ComputePiTask]
+    worker: ptr Worker[T]
+    taskDeque: ptr TaskDeque[T]
+
+  # Task = concept task, var mut_task
+  #   task is object
+  #   execute(mut_task) # Require an execute routine
+
+  #   # Unfortunately we leak implementationd details with concepts
+  #   task.worker is ptr Worker[task]
+  #   task.deque is ptr TaskDeque[task]
+
+  Worker[T] = object
+    id: int
+    allocator: ptr StackAllocator
 
 # Utils
 # ----------------------------------------------------------------------
@@ -271,3 +296,18 @@ proc steal[T](td: var TaskDeque[T]): Option[T] {.sideeffect.} =
     return none
 
   return
+
+
+# Tests
+# ----------------------------------------------------------------------
+
+when isMainModule:
+
+  type ComputePiTask = object of Task[COmputePiTask]
+    iterStart: int
+    iterEnd: int
+
+  var a: ComputePiTask
+  a.iterEnd = 100
+
+  echo a
