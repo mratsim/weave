@@ -1,11 +1,15 @@
-# 01 - Experiment by storing tasks content as an object instead of
+# 01 - Child-stealing scheduler
+#      with leapfrogging and support for weak memory models
+#
+#      Experiment by storing tasks content as an object instead of
 #      a pointer or closure:
 #      - to limit memory fragmentation and cache misses
 #      - avoid having to deallocate the pointer/closure
 
-# import
-#   # Low-level primitives
-#   system/atomics
+# when not compileOption("threads"):
+#     {.error: "This requires --threads:on compilation flag".}
+
+import atomics, options
 
 # Constants
 # ----------------------------------------------------------------------
@@ -20,8 +24,13 @@ const
 # ----------------------------------------------------------------------
 
 type
+
+  # Memory
+  # --------------------------------------------------------------------
+
   StackAllocator = object
-    ## Pages are pushed and popped from the last of the stack
+    ## Pages are pushed and popped from the last of the stack.
+    ## Note: on destruction, pages are deallocated from first to last.
     pageSize: int
     last: ptr Page
     first: ptr Page
@@ -34,6 +43,28 @@ type
     freeSpace: int
     top: pointer    # pointer to the last of the stack
     bottom: pointer # pointer to the first of the stack
+
+  # Tasking
+  # --------------------------------------------------------------------
+
+  TaskDeque[T] = object
+    ## The owning worker pushes/pops tasks from the end
+    ## of the deque (depth-first) to improve locality of tasks.
+    ##
+    ## The stealing workers pop tasks from the beginning
+    ## of the deque (breadth-first) to improve parallelism
+    ## and limit synchronization.
+    mask: int
+    tasks: ptr UncheckedArray[T]
+
+    # Concurrent access
+    # Need padding to a cache-line
+    pad0: array[CacheLineSize-sizeof(int)-sizeof(pointer), byte]
+    numStolen: Atomic[int]
+    pad1: array[CacheLineSize-sizeof(int), byte]
+    first: Atomic[int]
+    pad2: array[CacheLineSize-sizeof(int), byte]
+    last: Atomic[int]
 
 # Utils
 # ----------------------------------------------------------------------
@@ -59,17 +90,16 @@ func round_step_up*(x: Natural, step: static Natural): int {.inline.} =
 
 # Memory
 # ----------------------------------------------------------------------
+# A Practical Solution to the Cactus Stack Problem
+# http://chaoran.me/assets/pdf/ws-spaa16.pdf
 
 proc posix_memalign(mem: var ptr Page, alignment, size: csize){.sideeffect,importc, header:"<stdlib.h>".}
 proc free(mem: sink pointer){.sideeffect,importc, header:"<stdlib.h>".}
 
 func initPage(mem: pointer, size: int): Page =
-  Page(
-    next: nil,
-    freeSpace: size,
-    top: mem,
-    bottom: cast[pointer](cast[ByteAddress](mem) +% sizeof(Page))
-  )
+  result.freeSpace = size
+  result.top = mem
+  result.bottom = cast[pointer](cast[ByteAddress](mem) +% sizeof(Page))
 
 func align(alignment: static[int], size: int, buffer: var pointer, space: var int): pointer =
   ## Tries to get ``size`` of storage with the specified ``alignment``
@@ -130,7 +160,7 @@ proc initStackAllocator(pageSize: int): StackAllocator =
   result.last = result.first
 
 proc `=destroy`(al: var StackAllocator) =
-  var node = al.last
+  var node = al.first
   while not node.isNil:
     let p = node
     node = node.next
@@ -164,3 +194,80 @@ proc alloc(al: var StackAllocator, T: typedesc): ptr T =
 
 proc allocArray(al: var StackAllocator, T: typedesc, length: int): ptr UncheckedArray[T] =
   result = al.alloc(alignof(T), sizeof(T) * length)
+
+# Task Deque
+# ----------------------------------------------------------------------
+# Correct and Efficient Work-Stealing for Weak Memory Models
+# https://www.di.ens.fr/~zappa/readings/ppopp13.pdf
+
+func initTaskDeque[T](buffer: ptr T, size: int): TaskDeque[T] =
+  assert size.isPowerOf2(), "size must be a power of 2"
+  result.mask = size-1
+  result.tasks = cast[ptr UncheckedArray[T]](buffer)
+  result.top = 1
+  result.bottom = 1
+
+proc push[T](td: var TaskDeque[T], task: sink T) {.sideeffect.}=
+  ## Worker: Append a task at the end of the deque
+
+  let tail = load(td.last, moRelaxed)
+  td.tasks[tail and td.mask] = task
+
+  # Barrier
+  fence(moRelease)
+
+  # Make task visible (and stealable only now)
+  store(td.last, tail+1, moRelaxed)
+
+proc pop[T](td: var TaskDeque[T]): Option[T] {.sideeffect.}=
+  ## Worker: Retrieve a task from the end of the deque
+
+  # Reserve task by decrementing last index
+  let tail = fetchSub(td.last, moRelaxed) - 1
+  let head = load(td.first, moRelaxed)
+  let steals = load(td.numStolen, moRelaxed)
+
+  if tail > head:
+    # Empty deque, restoring to empty state
+    store(td.last, tail+1)
+    td.numStolen = steals
+    return
+
+  if tail == head:
+    # We had 1 task left - try to reserve it by updating head
+    if not compareExchange(td.first, head, head+1, moSequentiallyConsistent, moRelaxed):
+      # Task was stolen
+      td.last = tail+1
+      td.numStolen = steals+1
+      return
+
+    # We won the race
+    td.last = tail+1
+
+  # We won or task can't be stolen (more than 1 task in deque)
+  result = some(td.tasks[tail and td.mask])
+
+proc steal[T](td: var TaskDeque[T]): Option[T] {.sideeffect.} =
+  ## Thief: Retrieve a task from the start of another worker queue
+
+  let head = load(td.first, moAcquire)
+  fence(moSequentiallyConsistent)       # Ensure consistent view of the deque size
+  let tail = load(td.last, moAcquire)
+
+  if head >= tail:
+    # Empty deque
+    return
+
+  # We optimistically steal
+  result = some(td.tasks[td.first and td.mask])
+  discard fetchAdd(td.numStolen, 1, moRelaxed)
+
+  if not compareExchangeWeak(td.first, head, head+1, moSequentiallyConsistent, moRelaxed):
+    # A weak cmpexch (that can fail on timing or cache line reload)
+    # is fine for the thief.
+    #
+    # We were not stealing fast enough
+    discard fetchSub(td.numStolen, 1, moRelaxed)
+    return none
+
+  return
