@@ -1,10 +1,11 @@
-# 01 - Child-stealing scheduler
-#      with leapfrogging and support for weak memory models
+# 01 - port of staccato: https://github.com/rkuchumov/staccato
 #
-#      Experiment by storing tasks content as an object instead of
-#      a pointer or closure:
-#      - to limit memory fragmentation and cache misses
-#      - avoid having to deallocate the pointer/closure
+# Characteristics:
+# - help-first / child-stealing
+# - leapfrogging
+# - Tasks stored as object instead of pointer or closure
+#   - to limit memory fragmentation and cache misses
+#   - avoid having to deallocate the pointer/closure
 
 # when not compileOption("threads"):
 #     {.error: "This requires --threads:on compilation flag".}
