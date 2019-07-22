@@ -6,6 +6,11 @@
 # - Tasks stored as object instead of pointer or closure
 #   - to limit memory fragmentation and cache misses
 #   - avoid having to deallocate the pointer/closure
+#
+# Notes:
+# - There is one scheduler per instantiated type.
+#   This might oversubscribe the system if we schedule
+#   something on float and another part on int
 
 # when not compileOption("threads"):
 #     {.error: "This requires --threads:on compilation flag".}
@@ -79,6 +84,7 @@ type
     ## type ComputePiTask = object of Task[ComputePiTask]
     worker: ptr Worker[T]
     taskDeque: ptr TaskDeque[T]
+    execute: proc()
 
   # Task = concept task, var mut_task
   #   task is object
@@ -91,6 +97,15 @@ type
   Worker[T] = object
     id: int
     allocator: ptr StackAllocator
+    taskgraphDegree: int
+    taskgraphHeight: int
+
+    stopped: Atomic[bool]
+
+    numVictims: Atomic[int]
+    victimsHeads: ptr UncheckedArray[TaskDeque[T]]
+
+    headDeque: ptr TaskDeque[T]
 
 # Utils
 # ----------------------------------------------------------------------
@@ -226,7 +241,10 @@ proc allocArray(al: var StackAllocator, T: typedesc, length: int): ptr Unchecked
 # Correct and Efficient Work-Stealing for Weak Memory Models
 # https://www.di.ens.fr/~zappa/readings/ppopp13.pdf
 
-func initTaskDeque[T](buffer: ptr T, size: int): TaskDeque[T] =
+func initTaskDeque[T](
+       buffer: ptr (T or UncheckedArray[T]),
+       size: int
+      ): TaskDeque[T] =
   assert size.isPowerOf2(), "size must be a power of 2"
   result.mask = size-1
   result.tasks = cast[ptr UncheckedArray[T]](buffer)
@@ -298,6 +316,58 @@ proc steal[T](td: var TaskDeque[T]): Option[T] {.sideeffect.} =
 
   return
 
+# Task
+# ----------------------------------------------------------------------
+
+proc process(task: var Task, worker: ptr Worker, deque: ptr TaskDeque) =
+
+  task.worker = worker
+  task.deque = deque
+
+  task.execute()
+
+# Worker
+# ----------------------------------------------------------------------
+
+proc initWorker(
+       T: typedesc,
+       id: int, allocator: ptr StackAllocator, numVictims: int,
+       taskgraphDegree, taskgraphHeight: int
+     ): Worker[T] =
+  result.id = id
+  result.taskgraphDegree = taskgraphDegree
+  result.taskgraphHeight = taskgraphHeight
+  result.allocator = allocator
+
+  result.victimsHeads = allocator.allocArray(T, numVictims)
+
+  let
+    mem = allocator.alloc(TaskDeque[T])
+    buf = allocator.allocArray(T, taskgraphDegree)
+    td  = initTaskDeque(buf, taskgraphDegree)
+
+  result.headDeque = td.unsafeAddr
+
+  var w = td
+  for i in 1 .. taskgraphHeight:
+    let
+      # init co-workers
+      cmem = allocator.alloc(TaskDeque[T])
+      cbuf = allocator.allocArray(T, taskgraphDegree)
+      ctd  = initTaskDeque(cbuf, taskgraphDegree)
+
+    w.next = cmem
+    w = cmem
+
+proc `=destroy`[T](w: var Worker[T]) =
+  `=destroy`(w.allocator[])
+
+proc cache_victim(w: var Worker, victim: Worker) =
+  w.victimsHeads[w.numVictims] = victim.headDeque
+  inc w.nimVictims
+
+proc push[T](w: Worker[T], task: sink T) {.inline.}=
+  w.headDeque.push(task)
 
 # Tests
 # ----------------------------------------------------------------------
