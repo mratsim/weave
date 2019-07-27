@@ -15,7 +15,9 @@
 # when not compileOption("threads"):
 #     {.error: "This requires --threads:on compilation flag".}
 
-import atomics, options
+import
+  atomics, options, random,
+  ./threading_primitives
 
 # Constants
 # ----------------------------------------------------------------------
@@ -319,10 +321,10 @@ proc steal[T](td: var TaskDeque[T]): Option[T] {.sideeffect.} =
 # Task
 # ----------------------------------------------------------------------
 
-proc process(task: var Task, worker: ptr Worker, deque: ptr TaskDeque) =
+proc process(task: var Task, worker: ptr Worker, deque: TaskDeque) =
 
   task.worker = worker
-  task.deque = deque
+  task.deque = deque.unsafeAddr
 
   task.execute()
 
@@ -368,6 +370,64 @@ proc cache_victim(w: var Worker, victim: Worker) =
 
 proc push[T](w: Worker[T], task: sink T) {.inline.}=
   w.headDeque.push(task)
+
+proc extend[T](tail: var TaskDeque[T], w: Worker[T]) =
+
+  if not tail.next.isNil:
+    # Can only extend if last
+    return
+
+  let
+    mem = w.allocator.alloc(TaskDeque[T])
+    buf = w.allocator.allocArray(T, w.taskgraphDegree)
+    td  = initTaskDeque(buf, w.taskgraphDegree)
+
+  tail.next = td
+
+proc getVictim[T](w: Worker[T]): var TaskDeque[T] =
+  # don't start at 0
+  # And use a different seed per thread
+  var rng {.threadvar.} = randomize(w.id + 1000)
+  let i = rng.rand(w.numVictims-1)
+
+  return w.victimsHead[i]
+
+proc stealLoop[T](w: Worker[T]) =
+  while w.numVictims == 0:
+    threadYield()
+
+  var vtail = w.getVictim()
+  var nowStolen = 0
+
+  while not load(w.stopped, moRelaxed):
+    if nowStolen >= w.taskgraphDegree - 1:
+      if not vtail.next.isNil:
+        vtail = vtail.next
+        nowStolen = 0
+
+    var t = steal(vtail)
+
+    if t.isSome:
+      t.unsafeGet().process(w, w.headDeque)
+      assert w.numStolen > 0
+      discard fetchSub(w.numStolen, 1, moRelaxed)
+
+      # Continue to steal while we have tasks to steal
+      vtail = w.getVictim()
+      nowStolen = 0
+      continue
+
+    # TODO, Staccato has a case where there is no task return
+    # but the dequeue was not empty: when the tentative stolen
+    # task was actually pre-empted by another thread.
+    # Strangely it increases "nowStolen" in that case.
+
+    if not vtail.next.isNil:
+      vtail = vtail.next
+    else:
+      vtail = w.getVictim()
+
+    nowStolen = 0
 
 # Tests
 # ----------------------------------------------------------------------
