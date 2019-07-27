@@ -265,7 +265,7 @@ proc push[T](td: var TaskDeque[T], task: sink T) {.sideeffect.}=
   # Make task visible (and stealable only now)
   store(td.last, tail+1, moRelaxed)
 
-proc pop[T](td: var TaskDeque[T]): Option[T] {.sideeffect.}=
+proc pop[T](td: var TaskDeque[T], numStolen: var int): Option[T] {.sideeffect.}=
   ## Worker: Retrieve a task from the end of the deque
 
   # Reserve task by decrementing last index
@@ -276,7 +276,7 @@ proc pop[T](td: var TaskDeque[T]): Option[T] {.sideeffect.}=
   if tail > head:
     # Empty deque, restoring to empty state
     store(td.last, tail+1)
-    td.numStolen = steals
+    numStolen = steals
     return
 
   if tail == head:
@@ -284,7 +284,7 @@ proc pop[T](td: var TaskDeque[T]): Option[T] {.sideeffect.}=
     if not compareExchange(td.first, head, head+1, moSequentiallyConsistent, moRelaxed):
       # Task was stolen
       td.last = tail+1
-      td.numStolen = steals+1
+      numStolen = steals+1
       return
 
     # We won the race
@@ -321,9 +321,9 @@ proc steal[T](td: var TaskDeque[T]): Option[T] {.sideeffect.} =
 # Task
 # ----------------------------------------------------------------------
 
-proc process(task: var Task, worker: ptr Worker, deque: TaskDeque) =
+proc process(task: var Task, worker: Worker, deque: TaskDeque) =
 
-  task.worker = worker
+  task.worker = worker.unsafeAddr
   task.deque = deque.unsafeAddr
 
   task.execute()
@@ -364,14 +364,14 @@ proc initWorker(
 proc `=destroy`[T](w: var Worker[T]) =
   `=destroy`(w.allocator[])
 
-proc cache_victim(w: var Worker, victim: Worker) =
+proc cacheVictim(w: var Worker, victim: Worker) =
   w.victimsHeads[w.numVictims] = victim.headDeque
   inc w.nimVictims
 
 proc push[T](w: Worker[T], task: sink T) {.inline.}=
   w.headDeque.push(task)
 
-proc extend[T](tail: var TaskDeque[T], w: Worker[T]) =
+proc extend[T](w: Worker[T], tail: var TaskDeque[T]) =
 
   if not tail.next.isNil:
     # Can only extend if last
@@ -405,12 +405,12 @@ proc stealLoop[T](w: Worker[T]) =
         vtail = vtail.next
         nowStolen = 0
 
-    var t = steal(vtail)
+    var task = steal(vtail)
 
-    if t.isSome:
-      t.unsafeGet().process(w, w.headDeque)
-      assert w.numStolen > 0
-      discard fetchSub(w.numStolen, 1, moRelaxed)
+    if task.isSome:
+      task.unsafeGet().process(w, w.headDeque)
+      assert vtail.numStolen > 0
+      discard fetchSub(vtail.numStolen, 1, moRelaxed)
 
       # Continue to steal while we have tasks to steal
       vtail = w.getVictim()
@@ -429,12 +429,73 @@ proc stealLoop[T](w: Worker[T]) =
 
     nowStolen = 0
 
+proc stealTask[T](w: Worker[T], thief: TaskDeque[T], victim: var TaskDeque[T]): Option[T] =
+  if load(w.numVictions == 0):
+    return
+
+  let vtail = w.getVictim()
+  var nowStolen = 0
+
+  while true:
+    if nowStolen >= w.taskgraphDegree - 1:
+      if not vtail.next.isNil:
+        vtail = vtail.next
+        nowStolen = 0
+
+    let task = steal(vtail)
+
+    if task.isSome:
+      victim = vtail
+      return task
+
+    # TODO, Staccato has a case where there is no task return
+    # but the dequeue was not empty: when the tentative stolen
+    # task was actually pre-empted by another thread.
+    # Strangely it increases "nowStolen" in that case.
+
+    if not vtail.next.isNil:
+      vtail = vtail.next
+    else:
+      return none
+
+    nowStolen = 0
+
+proc localTaskLoop[T](w: Worker[T], tail: var TaskDeque[T]) =
+  var task: Option[T]
+  var victim : ptr TaskDeque[T]
+
+  while true:
+    if not task.isNil:
+      w.extend(tail)
+      task.process(w, tail.next)
+
+      if not victim.isNil:
+        assert victim.numStolen > 0
+        discard fetchSub(victim.numStolen, 1, moRelaxed)
+        victim = nil
+
+    var numStolen: int
+    task = tail.pop(numStolen) # Can we avoid copying the task
+
+    if task.isSome:
+      # Found a task, process it
+      continue
+    if numStolen == 0:
+      # Found no task and no-one stole --> nothing to do
+      return
+
+    # Found no task, but still something to do
+    task = stealTask(tail, victim)
+
+    if task.isNone:
+      thread_yield()
+
 # Tests
 # ----------------------------------------------------------------------
 
 when isMainModule:
 
-  type ComputePiTask = object of Task[COmputePiTask]
+  type ComputePiTask = object of Task[ComputePiTask]
     iterStart: int
     iterEnd: int
 
