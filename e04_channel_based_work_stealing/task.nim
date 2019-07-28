@@ -77,5 +77,8 @@ func task_new(): Task {.inline.} =
 func task_delete(task: sink Task) {.inline.} =
   free(task)
 
-func task_data(task: Task): ptr array[TaskDataSize, byte] =
-  return task.data.addr
+# Smoke test
+# -------------------------------
+
+when isMainModule:
+  let x = task_new()
