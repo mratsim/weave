@@ -11,7 +11,8 @@ type
   # Memory
   # --------------------------------------------------------------------
 
-  LifoAllocator* = object
+  LifoAllocator* = ptr LifoAllocatorObj
+  LifoAllocatorObj = object
     ## Pages are pushed and popped from the last of the stack.
     ## Note: on destruction, pages are deallocated from first to last.
     m_page_size*: int
@@ -121,26 +122,27 @@ proc allocate_page(alignment: static[int], size: int): ptr Page =
   # Initialize the page metadata
   result[] = initPage(result, sz - sizeof(Page))
 
-proc initLifoAllocator(page_size: int): LifoAllocator =
+proc newLifoAllocator*(page_size: int): LifoAllocator =
+  result = create(LifoAllocatorObj) # Allocated on the thread-local heap
   result.m_page_size = page_size
   result.m_head = allocate_page(PageAlignment, page_size)
   result.m_tail = result.m_head
 
-proc `=destroy`(al: var LifoAllocator) =
+proc `=destroy`(al: var LifoAllocatorObj) =
   var n = al.m_head
   while not n.isNil:
     let p = n
     n = n.get_next()
     free(p)
 
-proc inc_tail(al: var LifoAllocator, required_size: int) =
+proc inc_tail(al: LifoAllocator, required_size: int) =
   let size = max(al.m_page_size, required_size)
   let p = allocate_page(PageAlignment, size)
 
   al.m_tail.set_next(p)
   al.m_tail = p
 
-proc alloc(al: var LifoAllocator, alignment: static[int], size: int): pointer =
+proc alloc(al: LifoAllocator, alignment: static[int], size: int): pointer =
   result = al.m_tail.alloc(alignment, size)
   if not result.isNil:
     return
@@ -156,8 +158,8 @@ proc alloc(al: var LifoAllocator, alignment: static[int], size: int): pointer =
     #           a thread-local GC needs to be allocated
     raise newException(OutOfMemError, "Unable to allocate memory")
 
-proc alloc(al: var LifoAllocator, T: typedesc): ptr T {.inline.}=
+proc alloc(al: LifoAllocator, T: typedesc): ptr T {.inline.}=
   result = al.alloc(alignof(T), sizeof(T))
 
-proc alloc_array(al: var LifoAllocator, T: typedesc, length: int): ptr UncheckedArray[T] {.inline.}=
+proc alloc_array(al: LifoAllocator, T: typedesc, length: int): ptr UncheckedArray[T] {.inline.}=
   result = al.alloc(alignof(T), sizeof(T) * length)

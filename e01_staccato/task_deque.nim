@@ -43,7 +43,7 @@ type
 func newTaskDeque*(
         T: typedesc,
         size: int,
-        allocator: ptr LifoAllocator
+        allocator: LifoAllocator
       ): TaskDeque[T] =
   assert size.isPowerOf2(), "size must be a power of 2"
 

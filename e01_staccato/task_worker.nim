@@ -34,7 +34,7 @@ type
     m_id: int
     m_taskgraph_degree: int
     m_taskgraph_height: int
-    m_allocator: ptr LifoAllocator
+    m_allocator: LifoAllocator
 
     m_stopped: Atomic[bool]
 
@@ -66,14 +66,12 @@ proc wait(task: Task) =
 # Worker
 # ----------------------------------------------------------------------
 
-proc newWorker(
+proc newWorker*(
        T: typedesc,
-       id: int, allocator: ptr LifoAllocator, nvictims: int,
+       id: int, allocator: LifoAllocator, nvictims: int,
        taskgraph_degree, taskgraph_height: int
      ): Worker[T] =
 
-  # Allocate a worker on the thread-local heap
-  # It is zero-initialized
   result = allocator.alloc(WorkerObj[T])
 
   result.m_id = id
@@ -98,7 +96,7 @@ proc `=destroy`[T](w: var WorkerObj[T]) =
   assert not w.m_allocator.isNil
   `=destroy`(w.m_allocator[])
 
-func cacheVictim(w: Worker, victim: Worker) =
+func cache_victim(w: Worker, victim: Worker) =
   w.m_victims_heads[w.m_nvictims] = victim.m_head_deque
   inc w.m_nvictims
 
