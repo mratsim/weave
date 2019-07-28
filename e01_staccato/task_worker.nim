@@ -24,7 +24,7 @@ type
     ## type ComputePiTask = object of Task[ComputePiTask]
     m_worker: Worker[T]
     m_tail: TaskDeque[T]
-    execute*: proc()
+    execute*: proc(t: T or var T)
 
   # Worker - internal
   # --------------------------------------------------------------------
@@ -53,14 +53,14 @@ proc process(task: var Task, worker: Worker, deque: TaskDeque) =
 
   task.execute()
 
-func child[T](task: Task[T]): ptr T =
-  return task.m_tail.put_allocate()
+func child*[T](task: Task[T]): ptr T =
+  task.m_tail.put_allocate()
 
-func spawn[T](task: Task[T], t: T) =
+func spawn*[T](task: Task[T], t: ptr T) =
   # t is unused
   task.m_tail.put_commit()
 
-proc wait(task: Task) =
+proc wait*(task: Task) =
   task.m_worker.local_loop(task.m_tail)
 
 # Worker

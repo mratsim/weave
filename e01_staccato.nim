@@ -12,17 +12,31 @@
 #   This might oversubscribe the system if we schedule
 #   something on float and another part on int
 
-# when not compileOption("threads"):
-#     {.error: "This requires --threads:on compilation flag".}
+import e01_staccato/scheduler
 
-# import
+type FibTask = object of Task[FibTask]
+  n: int
+  sum: ptr int64
+
+# proc execute(t: var FibTask) =
+#   if t.n <= 2:
+#     t.sum[] = 1
+#     return
+
+#   var x: int64
+#   t.child[] = FibTask(n: n-1, sum: x.addr)
+#   t.spawn(t.child)
+
+#   var y: int64
+#   t.child[] = FibTask(n: n-2, sum: y.addr)
+#   t.spawn(t.child)
+
+#   t.wait()
+
+#   t.sum[] = x + y
 
 
-# type ComputePiTask = object of Task[ComputePiTask]
-#   iterStart: int
-#   iterEnd: int
-
-# var a: ComputePiTask
-# a.iterEnd = 100
-
-# echo a
+## This crashes the compiler
+## with `Error: internal error: getTypeDescAux(tyOr)`
+##
+# var x: FibTask

@@ -8,6 +8,8 @@ import
   ./task_worker, ./lifo_allocator,
   ./threading_primitives
 
+export Task, child, spawn, wait
+
 type
   Weaver[T] = object
     thr: Thread[void]

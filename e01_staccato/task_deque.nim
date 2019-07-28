@@ -65,7 +65,7 @@ func get_next(td: TaskDeque): TaskDeque {.inline.}=
 # Push
 # ----------------------------------------------------------------------
 
-func put_allocate[T](td: TaskDeque[T]): ptr T {.inline.}=
+func put_allocate*[T](td: TaskDeque[T]): ptr T {.inline.}=
   let b = td.m_bottom.load(moRelaxed)
   return addr td.m_array[b and td.m_mask]
 
