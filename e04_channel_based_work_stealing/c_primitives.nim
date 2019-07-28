@@ -13,12 +13,17 @@ proc printf*(formatstr: cstring) {.header: "<stdio.h>", varargs, sideeffect.}
 # Memory
 # -------------------------------------------------------
 
-proc malloc(size: csize): pointer {.header: "<stdio.h>".}
+func malloc(size: csize): pointer {.header: "<stdio.h>".}
+  # We consider that malloc as no side-effect
+  # i.e. it never fails
+  #      and we don't care about pointer addresses
 
-proc malloc*(T: typedesc): ptr T =
-  result = malloc(sizeof(T))
+func malloc*(T: typedesc): ptr T =
+  result = cast[type result](malloc(sizeof(T)))
 
-proc malloc*(T: typedesc, len: Natural): ptr UncheckedArray[T] =
-  result = malloc(sizeof(T) * len)
+func malloc*(T: typedesc, len: Natural): ptr UncheckedArray[T] =
+  result = cast[type result](malloc(sizeof(T) * len))
 
-proc free*(p: pointer) {.header: "<stdio.h>".}
+func free*(p: pointer) {.header: "<stdio.h>".}
+  # We consider that free as no side-effect
+  # i.e. it never fails

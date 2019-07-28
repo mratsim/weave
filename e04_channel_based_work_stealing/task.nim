@@ -33,7 +33,8 @@ const
     padding
 
 type
-  Task = ptr object
+  Task = ptr TaskObj
+  TaskObj = object
     # We save memory by using int32 instead of int
     # We also keep the original "future" name
     # It will be changed to FlowVar in the future for async compat
@@ -61,10 +62,14 @@ func task_zero(task: sink Task): Task {.inline.} =
   return task
 
 func task_new(): Task {.inline.} =
-  result = malloc(Task[])
+  # We consider that task_new has no side-effect
+  # i.e. it never fails
+  #      and we don't care about pointer addresses
+  result = malloc(TaskObj)
   if result.isNil:
-    # writeStackTrace()
-    write(stderr, "Warning: task_new failed\n")
+    {.noSideEffect.}:
+      # writeStackTrace()
+      write(stderr, "Warning: task_new failed\n")
     return
 
   result = task_zero(result)
@@ -73,4 +78,4 @@ func task_delete(task: sink Task) {.inline.} =
   free(task)
 
 func task_data(task: Task): ptr array[TaskDataSize, byte] =
-  return task.data
+  return task.data.addr
