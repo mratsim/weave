@@ -1,5 +1,9 @@
+# Profiling
+# ----------------------------------------------------------------------------------
+
 import
   # Internal
+  ./c_primitives,
   ./timer
 
 # TODO: use runtime cpu frequency detection
@@ -36,10 +40,6 @@ template profile_stop*(name: untyped): untyped {.dirty.} =
   checkName(name)
   timer_stop(`timer _ name`)
 
-proc printf(formatstr: cstring) {.header: "<stdio.h>", varargs.}
-  # Nim interpolation with "%" doesn't support formatting
-  # And strformat requires inlining the variable with the format
-
 template profile_results*(): untyped {.dirty.} =
   # Parsable format
   # The first value should make it easy to grep for these lines, e.g. with
@@ -62,6 +62,9 @@ template profile_results*(): untyped {.dirty.} =
       tkMicroseconds
     )
   )
+
+# Smoke test
+# -------------------------------
 
 when isMainModule:
   let ID = 0
