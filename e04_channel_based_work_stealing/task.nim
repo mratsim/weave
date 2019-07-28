@@ -1,10 +1,9 @@
-# Private memory (PRM) task queue
-# Circular doubly-linked list
-# ----------------------------------------------------------------------------------
-
 import
   # Internal
   ./c_primitives
+
+# Task
+# ----------------------------------------------------------------------------------
 
 const
   TaskDataSize = 192 - 96
@@ -77,8 +76,14 @@ func task_new(): Task {.inline.} =
 func task_delete(task: sink Task) {.inline.} =
   free(task)
 
+# Private memory (PRM) task queue
+# Circular doubly-linked list
+# ----------------------------------------------------------------------------------
+
+# TODO: currently unused
+
 # Smoke test
-# -------------------------------
+# --------------------------------------------------
 
 when isMainModule:
   let x = task_new()
