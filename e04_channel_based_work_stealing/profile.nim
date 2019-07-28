@@ -1,10 +1,10 @@
-# Profiling
-# ----------------------------------------------------------------------------------
-
 import
   # Internal
   ./c_primitives,
   ./timer
+
+# Profiling
+# ----------------------------------------------------------------------------------
 
 # TODO: use runtime cpu frequency detection
 const

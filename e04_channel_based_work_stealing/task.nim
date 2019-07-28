@@ -16,6 +16,7 @@ const
     var padding = 0
     padding += sizeof(pointer)               # parent
     padding += sizeof(pointer)               # prev
+    padding += sizeof(pointer)               # next
     padding += sizeof(proc (param: pointer)) # fn
     padding += sizeof(int32)                 # batch
     padding += sizeof(int32)                 # victim
@@ -32,13 +33,14 @@ const
     padding
 
 type
-  Task = ptr TaskObj
+  Task* = ptr TaskObj
   TaskObj = object
     # We save memory by using int32 instead of int
     # We also keep the original "future" name
     # It will be changed to FlowVar in the future for async compat
-    parent: ptr Task
-    prev: ptr Task
+    parent: Task
+    prev: Task
+    next*: Task
     fn: proc (param: pointer)
     batch: int32
     victim: int32
