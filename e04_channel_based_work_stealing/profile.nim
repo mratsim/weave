@@ -20,27 +20,37 @@ template checkName(name: untyped) =
           """Only "run_task", "enq_deq_task", "send_recv_task", "send_recv_req", "idle" are valid"""
       )
 
+# With untyped dirty templates we need to bind the symbol early
+# otherwise they are resolved too late in a scope where they don't exist/
+# Alternatively we export ./timer.nim.
+
 template profile_decl*(name: untyped): untyped {.dirty.} =
+  bind checkName, Timer
   checkName(name)
   var `timer _ name`{.inject.}: Timer
 
 template profile_extern_decl*(name: untyped): untyped {.dirty.} =
+  bind checkName, Timer
   checkName(name)
   var `timer _ name`*{.inject.}: Timer
 
 template profile_init*(name: untyped): untyped {.dirty.} =
+  bind checkName
   checkName(name)
   timer_new(`timer _ name`, CpuFreqGhz)
 
 template profile_start*(name: untyped): untyped {.dirty.} =
+  bind checkName
   checkName(name)
   timer_start(`timer _ name`)
 
 template profile_stop*(name: untyped): untyped {.dirty.} =
+  bind checkName
   checkName(name)
   timer_stop(`timer _ name`)
 
 template profile_results*(): untyped {.dirty.} =
+  bind timer_elapsed, tkMicroseconds, timers_elapsed
   # Parsable format
   # The first value should make it easy to grep for these lines, e.g. with
   # ./a.out | grep Timer | cut -d, -f2-

@@ -38,25 +38,25 @@ type
     # We save memory by using int32 instead of int
     # We also keep the original "future" name
     # It will be changed to FlowVar in the future for async compat
-    parent: Task
+    parent*: Task
     prev: Task
     next*: Task
-    fn: proc (param: pointer)
+    fn*: proc (param: pointer) # nimcall / closure?
     batch: int32
     victim: int32
-    start: int32
+    start*: int32
     cur: int32
-    stop: int32
+    stop*: int32
     chunks: int32
     sst: int32
-    is_loop: bool
+    is_loop*: bool
     has_future: bool
     # List of futures required by the current task
     futures: pointer
     # Dummy padding data
     pad: array[Padding, byte]
     # User data
-    data: array[TaskDataSize, byte]
+    data*: array[TaskDataSize, byte]
 
 func task_zero(task: sink Task): Task {.inline.} =
   reset(task[])
