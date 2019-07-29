@@ -14,7 +14,7 @@ type
     adaptative
 
 const
-  Platform{.strdefine.} = "SHM"
+  # Platform{.strdefine.} = "SHM"
   Steal{.strdefine.} = "one"
   Split{.strdefine.} = "half"
 

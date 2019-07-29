@@ -5,7 +5,7 @@ import
   # Internal
   ./platform, ./task,
   ./profile,
-  ./primitives/[c, pthread]
+  ./primitives/[c, threads]
 
   # TODO: document compilation flags
 
