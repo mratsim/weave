@@ -23,8 +23,8 @@ when defined(debug):
   assert Debug_CPU_SETSIZE == CpuSetSize, "Platform is misconfigured"
 type
   Pthread* {.importc: "pthread_t", header: "<sys/types.h>".} = distinct culong
-  PthreadAttr* {.importc: "pthread_attr_t", header: "<sys/types.h>".} = object
-  PthreadBarrier* {.importc: "pthread_barrier_t", header: "<sys/types.h>".} = object
+  PthreadAttr* {.byref, importc: "pthread_attr_t", header: "<sys/types.h>".} = object
+  PthreadBarrier* {.byref, importc: "pthread_barrier_t", header: "<sys/types.h>".} = object
 
   Errno* = distinct cint
 
@@ -48,6 +48,17 @@ proc pthread_create*(
   ## Returns an error code 0 if successful
   ## or an error code described in <errno.h>
 
+proc pthread_self*(): Pthread {.header: "<pthread.h>".}
+  ## Obtain the identifier of the current thread
+
+proc pthread_barrier_init*(
+       barrier: PthreadBarrier,
+       attr: PthreadAttr,
+       count: cuint
+     ): Errno {.header: "<pthread.h>".}
+  ## Initialize `narrier` with the attributes `attr`.
+  ## The barrier is opened when `count` waiters arrived.
+
 proc pthread_barrier_wait*(
        barrier: var PthreadBarrier
      ): Errno {.header: "<pthread.h>".}
@@ -56,12 +67,18 @@ proc pthread_barrier_wait*(
 proc pthread_getaffinity_np*(
        thread: Pthread,
        cpuset_size: csize,
-       cpuset: ptr CpuSet
+       cpuset: var CpuSet
   ) {.header: "<pthread.h>".}
-  ## Get bit set in `cpuset` representing the processors thread can run on.
+  ## Get bitset in `cpuset` representing the processors
+  ## the thread can run on.
 
-proc pthread_self*(): Pthread =
-  ## Obtain the identifier of the current thread
+proc pthread_set_affinity_np*(
+       thread: Pthread,
+       cpuset_size: csize,
+       cpuset: CpuSet
+  ) {.header: "<pthread.h>".}
+  ## Limit specified `thread` to run only on the processors
+  ## represented in `cpuset`
 
 # Posix Sched
 # -------------------------------------------------------
