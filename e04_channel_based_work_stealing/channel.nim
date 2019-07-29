@@ -38,6 +38,8 @@ type
     tail: int32
     buffer: ptr UncheckedArray[byte]
 
+  # TODO: Replace this cache by generic ObjectPools
+  #       We can use HList or a Table to keep the list of object pools
   ChannelCache = ptr ChannelCacheObj
   ChannelCacheObj = object
     next: ChannelCache
@@ -134,3 +136,74 @@ proc channel_cache_free() =
 
   assert(channel_cache_len == 0)
   channel_cache = nil
+
+proc channel_alloc(size, n: int32, impl: ChannelImplKind): Channel =
+
+  when ChannelCacheSize > 0:
+    var p = channel_cache
+
+    while not p.isNil:
+      if size == p.chan_size   and
+            n == p.chan_n      and
+            impl == p.chan_impl:
+        # Check if free list contains channel
+        if p.num_cached > 0:
+          dec p.num_cached
+          result = p.cache[p.num_cached]
+          assert(result.is_empty())
+          return
+        else:
+          # All the other lists in cache won't match
+          break
+      p = p.next
+
+  result = malloc(ChannelObj)
+  if result.isNil:
+    raise newException(OutOfMemError, "Could not allocate memory")
+
+  # To buffer n items, we allocate for n+1
+  result.buffer = malloc(byte, (n+1) * size)
+  if result.buffer.isNim:
+    raise newException(OutOfMemError, "Could not allocate memory")
+
+  initLock(result.head_lock)
+  initLock(result.tail_lock)
+
+  result.owner = -1 # TODO
+  result.impl = impl
+  result.closed = false
+  result.size = n+1
+  result.itemsize = size
+  result.head = 0
+  result.tail = 0
+
+  when ChannelCacheSize > 0:
+    # Allocate a cache as well if one of the proper size doesn't exist
+    discard channel_cache_alloc(size, n, impl)
+
+proc channel_free(chan: Channel) =
+  if chan.isNil:
+    return
+
+  when ChannelCacheSize > 0:
+    var p = channel_cache
+    while not p.isNil:
+      if chan.itemsize == p.chan_size and
+         chan.size-1 == p.chan_n      and
+         chan.impl == p.chan_impl:
+        if p.num_cached < ChannelCacheSize:
+          # If space left in cache, cache it
+          p.cache[p.num_cached] = chan
+          inc p.num_cached
+          return
+        else:
+          # All the other lists in cache won't match
+          break
+
+  if not chan.buffer.isNil:
+    free(chan.buffer)
+
+  deinitLock(chan.head_lock)
+  deinitLock(chan.tail_lock)
+
+  free(chan)
