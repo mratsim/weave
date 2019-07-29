@@ -26,6 +26,6 @@ func malloc*(T: typedesc): ptr T =
 func malloc*(T: typedesc, len: Natural): ptr UncheckedArray[T] =
   result = cast[type result](malloc(sizeof(T) * len))
 
-func free*(p: pointer) {.header: "<stdio.h>".}
+func free*(p: sink pointer) {.header: "<stdio.h>".}
   # We consider that free as no side-effect
   # i.e. it never fails
