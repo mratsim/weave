@@ -62,7 +62,7 @@ func task_zero*(task: sink Task): Task {.inline.} =
   reset(task[])
   return task
 
-func task_new(): Task {.inline.} =
+func task_new*(): Task {.inline.} =
   # We consider that task_new has no side-effect
   # i.e. it never fails
   #      and we don't care about pointer addresses

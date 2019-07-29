@@ -2,12 +2,15 @@ import
   # Internal
   ./primitives/threads
 
-proc set_thread_affinity*(t: Pthread, cpu: int32) =
+proc set_thread_affinity*(t: Pthread, cpu: int32) {.inline.}=
   var cpuset {.noinit.}: CpuSet
 
   cpu_zero(cpuset)
   cpu_set(cpu, cpuset)
   pthread_setaffinity_np(t, sizeof(CpuSet), cpuset)
+
+proc set_thread_affinity*(cpu: int32) {.inline.} =
+  set_thread_affinity(pthread_self(), cpu)
 
 proc cpu_count*(): int32 {.inline.} =
   var cpuset {.noinit.}: CpuSet

@@ -38,11 +38,11 @@ type
 # Pthread
 # -------------------------------------------------------
 
-proc pthread_create*(
+proc pthread_create*[T](
        thread: var Pthread,
        attr: ptr PthreadAttr, # In Nim this is a var and how Nim sets a custom stack
-       fn: proc (x: pointer): pointer {.thread, noconv.},
-       arg: pointer
+       fn: proc (x: ptr T): pointer {.thread, noconv.},
+       arg: ptr T
   ): Errno {.header: "<sys/types.h>".}
   ## Create a new thread
   ## Returns an error code 0 if successful
@@ -61,11 +61,15 @@ proc pthread_self*(): Pthread {.header: "<pthread.h>".}
 
 proc pthread_barrier_init*(
        barrier: PthreadBarrier,
-       attr: PthreadAttr,
-       count: cuint
+       attr: PthreadAttr or ptr PthreadAttr,
+       count: range[0'i32..high(int32)]
      ): Errno {.header: "<pthread.h>".}
   ## Initialize `narrier` with the attributes `attr`.
   ## The barrier is opened when `count` waiters arrived.
+
+proc pthread_barrier_destroy*(
+       barrier: sink PthreadBarrier): Errno {.header: "<pthread.h>".}
+  ## Destroy a previously dynamically initialized `barrier`.
 
 proc pthread_barrier_wait*(
        barrier: var PthreadBarrier

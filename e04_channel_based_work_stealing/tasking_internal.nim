@@ -185,7 +185,7 @@ proc tasking_internal_statistics() =
 # pthread_create initializer
 # ----------------------------------------------------------------------------------
 
-proc worker_entry_fn(id: ptr int32): pointer =
+proc worker_entry_fn(id: ptr int32): pointer {.noconv.} =
   ID = id[]
   set_current_task(nil)
   num_tasks_exec = 0
@@ -237,7 +237,7 @@ proc tasking_internal_init() =
   IDs = malloc(int32, num_workers)
   worker_threads = malloc(Pthread, num_workers)
 
-  pthread_barrier_init(global_barrier, nil, num_workers)
+  discard pthread_barrier_init(global_barrier, nil, num_workers)
 
   # Master thread
   ID = 0
@@ -249,12 +249,12 @@ proc tasking_internal_init() =
   # Create num_workers-1 worker threads
   for i in 1 ..< num_workers:
     IDs[i] = i
-    pthread_create(worker_threads[i], nil, worker_entry_fn, IDs[i])
+    discard pthread_create(worker_threads[i], nil, worker_entry_fn, IDs[i].addr)
     # Bind worker threads to available CPUs in a round-robin fashion
     # TODO take into account 2x and 4x Hyper Threading (Xeon Phi)
     set_thread_affinity(worker_threads[i], i mod num_cpus)
 
-    set_current_task(malloc(Task).task_zero())
+    set_current_task(task_new())
 
     num_tasks_exec = 0
     tasking_finished = false
@@ -273,9 +273,9 @@ proc tasking_internal_exit_signal() =
 proc tasking_internal_exit() =
   # Join worker threads
   for i in 1 ..< num_workers:
-    pthread_join(worker_threads[i], nil)
+    discard pthread_join(worker_threads[i], nil)
 
-  pthread_barrier_destroy(global_barrier)
+  discard pthread_barrier_destroy(global_barrier)
   free(worker_threads)
   free(IDs)
   when defined(DISABLE_MANAGER):
