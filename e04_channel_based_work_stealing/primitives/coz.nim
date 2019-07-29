@@ -9,7 +9,7 @@ const cHeader = csourcesPath / "coz.h"
 
 {.passC: "-I" & cSourcesPath .}
 
-# {.pragma: coz, header: cHeader.}
+{.pragma: coz, header: cHeader.}
 # type
 #   coz_counter_t* {.coz, bycopy.} = object
 #     ## Counter info struct, containing both a counter and backoff size
@@ -18,17 +18,11 @@ const cHeader = csourcesPath / "coz.h"
 #   coz_get_counter_t* {.coz.} = proc(kind: cint, name: cstring): coz_counter_t {.cdecl.}
 #     ## The type of the _coz_get_counter function
 
-# var x: coz_get_counter_t # Dummy to ensure import of the header
-
-{.emit: "#include \"coz.h\"".}
-
-template coz_progress_named*(name: static string): untyped =
+proc coz_progress_named*(name: cstring) {.importc: "COZ_PROGRESS_NAMED", coz.}
   ## This must be used in a procedure
   ## and cannot be at top-level
 
-  {.emit: "COZ_PROGRESS_NAMED(\"" & name & "\");".}
-
-# Tasking internal
+# Smoke test
 # ----------------------------------------------------------------------------------
 
 when isMainModule:
