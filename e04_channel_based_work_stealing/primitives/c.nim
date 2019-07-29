@@ -5,6 +5,8 @@ proc printf*(formatstr: cstring) {.header: "<stdio.h>", varargs, sideeffect.}
   # Nim interpolation with "%" doesn't support formatting
   # And strformat requires inlining the variable with the format
 
+proc fprintf*(file: File, formatstr: cstring) {.header: "<stdio.h>", varargs, sideeffect.}
+
 # We use the system malloc to reproduce the original results
 # instead of Nim alloc or implementing our own multithreaded allocator
 # This also allows us to use normal memory leaks detection tools

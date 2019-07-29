@@ -1,5 +1,7 @@
 from strutils import parseEnum
 
+# TODO: document compilation flags
+
 type
   StealKind {.pure.}= enum
     one

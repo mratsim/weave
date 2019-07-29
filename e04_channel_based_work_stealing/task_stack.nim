@@ -1,6 +1,6 @@
 import
   # Internal
-  ./c_primitives,
+  ./primitives/c,
   ./task
 
 # A stack of recently used Task objects (LIFO)
