@@ -48,6 +48,14 @@ proc pthread_create*(
   ## Returns an error code 0 if successful
   ## or an error code described in <errno.h>
 
+proc pthread_join*(
+       thread: Pthread,
+       thread_exit_status: ptr pointer
+     ): Errno {.header: "<pthread.h>".}
+  ## Make calling thread wait for termination of the `thread`.
+  ## The exit status of the thread is stored in `thread_exit_status`,
+  ## if `thread_exit_status` is not nil.
+
 proc pthread_self*(): Pthread {.header: "<pthread.h>".}
   ## Obtain the identifier of the current thread
 

@@ -4,7 +4,7 @@ import
   os, strutils,
   # Internal
   ./platform, ./task,
-  ./profile,
+  ./profile, ./affinity,
   ./primitives/[c, threads]
 
   # TODO: document compilation flags
@@ -19,7 +19,7 @@ when defined(USE_COZ):
 # ----------------------------------------------------------------------------------
 
 when defined(DISABLE_MANAGER):
-  var td_count: Atomic[int32]
+  var td_count: ptr Atomic[int32]
 
 const MaxWorkers* = 256
 
@@ -203,17 +203,91 @@ proc worker_entry_fn(id: ptr int32): pointer =
 
   return nil
 
+# Init tasking system
 # ----------------------------------------------------------------------------------
+
 proc tasking_internal_init() =
-  var num_cpus: int32
   # TODO detect hyper-threading
 
   if existsEnv"WEAVE_NUM_THREADS":
     # num_workers is a global
-    numworkers = getEnv"WEAVE_NUM_THREADS".parseInt.int32
+    num_workers = getEnv"WEAVE_NUM_THREADS".parseInt.int32
     if num_workers <= 0:
       raise newException(ValueError, "WEAVE_NUM_THREADS must be > 0")
     elif num_workers > MaxWorkers:
       printf "WEAVE_NUM_THREADS is truncated to %d\n", MaxWorkers
   else:
     num_workers = countProcessors().int32
+
+  # TODO Question, why the convoluted cpu_count()
+  # when countProcessors / sysconf(_SC_NPROCESSORS_ONLN)
+  # is easy
+  #
+  # Call cpu_count() only once, before changing the affinity of thread 0!
+  # After set_thread_affinity(0), cpu_count() would return 1, and every
+  # thread would end up being pinned to processor 0.
+  let num_cpus {.global.} = cpu_count()
+  printf "Number of CPUs: %d\n", num_cpus
+
+  when defined(DISABLE_MANAGER):
+    # Global - Reserve cache lines to avoid false sharing
+    td_count = cast[ptr Atomic[int32]](malloc(Atomic[int32], 64))
+    store(td_count[], 0, moRelaxed)
+
+  IDs = malloc(int32, num_workers)
+  worker_threads = malloc(Pthread, num_workers)
+
+  pthread_barrier_init(global_barrier, nil, num_workers)
+
+  # Master thread
+  ID = 0
+  IDs[0] = 0
+
+  # Bind master thread to CPU 0
+  set_thread_affinity(0)
+
+  # Create num_workers-1 worker threads
+  for i in 1 ..< num_workers:
+    IDs[i] = i
+    pthread_create(worker_threads[i], nil, worker_entry_fn, IDs[i])
+    # Bind worker threads to available CPUs in a round-robin fashion
+    # TODO take into account 2x and 4x Hyper Threading (Xeon Phi)
+    set_thread_affinity(worker_threads[i], i mod num_cpus)
+
+    set_current_task(malloc(Task).task_zero())
+
+    num_tasks_exec = 0
+    tasking_finished = false
+
+# Teardown tasking system
+# ----------------------------------------------------------------------------------
+
+proc notify_workers() =
+  # TODO - no implementation
+  discard
+
+proc tasking_internal_exit_signal() =
+  notify_workers()
+  tasking_finished = true
+
+proc tasking_internal_exit() =
+  # Join worker threads
+  for i in 1 ..< num_workers:
+    pthread_join(worker_threads[i], nil)
+
+  pthread_barrier_destroy(global_barrier)
+  free(worker_threads)
+  free(IDs)
+  when defined(DISABLE_MANAGER):
+    free(td_count)
+
+  # Deallocate root task
+  assert current_task.is_root_task()
+  free(current_task)
+
+when defined(DISABLED_MANAGER):
+  proc tasking_all_idle(): bool =
+    return load(td_count, moRelaxed) == num_workers
+
+proc tasking_done(): bool =
+  return tasking_finished

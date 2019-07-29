@@ -58,7 +58,7 @@ type
     # User data
     data*: array[TaskDataSize, byte]
 
-func task_zero(task: sink Task): Task {.inline.} =
+func task_zero*(task: sink Task): Task {.inline.} =
   reset(task[])
   return task
 
