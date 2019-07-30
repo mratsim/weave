@@ -260,6 +260,9 @@ proc channel_send_mpmc(
        size: int32
      ): bool =
 
+  assert not chan.isNil # TODO not nil compiler constraint
+  assert not data.isNil
+
   if channel_unbuffered(chan):
     return channel_send_unbuffered_mpmc(chan, data, size)
 
@@ -322,6 +325,9 @@ proc channel_recv_mpmc(
        size: int32
      ): bool =
 
+  assert not chan.isNil # TODO not nil compiler constraint
+  assert not data.isNil
+
   if channel_unbuffered(chan):
     return channel_recv_unbuffered_mpmc(chan, data, size)
 
@@ -377,3 +383,77 @@ proc channel_send_mpsc(
        size: int32
       ): bool {.inline.} =
   channel_send_mpmc(chan, data, size)
+
+proc channel_recv_unbuffered_mpsc(
+       chan: Channel,
+       data: pointer,
+       size: int32
+      ): bool =
+  # Single consumer, no lock needed on reception
+
+  if chan.is_empty_unbuf():
+    return false
+
+  assert chan.is_full_unbuf
+  assert size <= chan.itemsize
+
+  copyMem(data, chan.buffer, size)
+
+  fence(moSequentiallyConsistent)
+
+  chan.head = 0
+  return true
+
+proc channel_recv_mpsc(
+       chan: Channel,
+       data: pointer,
+       size: int32
+      ): bool =
+  # Single consumer, no lock needed on reception
+
+  assert not chan.isNil # TODO not nil compiler constraint
+  assert not data.isNil
+
+  if channel_unbuffered(chan):
+    return channel_recv_unbuffered_mpsc(chan, data, size)
+
+  if chan.is_empty():
+    return false
+
+  assert not chan.is_empty()
+  assert size <= chan.itemsize
+
+  copyMem(
+    data,
+    chan.buffer[chan.head * chan.itemsize].addr,
+    size
+  )
+
+  let newHead = chan.head.incmod(chan.size)
+
+  fence(moSequentiallyConsistent)
+
+  chan.head = newHead
+  return true
+
+proc channel_close_mpsc(chan: Channel): bool =
+  # Unsynchronized
+  assert not chan.isNil
+
+  if chan.channel_closed():
+    # Already closed
+    return false
+
+  chan.closed.store(true, moRelaxed)
+  return true
+
+proc channel_open_mpsc(chan: Channel): bool =
+  # Unsynchronized
+  assert not chan.isNil
+
+  if not chan.channel_closed():
+    # Already open
+    return true
+
+  chan.closed.store(false, moRelaxed)
+  return true
