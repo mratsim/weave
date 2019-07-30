@@ -92,11 +92,19 @@ func channel_unbuffered(chan: Channel): bool =
   assert chan.size >= 0
   chan.size - 1 == 0
 
-# Channel status
+# Channel status and properties
 # ----------------------------------------------------------------------------------
 
-proc channel_closed(chan: Channel): bool {.inline.}=
+proc channel_closed(chan: Channel): bool {.inline.} =
   load(chan.closed, moRelaxed)
+
+proc channel_capacity(chan: Channel): int32 {.inline.} =
+  return chan.size - 1
+
+proc channel_peek(chan: Channel): int32 =
+  if chan.channel_unbuffered():
+    return num_items_unbuf(chan)
+  return num_items(chan)
 
 # Per-thread channel cache
 # ----------------------------------------------------------------------------------
@@ -232,7 +240,7 @@ proc channel_free(chan: Channel) =
 
 proc channel_send_unbuffered_mpmc(
        chan: Channel,
-       data: pointer,
+       data: sink pointer,
        size: int32
      ): bool =
   if chan.is_full_unbuf():
@@ -256,7 +264,7 @@ proc channel_send_unbuffered_mpmc(
 
 proc channel_send_mpmc(
        chan: Channel,
-       data: pointer,
+       data: sink pointer,
        size: int32
      ): bool =
 
@@ -379,9 +387,10 @@ proc channel_open_mpmc(chan: Channel): bool =
 
 proc channel_send_mpsc(
        chan: Channel,
-       data: pointer,
+       data: sink pointer,
        size: int32
-      ): bool {.inline.} =
+      ): bool =
+  # Cannot be inline due to function table
   channel_send_mpmc(chan, data, size)
 
 proc channel_recv_unbuffered_mpsc(
@@ -453,7 +462,150 @@ proc channel_open_mpsc(chan: Channel): bool =
 
   if not chan.channel_closed():
     # Already open
-    return true
+    return false
 
   chan.closed.store(false, moRelaxed)
   return true
+
+# SPSC Channels (Single-Producer Single-Consumer)
+# ----------------------------------------------------------------------------------
+
+proc channel_send_unbuffered_spsc(
+       chan: Channel,
+       data: sink pointer,
+       size: int32
+      ): bool =
+  if chan.is_full_unbuf:
+    return false
+
+  assert chan.is_empty_unbuf
+  assert size <= chan.itemsize
+  copyMem(chan.buffer, data, size)
+
+  fence(moSequentiallyConsistent)
+
+  chan.head = 1
+  return true
+
+proc channel_send_spsc(
+       chan: Channel,
+       data: sink pointer,
+       size: int32
+      ): bool =
+  assert not chan.isNil
+  assert not data.isNil
+
+  if chan.channel_unbuffered():
+    return channel_send_unbuffered_spsc(chan, data, size)
+
+  if chan.is_full():
+    return false
+
+  assert not chan.is_full()
+  assert size <= chan.itemsize
+  copyMem(
+    chan.buffer[chan.tail * chan.itemsize].addr,
+    data,
+    size
+  )
+
+  let newTail = chan.tail.incmod(chan.size)
+
+  fence(moSequentiallyConsistent)
+
+  chan.tail = newTail
+  return true
+
+proc channel_recv_spsc(
+       chan: Channel,
+       data: pointer,
+       size: int32
+      ): bool =
+  # Cannot be inline due to function table
+  channel_recv_mpsc(chan, data, size)
+
+proc channel_close_spsc(chan: Channel): bool =
+  # Unsynchronized
+  assert not chan.isNil
+
+  if chan.channel_closed():
+    # Already closed
+    return false
+
+  chan.closed.store(true, moRelaxed)
+  return true
+
+proc channel_open_spsc(chan: Channel): bool =
+  # Unsynchronized
+  assert not chan.isNil
+
+  if not chan.channel_closed():
+    # Already open
+    return false
+
+  chan.closed.store(false, moRelaxed)
+  return true
+
+# "Generic" dispatch
+# ----------------------------------------------------------------------------------
+
+const
+  send_fn = [
+    Mpmc: channel_send_mpmc,
+    Mpsc: channel_send_mpsc,
+    Spsc: channel_send_spsc
+  ]
+
+  recv_fn = [
+    Mpmc: channel_recv_mpmc,
+    Mpsc: channel_recv_mpsc,
+    Spsc: channel_recv_spsc
+  ]
+
+  close_fn = [
+    Mpmc: channel_close_mpmc,
+    Mpsc: channel_close_mpsc,
+    Spsc: channel_close_spsc
+  ]
+
+  open_fn = [
+    Mpmc: channel_open_mpmc,
+    Mpsc: channel_open_mpsc,
+    Spsc: channel_open_spsc
+  ]
+
+proc channel_send(chan: Channel, data: sink pointer, size: int32): bool {.inline.}=
+  ## Send item to the channel (FIFO queue)
+  ## (Insert at last)
+  send_fn[chan.impl](chan, data, size)
+
+proc channel_receive(chan: Channel, data: pointer, size: int32): bool {.inline.}=
+  ## Receive an item from the channel
+  ## (Remove the first item)
+  recv_fn[chan.impl](chan, data, size)
+
+proc channel_close(chan: Channel): bool {.inline.}=
+  ## Close a channel
+  close_fn[chan.impl](chan)
+
+proc channel_open(chan: Channel): bool {.inline.}=
+  ## (Re)open a channel
+  close_fn[chan.impl](chan)
+
+template channel_send(chan: Channel,
+                      data: sink pointer,
+                      size: int32,
+                      body: untyped): untyped =
+  while not channel_send(chan, data, size):
+    body
+
+template channel_receive(chan: Channel,
+                         data: sink pointer,
+                         size: int32,
+                         body: untyped): untyped =
+  while not channel_send(chan, data, size):
+    body
+
+# Tests
+# ----------------------------------------------------------------------------------
+
