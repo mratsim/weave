@@ -784,11 +784,11 @@ when isMainModule:
     test "Explicit caches allocation":
       check:
         channel_cache_alloc(int32 sizeof(char), 4, Mpmc)
-        channel_cache_alloc(int32 sizeof(int), 8, Mpsc)
+        channel_cache_alloc(int32 sizeof(int32), 8, Mpsc)
         channel_cache_alloc(int32 sizeof(ptr float64), 16, Spsc)
 
         not channel_cache_alloc(int32 sizeof(char), 4, Mpmc)
-        not channel_cache_alloc(int32 sizeof(int), 8, Mpsc)
+        not channel_cache_alloc(int32 sizeof(int32), 8, Mpsc)
         not channel_cache_alloc(int32 sizeof(ptr float64), 16, Spsc)
 
       check:
@@ -797,3 +797,18 @@ when isMainModule:
         channel_cache.next.next.chan_impl == Mpmc
 
         channel_cache_len == 3
+
+    test "Implicit caches allocation":
+      var chan, stash: array[10, Channel]
+
+      chan[0] = channel_alloc(int32 sizeof(char), 4, Mpmc)
+      chan[1] = channel_alloc(int32 sizeof(int32), 8, Mpsc)
+      chan[2] = channel_alloc(int32 sizeof(ptr float64), 16, Spsc)
+
+      chan[3] = channel_alloc(int32 sizeof(char), 5, Mpmc)
+      chan[4] = channel_alloc(int32 sizeof(int64), 8, Mpsc)
+      chan[5] = channel_alloc(int32 sizeof(ptr float64), 16, Mpsc)
+
+      check: channel_cache_len == 6 # Cumulated with previous test
+      for i in 0 .. 5:
+        check: not chan[i].is_cached()
