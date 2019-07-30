@@ -609,3 +609,80 @@ template channel_receive(chan: Channel,
 # Tests
 # ----------------------------------------------------------------------------------
 
+when isMainModule:
+  import unittest, strformat
+
+  type Thread_args = object
+    ID: int32
+    chan: Channel
+
+  template Worker(id: int32, body: untyped): untyped =
+    if A.ID == id:
+      body
+
+  template Master(body: untyped): untyped =
+    Worker(0, body)
+
+  proc thread_func(args: pointer): pointer =
+
+    let A = cast[ptr Thread_args](args)
+
+    const Sender = 1
+    const Receiver = 0
+
+    #
+    # Worker RECEIVER:
+    # ---------
+    # <- chan
+    # <- chan
+    # <- chan
+    #
+    # Worker SENDER:
+    # ---------
+    # chan <- 42
+    # chan <- 53
+    # chan <- 64
+    #
+
+    Worker(Receiver):
+      var val: int
+      for j in 0 ..< 3:
+        channel_receive(A.chan, val.addr, sizeof(val).int32):
+          # Busy loop, normally it should yield
+          discard
+        doAssert(val == 42 + j*11)
+
+    Worker(Sender):
+      var val: int
+      doAssert(channel_peek(A.chan) == 0)
+      for j in 0 ..< 3:
+        val = 42 + j*11
+        channel_send(A.chan, val.addr, sizeof(val).int32):
+          # Busy loop, normally it should yield
+          discard
+
+    return nil
+
+  suite "Channel implementations test":
+
+    var chan: Channel
+
+    for impl in Mpmc .. Spsc:
+      for i in Unbuffered .. Buffered:
+        test &"{i:10} {impl} channels":
+          if i == Unbuffered:
+            chan = channel_alloc(size = 32, n = 0, impl)
+            check:
+              channel_peek(chan) == 0
+              channel_capacity(chan) == 0
+              channel_buffered(chan) == false
+              channel_unbuffered(chan) == true
+              chan.impl == impl
+          else:
+            chan = channel_alloc(size = sizeof(int).int32, n = 7, impl)
+            check:
+              channel_peek(chan) == 0
+              channel_capacity(chan) == 7
+              channel_buffered(chan) == true
+              channel_unbuffered(chan) == false
+              chan.impl == impl
