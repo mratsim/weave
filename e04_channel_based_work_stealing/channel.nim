@@ -600,37 +600,84 @@ template channel_send(chan: Channel,
     body
 
 template channel_receive(chan: Channel,
-                         data: sink pointer,
+                         data: pointer,
                          size: int32,
                          body: untyped): untyped =
-  while not channel_send(chan, data, size):
+  while not channel_receive(chan, data, size):
     body
 
 # Tests
 # ----------------------------------------------------------------------------------
 
 when isMainModule:
+
+  when not compileOption("threads"):
+    {.error: "This requires --threads:on compilation flag".}
+
+  # Without threads:on or release,
+  # worker threads will crash on popFrame
+
   import unittest, strformat
 
-  type Thread_args = object
+  type ThreadArgs = object
     ID: int32
     chan: Channel
 
-  template Worker(id: int32, body: untyped): untyped =
-    if A.ID == id:
+  template Worker(id: int32, body: untyped): untyped {.dirty.}=
+    if args.ID == id:
       body
 
   template Master(body: untyped): untyped =
     Worker(0, body)
 
-  proc thread_func(args: pointer): pointer =
+  const Sender = 1
+  const Receiver = 0
 
-    let A = cast[ptr Thread_args](args)
+  proc runSuite(
+             name: string,
+             fn: proc(args: ptr ThreadArgs): pointer {.noconv, gcsafe.}
+           ) =
+    suite name:
+      var chan: Channel
 
-    const Sender = 1
-    const Receiver = 0
+      for impl in Mpmc .. Spsc:
+        for i in Unbuffered .. Buffered:
+          test &"{i:10} {impl} channels":
+            if i == Unbuffered:
+              chan = channel_alloc(size = 32, n = 0, impl)
+              check:
+                channel_peek(chan) == 0
+                channel_capacity(chan) == 0
+                channel_buffered(chan) == false
+                channel_unbuffered(chan) == true
+                chan.impl == impl
+            else:
+              chan = channel_alloc(size = int.sizeof.int32, n = 7, impl)
+              check:
+                channel_peek(chan) == 0
+                channel_capacity(chan) == 7
+                channel_buffered(chan) == true
+                channel_unbuffered(chan) == false
+                chan.impl == impl
 
-    #
+            var threads: array[2, Pthread]
+            var args = [
+              ThreadArgs(ID: 0, chan: chan),
+              ThreadArgs(ID: 1, chan: chan)
+            ]
+
+            discard pthread_create(threads[0], nil, fn, args[0].addr)
+            discard pthread_create(threads[1], nil, fn, args[1].addr)
+
+            discard pthread_join(threads[0], nil)
+            discard pthread_join(threads[1], nil)
+
+            channel_free(chan)
+
+  # ----------------------------------------------------------------------------------
+
+  proc thread_func(args: ptr ThreadArgs): pointer {.noconv.} =
+
     # Worker RECEIVER:
     # ---------
     # <- chan
@@ -647,42 +694,61 @@ when isMainModule:
     Worker(Receiver):
       var val: int
       for j in 0 ..< 3:
-        channel_receive(A.chan, val.addr, sizeof(val).int32):
+        channel_receive(args.chan, val.addr, val.sizeof.int32):
           # Busy loop, normally it should yield
           discard
-        doAssert(val == 42 + j*11)
+        check: val == 42 + j*11
 
     Worker(Sender):
       var val: int
-      doAssert(channel_peek(A.chan) == 0)
+      check: channel_peek(args.chan) == 0
       for j in 0 ..< 3:
         val = 42 + j*11
-        channel_send(A.chan, val.addr, sizeof(val).int32):
+        channel_send(args.chan, val.addr, val.sizeof.int32):
           # Busy loop, normally it should yield
           discard
 
     return nil
 
-  suite "Channel implementations test":
+  runSuite("[Channel] 2 threads can send data", thread_func)
 
-    var chan: Channel
+  # ----------------------------------------------------------------------------------
 
-    for impl in Mpmc .. Spsc:
-      for i in Unbuffered .. Buffered:
-        test &"{i:10} {impl} channels":
-          if i == Unbuffered:
-            chan = channel_alloc(size = 32, n = 0, impl)
-            check:
-              channel_peek(chan) == 0
-              channel_capacity(chan) == 0
-              channel_buffered(chan) == false
-              channel_unbuffered(chan) == true
-              chan.impl == impl
-          else:
-            chan = channel_alloc(size = sizeof(int).int32, n = 7, impl)
-            check:
-              channel_peek(chan) == 0
-              channel_capacity(chan) == 7
-              channel_buffered(chan) == true
-              channel_unbuffered(chan) == false
-              chan.impl == impl
+  iterator pairs(chan: Channel, T: typedesc): (int, T) =
+    var
+      i: int
+      x: T
+    while not channel_closed(chan) or channel_peek(chan) > 0:
+      if not channel_receive(chan, x.addr, x.sizeof.int32):
+        continue
+      else:
+        yield (i, x)
+        inc i
+
+  proc thread_func_2(args: ptr ThreadArgs): pointer {.noconv.}=
+
+    # Worker RECEIVER:
+    # ---------
+    # <- chan until closed and empty
+    #
+    # Worker SENDER:
+    # ---------
+    # chan <- 42, 53, 64, ...
+
+    const N = 100
+
+    Worker(Receiver):
+      for j, val in pairs(args.chan, int):
+        check: val == 42 + j*11
+
+    Worker(Sender):
+      var val: int
+      check: channel_peek(args.chan) == 0
+      for j in 0 ..< N:
+        val = 42 + j*11
+        discard channel_send(args.chan, val.addr, int.sizeof.int32)
+      discard channel_close(args.chan)
+
+    return nil
+
+  runSuite("[Channel] Channel can close", thread_func_2)
