@@ -209,8 +209,8 @@ proc channel_alloc(size, n: int32, impl: ChannelImplKind): Channel =
     discard channel_cache_alloc(size, n, impl)
 
 proc channel_free(chan: Channel) =
-  # if chan.isNil:
-  #   return
+  if chan.isNil:
+    return
 
   when ChannelCacheSize > 0:
     var p = channel_cache
@@ -226,6 +226,7 @@ proc channel_free(chan: Channel) =
         else:
           # All the other lists in cache won't match
           break
+      p = p.next
 
   if not chan.buffer.isNil:
     free(chan.buffer)
@@ -376,7 +377,7 @@ proc channel_open_mpmc(chan: Channel): bool =
   # Unsynchronized
 
   if not chan.channel_closed:
-    # CHannel already open
+    # Channel already open
     return false
 
   store(chan.closed, false, moRelaxed)
@@ -592,14 +593,14 @@ proc channel_open(chan: Channel): bool {.inline.}=
   ## (Re)open a channel
   close_fn[chan.impl](chan)
 
-template channel_send(chan: Channel,
+template channel_send_loop(chan: Channel,
                       data: sink pointer,
                       size: int32,
                       body: untyped): untyped =
   while not channel_send(chan, data, size):
     body
 
-template channel_receive(chan: Channel,
+template channel_receive_loop(chan: Channel,
                          data: pointer,
                          size: int32,
                          body: untyped): untyped =
@@ -694,7 +695,7 @@ when isMainModule:
     Worker(Receiver):
       var val: int
       for j in 0 ..< 3:
-        channel_receive(args.chan, val.addr, val.sizeof.int32):
+        channel_receive_loop(args.chan, val.addr, val.sizeof.int32):
           # Busy loop, normally it should yield
           discard
         check: val == 42 + j*11
@@ -704,7 +705,7 @@ when isMainModule:
       check: channel_peek(args.chan) == 0
       for j in 0 ..< 3:
         val = 42 + j*11
-        channel_send(args.chan, val.addr, val.sizeof.int32):
+        channel_send_loop(args.chan, val.addr, val.sizeof.int32):
           # Busy loop, normally it should yield
           discard
 
@@ -718,8 +719,10 @@ when isMainModule:
     var
       i: int
       x: T
-    while not channel_closed(chan) or channel_peek(chan) > 0:
-      if not channel_receive(chan, x.addr, x.sizeof.int32):
+    while not(channel_closed(chan)) or (channel_peek(chan) > 0):
+      let r = channel_receive(chan, x.addr, x.sizeof.int32)
+      # printf("x: %d, r: %d\n", x, r)
+      if not r:
         continue
       else:
         yield (i, x)
@@ -739,6 +742,10 @@ when isMainModule:
 
     Worker(Receiver):
       for j, val in pairs(args.chan, int):
+        # TODO: Need special handling that doesn't allocate
+        #       in thread with no GC
+        #       when check fails
+        #
         check: val == 42 + j*11
 
     Worker(Sender):
@@ -746,9 +753,10 @@ when isMainModule:
       check: channel_peek(args.chan) == 0
       for j in 0 ..< N:
         val = 42 + j*11
-        discard channel_send(args.chan, val.addr, int.sizeof.int32)
+        channel_send_loop(args.chan, val.addr, int.sizeof.int32):
+          discard
       discard channel_close(args.chan)
 
     return nil
 
-  runSuite("[Channel] Channel can close", thread_func_2)
+  runSuite("[Channel] channel_close, channel_free, channel_cache", thread_func_2)
