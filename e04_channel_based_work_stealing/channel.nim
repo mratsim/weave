@@ -50,7 +50,8 @@ type
     num_cached: int32
     cache: array[ChannelCacheSize, Channel]
 
-{.experimental: "notnil".}
+# {.experimental: "notnil".} - TODO
+
 # ----------------------------------------------------------------------------------
 
 func incmod(idx, size: int32): int32 {.inline.} =
@@ -59,35 +60,35 @@ func incmod(idx, size: int32): int32 {.inline.} =
 func decmod(idx, size: int32): int32 {.inline.} =
   (idx - 1) mod size
 
-func num_items(chan: Channel not nil): int32 {.inline.} =
+func num_items(chan: Channel): int32 {.inline.} =
   (chan.size + chan.tail - chan.head) mod chan.size
 
-func is_full(chan: Channel not nil): bool {.inline.} =
+func is_full(chan: Channel): bool {.inline.} =
   chan.num_items() == chan.size - 1
 
-func is_empty(chan: Channel not nil): bool {.inline.} =
+func is_empty(chan: Channel): bool {.inline.} =
   chan.head == chan.tail
 
 # Unbuffered / synchronous channels
 # ----------------------------------------------------------------------------------
 
-func num_items_unbuf(chan: Channel not nil): int32 {.inline.} =
+func num_items_unbuf(chan: Channel): int32 {.inline.} =
   # TODO: use range 0..1 but type mismatch
   chan.head
 
-func is_full_unbuf(chan: Channel not nil): bool {.inline.} =
+func is_full_unbuf(chan: Channel): bool {.inline.} =
   chan.head == 1
 
-func is_empty_unbuf(chan: Channel not nil): bool {.inline.} =
+func is_empty_unbuf(chan: Channel): bool {.inline.} =
   chan.head == 0
 
 # Channel kinds
 # ----------------------------------------------------------------------------------
 
-func channel_buffered(chan: Channel not nil): bool =
+func channel_buffered(chan: Channel): bool =
   chan.size - 1 > 0
 
-func channel_unbuffered(chan: Channel not nil): bool =
+func channel_unbuffered(chan: Channel): bool =
   assert chan.size >= 0
   chan.size - 1 == 0
 
@@ -155,7 +156,7 @@ proc channel_cache_free() =
   assert(channel_cache_len == 0)
   channel_cache = nil
 
-proc channel_alloc(size, n: int32, impl: ChannelImplKind): Channel not nil =
+proc channel_alloc(size, n: int32, impl: ChannelImplKind): Channel =
 
   when ChannelCacheSize > 0:
     var p = channel_cache
@@ -189,7 +190,7 @@ proc channel_alloc(size, n: int32, impl: ChannelImplKind): Channel not nil =
 
   result.owner = -1 # TODO
   result.impl = impl
-  result.closed = false
+  result.closed.store(false, moRelaxed) # We don't need atomic here, how to?
   result.size = n+1
   result.itemsize = size
   result.head = 0
@@ -199,7 +200,7 @@ proc channel_alloc(size, n: int32, impl: ChannelImplKind): Channel not nil =
     # Allocate a cache as well if one of the proper size doesn't exist
     discard channel_cache_alloc(size, n, impl)
 
-proc channel_free(chan: Channel not nil) =
+proc channel_free(chan: Channel) =
   # if chan.isNil:
   #   return
 
@@ -226,12 +227,12 @@ proc channel_free(chan: Channel not nil) =
 
   free(chan)
 
-# MPMC Channels (Multi-Producer Multi Consumer)
+# MPMC Channels (Multi-Producer Multi-Consumer)
 # ----------------------------------------------------------------------------------
 
 proc channel_send_unbuffered_mpmc(
-       chan: Channel not nil,
-       data: pointer not nil,
+       chan: Channel,
+       data: pointer,
        size: int32
      ): bool =
   if chan.is_full_unbuf():
@@ -254,8 +255,8 @@ proc channel_send_unbuffered_mpmc(
   return true
 
 proc channel_send_mpmc(
-       chan: Channel not nil,
-       data: pointer not nil,
+       chan: Channel,
+       data: pointer,
        size: int32
      ): bool =
 
@@ -287,8 +288,8 @@ proc channel_send_mpmc(
   return true
 
 proc channel_recv_unbuffered_mpmc(
-       chan: Channel not nil,
-       data: pointer not nil,
+       chan: Channel,
+       data: pointer,
        size: int32
      ): bool =
   if chan.is_empty_unbuf():
@@ -316,13 +317,13 @@ proc channel_recv_unbuffered_mpmc(
   return true
 
 proc channel_recv_mpmc(
-       chan: Channel not nil,
-       data: pointer not nil,
+       chan: Channel,
+       data: pointer,
        size: int32
      ): bool =
 
   if channel_unbuffered(chan):
-    return channem_recv_unbuffered_mpmc(chan, data, size)
+    return channel_recv_unbuffered_mpmc(chan, data, size)
 
   if chan.is_empty():
     return false
@@ -342,12 +343,12 @@ proc channel_recv_mpmc(
     size
   )
 
-  chan.head = chan.head.incmod(chan.head, chan.size)
+  chan.head = chan.head.incmod(chan.size)
 
   release(chan.head_lock)
   return true
 
-proc channel_close_mpmc(chan: Channel not nil): bool =
+proc channel_close_mpmc(chan: Channel): bool =
   # Unsynchronized
 
   if chan.channel_closed():
@@ -357,7 +358,7 @@ proc channel_close_mpmc(chan: Channel not nil): bool =
   store(chan.closed, true, moRelaxed)
   return true
 
-proc channel_open_mpmc(chan: Channel not nil): bool =
+proc channel_open_mpmc(chan: Channel): bool =
   # Unsynchronized
 
   if not chan.channel_closed:
@@ -366,3 +367,13 @@ proc channel_open_mpmc(chan: Channel not nil): bool =
 
   store(chan.closed, false, moRelaxed)
   return true
+
+# MPSC Channels (Multi-Producer Single-Consumer)
+# ----------------------------------------------------------------------------------
+
+proc channel_send_mpsc(
+       chan: Channel,
+       data: pointer,
+       size: int32
+      ): bool {.inline.} =
+  channel_send_mpmc(chan, data, size)
