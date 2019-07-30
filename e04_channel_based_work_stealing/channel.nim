@@ -760,3 +760,40 @@ when isMainModule:
     return nil
 
   runSuite("[Channel] channel_close, channel_free, channel_cache", thread_func_2)
+
+  # ----------------------------------------------------------------------------------
+
+  proc is_cached(chan: Channel): bool =
+    assert not chan.isNil
+
+    var p: ChannelCache
+
+    while not p.isNil:
+      if chan.itemsize == p.chan_size and
+         chan.size-1 == p.chan_n      and
+         chan.impl == p.chan_impl:
+        for i in 0 ..< p.num_cached:
+          if chan == p.cache[i]:
+            return true
+        # No more channel in cache can match
+        return false
+    return false
+
+  suite "[Channel] Channel caching implementation":
+    channel_cache_free()
+    test "Explicit caches allocation":
+      check:
+        channel_cache_alloc(int32 sizeof(char), 4, Mpmc)
+        channel_cache_alloc(int32 sizeof(int), 8, Mpsc)
+        channel_cache_alloc(int32 sizeof(ptr float64), 16, Spsc)
+
+        not channel_cache_alloc(int32 sizeof(char), 4, Mpmc)
+        not channel_cache_alloc(int32 sizeof(int), 8, Mpsc)
+        not channel_cache_alloc(int32 sizeof(ptr float64), 16, Spsc)
+
+      check:
+        channel_cache.chan_impl == Spsc
+        channel_cache.next.chan_impl == Mpsc
+        channel_cache.next.next.chan_impl == Mpmc
+
+        channel_cache_len == 3
