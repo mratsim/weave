@@ -31,6 +31,7 @@ type
     head_lock, tail_lock: Lock
     owner: int32
     impl: ChannelImplKind
+    closed: Atomic[bool]
     size: int32
     itemsize: int32 # up to itemsize bytes can be exchanged over this channel
     head: int32     # Items are taken from head and new items are inserted at tail
@@ -49,6 +50,7 @@ type
     num_cached: int32
     cache: array[ChannelCacheSize, Channel]
 
+{.experimental: "notnil".}
 # ----------------------------------------------------------------------------------
 
 func incmod(idx, size: int32): int32 {.inline.} =
@@ -57,27 +59,43 @@ func incmod(idx, size: int32): int32 {.inline.} =
 func decmod(idx, size: int32): int32 {.inline.} =
   (idx - 1) mod size
 
-func num_items(chan: Channel): int32 {.inline.} =
+func num_items(chan: Channel not nil): int32 {.inline.} =
   (chan.size + chan.tail - chan.head) mod chan.size
 
-func is_full(chan: Channel): bool {.inline.} =
+func is_full(chan: Channel not nil): bool {.inline.} =
   chan.num_items() == chan.size - 1
 
-func is_empty(chan: Channel): bool {.inline.} =
+func is_empty(chan: Channel not nil): bool {.inline.} =
   chan.head == chan.tail
 
 # Unbuffered / synchronous channels
 # ----------------------------------------------------------------------------------
 
-func num_items_unbuf(chan: Channel): int32 {.inline.} =
+func num_items_unbuf(chan: Channel not nil): int32 {.inline.} =
   # TODO: use range 0..1 but type mismatch
   chan.head
 
-func is_full_unbuf(chan: Channel): bool {.inline.} =
+func is_full_unbuf(chan: Channel not nil): bool {.inline.} =
   chan.head == 1
 
-func is_empty_unbuf(chan: Channel): bool {.inline.} =
+func is_empty_unbuf(chan: Channel not nil): bool {.inline.} =
   chan.head == 0
+
+# Channel kinds
+# ----------------------------------------------------------------------------------
+
+func channel_buffered(chan: Channel not nil): bool =
+  chan.size - 1 > 0
+
+func channel_unbuffered(chan: Channel not nil): bool =
+  assert chan.size >= 0
+  chan.size - 1 == 0
+
+# Channel status
+# ----------------------------------------------------------------------------------
+
+proc channel_closed(chan: Channel): bool {.inline.}=
+  load(chan.closed, moRelaxed)
 
 # Per-thread channel cache
 # ----------------------------------------------------------------------------------
@@ -137,7 +155,7 @@ proc channel_cache_free() =
   assert(channel_cache_len == 0)
   channel_cache = nil
 
-proc channel_alloc(size, n: int32, impl: ChannelImplKind): Channel =
+proc channel_alloc(size, n: int32, impl: ChannelImplKind): Channel not nil =
 
   when ChannelCacheSize > 0:
     var p = channel_cache
@@ -163,7 +181,7 @@ proc channel_alloc(size, n: int32, impl: ChannelImplKind): Channel =
 
   # To buffer n items, we allocate for n+1
   result.buffer = malloc(byte, (n+1) * size)
-  if result.buffer.isNim:
+  if result.buffer.isNil:
     raise newException(OutOfMemError, "Could not allocate memory")
 
   initLock(result.head_lock)
@@ -181,9 +199,9 @@ proc channel_alloc(size, n: int32, impl: ChannelImplKind): Channel =
     # Allocate a cache as well if one of the proper size doesn't exist
     discard channel_cache_alloc(size, n, impl)
 
-proc channel_free(chan: Channel) =
-  if chan.isNil:
-    return
+proc channel_free(chan: Channel not nil) =
+  # if chan.isNil:
+  #   return
 
   when ChannelCacheSize > 0:
     var p = channel_cache
@@ -207,3 +225,144 @@ proc channel_free(chan: Channel) =
   deinitLock(chan.tail_lock)
 
   free(chan)
+
+# MPMC Channels (Multi-Producer Multi Consumer)
+# ----------------------------------------------------------------------------------
+
+proc channel_send_unbuffered_mpmc(
+       chan: Channel not nil,
+       data: pointer not nil,
+       size: int32
+     ): bool =
+  if chan.is_full_unbuf():
+    return false
+
+  acquire(chan.head_lock)
+
+  if chan.is_full_unbuf():
+    # Another thread was faster
+    release(chan.head_lock)
+    return false
+
+  assert chan.is_empty_unbuf()
+  assert size <= chan.itemsize
+  copyMem(chan.buffer, data, size)
+
+  chan.head = 1
+
+  release(chan.head_lock)
+  return true
+
+proc channel_send_mpmc(
+       chan: Channel not nil,
+       data: pointer not nil,
+       size: int32
+     ): bool =
+
+  if channel_unbuffered(chan):
+    return channel_send_unbuffered_mpmc(chan, data, size)
+
+  if chan.is_full():
+    return false
+
+  acquire(chan.tail_lock)
+
+  if chan.is_full():
+    # Another thread was faster
+    release(chan.tail_lock)
+    return false
+
+  assert not chan.is_full
+  assert size <= chan.itemsize
+
+  copyMem(
+    chan.buffer[chan.tail * chan.itemsize].addr,
+    data,
+    size
+  )
+
+  chan.tail = chan.tail.incmod(chan.size)
+
+  release(chan.tail_lock)
+  return true
+
+proc channel_recv_unbuffered_mpmc(
+       chan: Channel not nil,
+       data: pointer not nil,
+       size: int32
+     ): bool =
+  if chan.is_empty_unbuf():
+    return false
+
+  acquire(chan.head_lock)
+
+  if chan.is_empty_unbuf():
+    # Another thread was faster
+    release(chan.head_lock)
+    return false
+
+  assert chan.is_full_unbuf()
+  assert size <= chan.itemsize
+  copyMem(
+    data,
+    chan.buffer,
+    size
+  )
+
+  chan.head = 0
+  assert chan.is_empty_unbuf
+
+  release(chan.head_lock)
+  return true
+
+proc channel_recv_mpmc(
+       chan: Channel not nil,
+       data: pointer not nil,
+       size: int32
+     ): bool =
+
+  if channel_unbuffered(chan):
+    return channem_recv_unbuffered_mpmc(chan, data, size)
+
+  if chan.is_empty():
+    return false
+
+  acquire(chan.head_lock)
+
+  if chan.is_empty():
+    # Another thread took the last data
+    release(chan.head_lock)
+    return false
+
+  assert not chan.is_empty()
+  assert size <= chan.itemsize
+  copyMem(
+    data,
+    chan.buffer[chan.head * chan.itemsize].addr,
+    size
+  )
+
+  chan.head = chan.head.incmod(chan.head, chan.size)
+
+  release(chan.head_lock)
+  return true
+
+proc channel_close_mpmc(chan: Channel not nil): bool =
+  # Unsynchronized
+
+  if chan.channel_closed():
+    # Channel already closed
+    return false
+
+  store(chan.closed, true, moRelaxed)
+  return true
+
+proc channel_open_mpmc(chan: Channel not nil): bool =
+  # Unsynchronized
+
+  if not chan.channel_closed:
+    # CHannel already open
+    return false
+
+  store(chan.closed, false, moRelaxed)
+  return true
