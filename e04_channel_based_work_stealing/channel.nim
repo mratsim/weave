@@ -858,3 +858,39 @@ when isMainModule:
         chan[7] == stash[1]
         chan[8] == stash[2]
         # chan[9] - required a fresh alloc
+
+    test "Clearing the cache":
+
+      stash[6..9] = chan.toOpenArray(6, 9)
+
+      for i in 6 .. 9:
+        channel_free(chan[i])
+
+      check:
+        stash[6].is_cached()
+        stash[7].is_cached()
+        stash[8].is_cached()
+        stash[9].is_cached()
+
+      channel_cache_free()
+
+      # Check that nothing is cached anymore
+      for i in 0 .. 9:
+        check: not stash[i].is_cached()
+      # And length is reset to 0
+      check: channel_cache_len == 0
+
+      # Cache can grow again
+      chan[0] = channel_alloc(int32 sizeof((int, float, int32, uint)), 1, Spsc)
+      chan[1] = channel_alloc(int32 sizeof(int32), 0, Spsc)
+      chan[2] = channel_alloc(int32 sizeof(int32), 0, Spsc)
+
+      check: channel_cache_len == 2
+
+      # Interleave cache clear and channel free
+      channel_cache_free()
+      check: channel_cache_len == 0
+
+      channel_free(chan[0])
+      channel_free(chan[1])
+      channel_free(chan[2])
