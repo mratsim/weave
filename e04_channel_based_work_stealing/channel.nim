@@ -40,7 +40,8 @@ type
     buffer: ptr UncheckedArray[byte]
 
   # TODO: Replace this cache by generic ObjectPools
-  #       We can use HList or a Table to keep the list of object pools
+  #       We can use HList or a Table or thread-local globals
+  #       to keep the list of object pools
   ChannelCache = ptr ChannelCacheObj
   ChannelCacheObj = object
     next: ChannelCache
@@ -766,7 +767,7 @@ when isMainModule:
   proc is_cached(chan: Channel): bool =
     assert not chan.isNil
 
-    var p: ChannelCache
+    var p = channel_cache
 
     while not p.isNil:
       if chan.itemsize == p.chan_size and
@@ -777,16 +778,21 @@ when isMainModule:
             return true
         # No more channel in cache can match
         return false
+      p = p.next
     return false
 
   suite "[Channel] Channel caching implementation":
+
+    # Start from clean cache slate
     channel_cache_free()
+
     test "Explicit caches allocation":
       check:
         channel_cache_alloc(int32 sizeof(char), 4, Mpmc)
         channel_cache_alloc(int32 sizeof(int32), 8, Mpsc)
         channel_cache_alloc(int32 sizeof(ptr float64), 16, Spsc)
 
+        # Don't create existing channel cache
         not channel_cache_alloc(int32 sizeof(char), 4, Mpmc)
         not channel_cache_alloc(int32 sizeof(int32), 8, Mpsc)
         not channel_cache_alloc(int32 sizeof(ptr float64), 16, Spsc)
@@ -798,8 +804,10 @@ when isMainModule:
 
         channel_cache_len == 3
 
+    # ---------------------------------
+    var chan, stash: array[10, Channel]
+
     test "Implicit caches allocation":
-      var chan, stash: array[10, Channel]
 
       chan[0] = channel_alloc(int32 sizeof(char), 4, Mpmc)
       chan[1] = channel_alloc(int32 sizeof(int32), 8, Mpsc)
@@ -809,6 +817,44 @@ when isMainModule:
       chan[4] = channel_alloc(int32 sizeof(int64), 8, Mpsc)
       chan[5] = channel_alloc(int32 sizeof(ptr float64), 16, Mpsc)
 
+      # We have caches ready to store specific channel kinds
       check: channel_cache_len == 6 # Cumulated with previous test
+      # But they are not in cache while in use
+      check:
+        not chan[0].is_cached()
+        not chan[1].is_cached()
+        not chan[2].is_cached()
+        not chan[3].is_cached()
+        not chan[4].is_cached()
+        not chan[5].is_cached()
+
+    test "Freed channels are returned to cache":
+      stash[0..5] = chan.toOpenArray(0, 5)
       for i in 0 .. 5:
-        check: not chan[i].is_cached()
+        # Free the channels
+        channel_free(chan[i])
+
+      check:
+        stash[0].is_cached()
+        stash[1].is_cached()
+        stash[2].is_cached()
+        stash[3].is_cached()
+        stash[4].is_cached()
+        stash[5].is_cached()
+
+    test "Cached channels are being reused":
+
+      chan[6] = channel_alloc(int32 sizeof(char), 4, Mpmc)
+      chan[7] = channel_alloc(int32 sizeof(int32), 8, Mpsc)
+      chan[8] = channel_alloc(int32 sizeof(ptr float32), 16, Spsc)
+      chan[9] = channel_alloc(int32 sizeof(ptr float64), 16, Spsc)
+
+      # All (itemsize, queue size, implementation) were already allocated
+      check: channel_cache_len == 6
+
+      # We reused old channels from cache
+      check:
+        chan[6] == stash[0]
+        chan[7] == stash[1]
+        chan[8] == stash[2]
+        # chan[9] - required a fresh alloc
