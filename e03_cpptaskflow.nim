@@ -2,3 +2,5 @@
 #
 # Characteristics:
 # - help-first / child-stealing
+# - Poster child of Chase-Lev deque
+# - Excellent Task graph API
