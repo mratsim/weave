@@ -7,7 +7,7 @@ import
 # ----------------------------------------------------------------------------------
 
 type
-  TaskStack = ptr TaskStackObj
+  TaskStack* = ptr TaskStackObj
   TaskStackObj = object
     top: Task
 
@@ -31,7 +31,7 @@ func task_stack_pop(stack: TaskStack): Task =
   stack.top = stack.top.next
   result.next = nil
 
-func task_stack_new(): TaskStack =
+func task_stack_new*(): TaskStack =
   # We consider that task_stack_new has no side-effect
   # i.e. it never fails
   #      and we don't care about pointer addresses
@@ -44,7 +44,7 @@ func task_stack_new(): TaskStack =
 
   result.top = nil
 
-func task_stack_delete(stack: sink TaskStack) =
+func task_stack_delete*(stack: sink TaskStack) =
   if stack.isNil:
     return
 
