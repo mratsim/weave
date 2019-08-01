@@ -33,7 +33,7 @@ type
     data*: array[TaskDataSize, byte]
 
 func task_zero*(task: sink Task): Task {.inline.} =
-  reset(task[])
+  zeroMem(task, sizeof(TaskObj))
   return task
 
 func task_new*(): Task {.inline.} =
