@@ -52,6 +52,9 @@ func task_new*(): Task {.inline.} =
 func task_delete*(task: sink Task) {.inline.} =
   free(task)
 
+func task_data*(task: Task): ptr array[TaskDataSize, byte] {.inline.} =
+  task.data.addr
+
 # Private memory (PRM) task queue
 # Circular doubly-linked list
 # ----------------------------------------------------------------------------------

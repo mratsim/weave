@@ -77,8 +77,54 @@ func deque_list_tl_delete(dq: sink DequeListTl) =
   task_stack_delete(dq.freelist)
   free(dq)
 
-# Work-stealing and scheduling routines
+func deque_list_tl_prepend(
+       dq: sink DequeListTl,
+       head, tail: Task,
+       len: int32
+      ): DequeListTl =
+  # Add a list of tasks [head, tail] of length len to the front of the dq
+  assert not dq.isNil
+  assert not head.isNil and not tail.isNil
+  assert len > 0
+
+  # Link tail with dq.head
+  assert tail.next.isNil
+  tail.next = dq.head
+  dq.head.prev = tail
+
+  # Update state of the deque
+  dq.head = head
+  dq.num_tasks += len
+
+  return dq
+
+func deque_list_tl_prepend(
+       dq: sink DequeListTl,
+       head: Task,
+       len: int32
+     ): DequeListTl =
+
+  assert not dq.isNil
+  assert not head.isNil
+  assert len > 0
+
+  var tail = head
+  # Find the tail
+  while not tail.next.isNil:
+    tail = tail.next
+
+  deque_list_tl_prepend(dq, head, tail, len)
+
+
+# Task routines
 # ---------------------------------------------------------------
+
+func deque_list_tl_task_new(dq: DequeListTl): Task =
+  assert not dq.isNil
+
+  if dq.freelist.task_stack_empty():
+    return task_new()
+  return dq.freelist.task_stack_pop()
 
 func deque_list_tl_pop_child(dq: DequeListTl, parent: Task): Task =
   assert not dq.isNil
@@ -97,6 +143,9 @@ func deque_list_tl_pop_child(dq: DequeListTl, parent: Task): Task =
   result.next = nil
 
   dec dq.num_tasks
+
+# Work-stealing routines
+# ---------------------------------------------------------------
 
 func deque_list_tl_steal(dq: DequeListTl): Task =
   assert not dq.isNil
@@ -120,25 +169,26 @@ func deque_list_tl_steal(dq: DequeListTl): Task =
   dec dq.num_tasks
   inc dq.num_steals
 
-template deque_list_tl_steal_many_impl(
+template deque_list_tl_multisteal_impl(
         result: var Task,
         dq: DequeListTl,
-        max: int32,
         stolen: var int32,
+        maxClamp: untyped,
         tailAssign: untyped
       ): untyped =
+
   assert not dq.isNil
 
   if dq.deque_list_tl_empty():
     return nil
 
   # Make sure to steal at least one task
-  var n = dq.num_tasks div 2
+  var n{.inject.} = dq.num_tasks div 2
   if n == 0: n = 1
-  if n > max: n = max
+  maxClamp # <-- 1st statement injected here
 
   result = dq.tail
-  tailAssign
+  tailAssign # <-- 2nd statement injected here
   assert result.fn == cast[proc (param: pointer){.nimcall.}](0xCAFE)
 
   # Walk backwards
@@ -168,8 +218,11 @@ func deque_list_tl_steal_many(
   # Steal up to half of the deque's tasks, but at most max tasks
   # tail will point to the last task in the returned list (head is returned)
   # stolen will contain the number of transferred tasks
-  deque_list_tl_steal_many_impl(
-        result, dq, max, stolen):
+
+  deque_list_tl_multisteal_impl(
+        result, dq, stolen):
+    if n > max: n = max
+  do:
     tail = result.prev
 
 func deque_list_tl_steal_many(
@@ -179,6 +232,70 @@ func deque_list_tl_steal_many(
      ): Task =
   # Steal up to half of the deque's tasks, but at most max tasks
   # stolen will contain the number of transferred tasks
-  deque_list_tl_steal_many_impl(
-        result, dq, max, stolen):
+
+  deque_list_tl_multisteal_impl(
+        result, dq, stolen):
+    if n > max: n = max
+  do:
     discard
+
+func deque_list_tl_steal_half(
+       dq: DequeListTl,
+       tail: var Task,
+       stolen: var int32
+      ): Task =
+  # Steal half of the deque's task
+  # tail will point to the last task in the returned list (head is returned)
+  # stolen will contain the number of transferred tasks
+
+  deque_list_tl_multisteal_impl(
+        result, dq, stolen):
+    discard
+  do:
+    tail = result.prev
+
+func deque_list_tl_steal_half(
+       dq: DequeListTl,
+       stolen: var int32
+      ): Task =
+  # Steal half of the deque's task
+  # tail will point to the last task in the returned list (head is returned)
+  # stolen will contain the number of transferred tasks
+
+  deque_list_tl_multisteal_impl(
+        result, dq, stolen):
+    discard
+  do:
+    discard
+
+# Unit tests
+# ---------------------------------------------------------------
+
+when isMainModule:
+  import unittest
+
+  const
+    N = 1000000 # Number of tasks to push/pop/steal
+    M = 100     # Max number of tasks to steal in one swoop
+
+  type
+    Data = object
+      a, b: int32
+
+  suite "Testing DequeListTl":
+    var deq: DequeListTl
+
+    test "Instantiation":
+      deq = deque_list_tl_new()
+
+      check:
+        deq.deque_list_tl_empty()
+        deq.deque_list_tl_num_tasks() == 0
+
+    test "Pushing data":
+      for i in 0'i32 ..< N:
+        let t = deq.deque_list_tl_task_new()
+        check: not t.isNil
+        let d = cast[ptr Data](task_data(t))
+        d[] = Data(a: i, b: i+1)
+        deque_list_tl_push(deq, t)

@@ -11,7 +11,7 @@ type
   TaskStackObj = object
     top: Task
 
-func task_stack_empty(stack: TaskStack): bool =
+func task_stack_empty*(stack: TaskStack): bool =
   assert not stack.isNil
   return stack.top.isNil
 
@@ -22,7 +22,7 @@ func task_stack_push(stack: TaskStack, task: sink Task) =
   task.next = stack.top
   stack.top = task
 
-func task_stack_pop(stack: TaskStack): Task =
+func task_stack_pop*(stack: TaskStack): Task =
   assert not stack.isNil
   if task_stack_empty(stack):
     return nil
