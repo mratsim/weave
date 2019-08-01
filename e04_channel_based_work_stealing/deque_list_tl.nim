@@ -144,6 +144,12 @@ func deque_list_tl_pop_child(dq: DequeListTl, parent: Task): Task =
 
   dec dq.num_tasks
 
+func deque_list_tl_task_cache(dq: DequeListTl, task: Task) =
+  assert not dq.isNil
+  assert not task.isNil
+
+  task_stack_push(dq.freelist, task_zero(task))
+
 # Work-stealing routines
 # ---------------------------------------------------------------
 
@@ -299,3 +305,21 @@ when isMainModule:
         let d = cast[ptr Data](task_data(t))
         d[] = Data(a: i, b: i+1)
         deque_list_tl_push(deq, t)
+
+      check:
+        not deq.deque_list_tl_empty()
+        deq.deque_list_tl_num_tasks() == N
+
+    test "Pop-ing data":
+      for i in countdown(N, 1):
+        let t = deq.deque_list_tl_pop()
+        let d = cast[ptr Data](task_data(t))
+        check:
+          d.a == i-1
+          d.b == i
+        deque_list_tl_task_cache(deq, t)
+
+      check:
+        deq.deque_list_tl_pop().isNil
+        deq.deque_list_tl_empty()
+        deq.deque_list_tl_num_tasks() == 0

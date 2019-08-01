@@ -15,7 +15,7 @@ func task_stack_empty*(stack: TaskStack): bool =
   assert not stack.isNil
   return stack.top.isNil
 
-func task_stack_push(stack: TaskStack, task: sink Task) =
+func task_stack_push*(stack: TaskStack, task: sink Task) =
   assert not stack.isNil
   assert not task.isNil
 
