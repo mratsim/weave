@@ -1,12 +1,10 @@
 type
 
-  Natural32 = range[0'i32 .. high(int32)]
-
   WorkerTree = object
-    left_child: Natural32
-    right_child: Natural32
-    parent: Natural32
-    num_children: Natural32
+    left_child: int32
+    right_child: int32
+    parent: int32
+    num_children: int32
     left_subtree_is_idle: bool
     right_subtree_is_idle: bool
     ## WHen a workerhas become quiescent and backs off from stealing
@@ -14,30 +12,30 @@ type
     ## it waits for tasks from its parent
     waiting_for_tasks: bool
 
-func left_child(ID, maxID: Natural32): Natural32 {.inline.} =
-  # assert(ID >= 0 and maxID >= 0)
+func left_child(ID, maxID: int32): int32 {.inline.} =
+  assert(ID >= 0 and maxID >= 0)
   assert(ID <= maxID)
 
   result = 2*ID + 1
   if result > maxID:
     result = -1
 
-func right_child(ID, maxID: Natural32): Natural32 {.inline.} =
-  # assert(ID >= 0 and maxID >= 0)
+func right_child(ID, maxID: int32): int32 {.inline.} =
+  assert(ID >= 0 and maxID >= 0)
   assert(ID <= maxID)
 
   result = 2*ID + 2
   if result > maxID:
     result = -1
 
-func parent(ID: Natural32): Natural32 {.inline.} =
+func parent(ID: int32): int32 {.inline.} =
   assert(ID >= 0)
 
   (ID - 1) shr 1
 
-proc worker_tree_init(tree: var WorkerTree, ID, maxID: Natural32)
+proc worker_tree_init(tree: var WorkerTree, ID, maxID: int32)
   # assert not tree.isNil
-  # assert ID >= 0 and maxID >= 0
+  assert ID >= 0 and maxID >= 0
   assert ID <= maxID
 
   tree.left_child = left_child(ID, maxID)
