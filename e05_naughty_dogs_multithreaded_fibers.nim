@@ -15,3 +15,15 @@
 #   work-stealing or private deque
 #   but had 3 queues with different priorities, which may
 #   trigger contention issues
+#
+# Big implementation hurdle:
+# - Naughty Dogs engine was implemented for PS4 which seems to have
+#   excellent fiber support.
+#   On x86, we would need to also save SIMD registers
+#   to allow floats and also compiler randomly optimizing
+#   functions to SIMD.
+#   And for compute workload, SIMD is necessary. For example
+#   AVX registers are 32 bytes in size and cores have 16:
+#   so 16x32 = 512 bytes to save/restore
+#   AVX512 registers are 64 bytes and cores have 32:
+#   so 32x64 = 2kB to save/restore
