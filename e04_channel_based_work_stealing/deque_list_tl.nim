@@ -119,3 +119,66 @@ func deque_list_tl_steal(dq: DequeListTl): Task =
 
   dec dq.num_tasks
   inc dq.num_steals
+
+template deque_list_tl_steal_many_impl(
+        result: var Task,
+        dq: DequeListTl,
+        max: int32,
+        stolen: var int32,
+        tailAssign: untyped
+      ): untyped =
+  assert not dq.isNil
+
+  if dq.deque_list_tl_empty():
+    return nil
+
+  # Make sure to steal at least one task
+  var n = dq.num_tasks div 2
+  if n == 0: n = 1
+  if n > max: n = max
+
+  result = dq.tail
+  tailAssign
+  assert result.fn == cast[proc (param: pointer){.nimcall.}](0xCAFE)
+
+  # Walk backwards
+  for i in 0 ..< n:
+    result = result.prev
+
+  dq.tail.prev.next = nil
+  dq.tail.prev = result.prev
+  result.prev = nil
+  if dq.tail.prev.isNil:
+    # tealing the last task of the deque
+    assert dq.head == result
+    dq.head = dq.tail
+  else:
+    dq.tail.prev.next = dq.tail
+
+  dq.num_tasks -= n
+  inc dq.num_steals
+  stolen = n
+
+func deque_list_tl_steal_many(
+       dq: DequeListTl,
+       tail: var Task,
+       max: int32,
+       stolen: var int32
+     ): Task =
+  # Steal up to half of the deque's tasks, but at most max tasks
+  # tail will point to the last task in the returned list (head is returned)
+  # stolen will contain the number of transferred tasks
+  deque_list_tl_steal_many_impl(
+        result, dq, max, stolen):
+    tail = result.prev
+
+func deque_list_tl_steal_many(
+       dq: DequeListTl,
+       max: int32,
+       stolen: var int32
+     ): Task =
+  # Steal up to half of the deque's tasks, but at most max tasks
+  # stolen will contain the number of transferred tasks
+  deque_list_tl_steal_many_impl(
+        result, dq, max, stolen):
+    discard
