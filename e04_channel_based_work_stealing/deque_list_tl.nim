@@ -205,7 +205,7 @@ template deque_list_tl_multisteal_impl(
   dq.tail.prev = result.prev
   result.prev = nil
   if dq.tail.prev.isNil:
-    # tealing the last task of the deque
+    # Stealing the last task of the deque
     assert dq.head == result
     dq.head = dq.tail
   else:
@@ -298,7 +298,7 @@ when isMainModule:
         deq.deque_list_tl_empty()
         deq.deque_list_tl_num_tasks() == 0
 
-    test "Pushing data":
+    test "Pushing tasks":
       for i in 0'i32 ..< N:
         let t = deq.deque_list_tl_task_new()
         check: not t.isNil
@@ -310,7 +310,7 @@ when isMainModule:
         not deq.deque_list_tl_empty()
         deq.deque_list_tl_num_tasks() == N
 
-    test "Pop-ing data":
+    test "Pop-ing tasks":
       for i in countdown(N, 1):
         let t = deq.deque_list_tl_pop()
         let d = cast[ptr Data](task_data(t))
@@ -323,3 +323,67 @@ when isMainModule:
         deq.deque_list_tl_pop().isNil
         deq.deque_list_tl_empty()
         deq.deque_list_tl_num_tasks() == 0
+
+    test "Stealing tasks":
+      for i in 0 ..< N:
+        let t = deq.deque_list_tl_task_new()
+        check: not t.isNil
+        let d = cast[ptr Data](task_data(t))
+        d[] = Data(a: int32 i+24, b: int32 i+42)
+        deque_list_tl_push(deq, t)
+
+      check:
+        deq.freelist.task_stack_empty()
+        not deq.deque_list_tl_empty()
+        deq.deque_list_tl_num_tasks == N
+
+      var i, m = 0'i32
+      while i < N:
+        var t: Task
+        let h = deque_list_tl_steal_many(deq, t, M, m)
+        check:
+          not h.isNil
+          m >= 1 and m <= M
+
+        let s = deque_list_tl_prepend(deque_list_tl_new(), h, t, m)
+        check:
+          not s.isNil
+          not s.deque_list_tl_empty()
+          s.deque_list_tl_num_tasks() == m
+
+        t = s.deque_list_tl_pop()
+        let d = cast[ptr Data](t.task_data())
+        # In the original code, the `let` statements
+        # are after the caching which is unsafe
+        # the original task_zero didn't zero the
+        # task's data.
+        let
+          a = d.a
+          b = d.b
+        deque_list_tl_task_cache(s, t)
+
+        for j in 1 ..< m:
+          t = s.deque_list_tl_pop()
+          let d = cast[ptr Data](t.task_data()) # Shadowing d
+          check:
+            d.a == a - j
+            d.b == b - j
+          s.deque_list_tl_task_cache(t)
+
+        check:
+          s.deque_list_tl_pop().isNil
+          s.deque_list_tl_steal().isNil
+          s.deque_list_tl_empty() == true
+          s.deque_list_tl_num_tasks() == 0
+
+        s.deque_list_tl_delete()
+
+        # while loop increment
+        i += m
+
+      check:
+        deq.deque_list_tl_steal.isNil
+        deq.deque_list_tl_empty == true
+        deq.deque_list_tl_num_tasks() == 0
+
+      deq.deque_list_tl_delete()
