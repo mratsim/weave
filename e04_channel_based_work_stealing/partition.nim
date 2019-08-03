@@ -75,7 +75,7 @@ template partition_create(
   var `partition _ id` {.inject, threadvar.}: array[N+1, int32]
   `partition _ id` = value
 
-  proc `partition_assign _ id`(manager: int32) =
+  template `partition_assign _ id`(manager: int32): untyped {.dirty.} =
     if num_partitions < max_num_partitions:
       if manager < num_workers:
         let p = addr partitions[num_partitions]
@@ -101,6 +101,7 @@ template partition_create(
 
 const Partitions {.intdefine.}: range[1 .. 4] = 1
   ## TODO add to compile flag
+  ## TODO - Question -> Partitioning algorithm?
 
 when Partitions == 1:
   partition_create(all, 48): [
