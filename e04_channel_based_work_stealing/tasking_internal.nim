@@ -290,5 +290,5 @@ when defined(DISABLED_MANAGER):
   proc tasking_all_idle(): bool =
     return load(td_count, moRelaxed) == num_workers
 
-proc tasking_done(): bool =
+proc tasking_done*(): bool =
   return tasking_finished

@@ -579,7 +579,7 @@ const
     Spsc: channel_open_spsc
   ]
 
-proc channel_send(chan: Channel, data: sink pointer, size: int32): bool {.inline.}=
+proc channel_send*(chan: Channel, data: sink pointer, size: int32): bool {.inline.}=
   ## Send item to the channel (FIFO queue)
   ## (Insert at last)
   send_fn[chan.impl](chan, data, size)

@@ -3,7 +3,7 @@ from ./tasking_internal import ID, num_workers
 type
   Partition = object
     number: int32 # index of partition: 0 <= number < partitions
-    manager: int32 # ID of partition manager
+    manager*: int32 # ID of partition manager
     workers*: ptr UncheckedArray[int32] # Pointer to statically defined workers
     num_workers*: int32 # Number of statically defined workers
     num_workers_rt*: int32 # Number of workers at runtime

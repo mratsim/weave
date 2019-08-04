@@ -479,3 +479,35 @@ proc next_victim(req: var StealRequest): int32 =
   assert result in 0 ..< my_partition.num_workers_rt
   assert result != ID
   assert req.retry in 0 ..< MaxStealAttempts
+
+when defined(StealLastVictim) or defined(StealLastThief):
+  proc steal_from(req: var StealRequest, worker: int32): int32 =
+    if req.retry < MaxStealAttempts:
+      if worker != -1 and worker != req.ID and likely_has_tasks(worker):
+        return worker
+      # Worker is unavailable, fallback to random victim selection
+      return next_victim(req)
+    return req.ID
+
+# Forward declarations
+# proc try_send_steal_request(idle: bool)
+# proc decline_steal_request(req: var StealRequest)
+# proc decline_all_steal_requests()
+# proc split_loop(task: Task, req: sink StealRequest)
+
+proc send_req(chan: Channel, req: sink StealRequest) {.inline.} =
+  var nfail = 0
+  while not channel_send(chan, req.unsafeAddr, int32 sizeof(req)):
+    inc nfail
+    if nfail mod 3 == 0:
+      log("*** Worker %d: blocked on channel send\n", ID)
+      # raising an exception in a thread will probably crash, oh well ...
+      raise newException(DeadThreadError, "Worker blocked! Check channel capacities!")
+    if tasking_done():
+      break
+
+proc send_req_worker(ID: int32, req: sink StealRequest) {.inline.} =
+  send_req(chan_requests[ID], req)
+
+proc send_req_manager(req: sink StealRequest) {.inline.} =
+  send_req(chan_requests[my_partition.manager], req)
