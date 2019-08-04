@@ -584,7 +584,7 @@ proc channel_send*(chan: Channel, data: sink pointer, size: int32): bool {.inlin
   ## (Insert at last)
   send_fn[chan.impl](chan, data, size)
 
-proc channel_receive(chan: Channel, data: pointer, size: int32): bool {.inline.}=
+proc channel_receive*(chan: Channel, data: pointer, size: int32): bool {.inline.}=
   ## Receive an item from the channel
   ## (Remove the first item)
   recv_fn[chan.impl](chan, data, size)

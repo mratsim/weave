@@ -130,7 +130,7 @@ template steal_request_init(): StealRequest =
   else:
     StealRequest(
       chan: channel_pop(),
-      id: ID, # thread-local var from tasking_internal.ni
+      ID: ID, # thread-local var from tasking_internal.ni
       retry: 0,
       partition: my_partition.number, # `my_partition`: thread-local from partition.nim after running `partition_init`
       pID: pID, # thread-local from runtime.nim, defined later
@@ -490,7 +490,7 @@ when defined(StealLastVictim) or defined(StealLastThief):
     return req.ID
 
 # Forward declarations
-# proc try_send_steal_request(idle: bool)
+proc try_send_steal_request(idle: bool)
 # proc decline_steal_request(req: var StealRequest)
 # proc decline_all_steal_requests()
 # proc split_loop(task: Task, req: sink StealRequest)
@@ -511,3 +511,121 @@ proc send_req_worker(ID: int32, req: sink StealRequest) {.inline.} =
 
 proc send_req_manager(req: sink StealRequest) {.inline.} =
   send_req(chan_requests[my_partition.manager], req)
+
+proc recv_req(req: var StealRequest): bool =
+  profile(send_recv_req):
+    result = channel_receive(chan_requests[ID], req.addr, int32 sizeof(req))
+    while result and req.state == Failed:
+      when defined(DebugTD):
+        # Termination detection
+        # TODO: add to compile-time options
+        log("Worker %d receives STATE_FAILED from worker %d\n", ID, req.ID)
+      assert(req.ID == tree.left_child or req.ID == tree.right_child)
+      if req.ID == tree.left_child:
+        assert not tree.left_subtree_is_idle
+        tree.left_subtree_is_idle = true
+      else:
+        assert not tree.right_subtree_is_idle
+        tree.right_subtree_is_idle = true
+      # Hold on to this steal request
+      enqueue_work_sharing_request(req)
+      result = channel_receive(chan_requests[ID], req.addr, int32 sizeof(req))
+
+    # No special treatment for other states
+    assert((result and req.state != Failed) or not result)
+
+proc recv_task(task: var Task, idle: bool): bool =
+  profile(send_recv_task):
+    for i in 0 ..< MaxSteal:
+      result = channel_receive(chan_tasks[ID][i], task.addr, int32 sizeof(Task))
+      if result:
+        channel_push(chan_tasks[ID][i])
+        break
+
+  if not result:
+    try_send_steal_request(idle)
+  else:
+    template tree_waiting_for_tasks(): untyped {.dirty.} =
+      assert requested == MaxSteal
+      assert channel_stack.top == MaxSteal
+      # Adjust value of requested by MaxSteal-1, the number of steal
+      # requests that have been dropped:
+      # requested = requested - (MaxSteal-1) =
+      #           = MaxSteal - MaxSteal + 1 = 1
+      requested = 1
+      tree.waiting_for_tasks = false
+      dropped_steal_requests = 0
+    when MaxSteal > 1:
+      if tree.waiting_for_tasks:
+        tree_waiting_for_tasks()
+      else:
+        # If we have dropped one or more steal requests before receiving
+        # tasks, adjust requested to make sure that we can send MaxSteal
+        # steal requests again
+        if dropped_steal_requests > 0:
+          assert requested > dropped_steal_requests
+          requested -= dropped_steal_requests
+          dropped_steal_requests = 0
+    else:
+      if tree.waiting_for_tasks:
+        tree_waiting_for_tasks()
+
+    dec requested
+    assert requested in 0 ..< MaxSteal
+    assert dropped_steal_requests == 0
+
+const StealAdaptativeInterval{.intdefine.} = 25
+  ## Number of steals after which the current strategy is reevaluated
+  # TODO: add to compile-time config
+
+var
+  num_tasks_exec_recently {.threadvar.}: int32
+  num_steals_exec_recently {.threadvar.}: int32
+  stealhalf {.threadvar.}: bool
+  requests_steal_one {.threadvar.}: int32
+  requests_steal_half {.threadvar.}: int32
+
+proc try_send_steal_request(idle: bool) =
+  ## Try to send a steal request
+  ## Every worker can have at most MaxSteal pending steal requests.
+  ## A steal request with idle == false indicates that the
+  ## requesting worker is still busy working on some tasks.
+  ## A steal request with idle == true indicates that
+  ## the requesting worker is idle and has nothing to work on
+
+  profile(send_recv_req):
+    if requested < MaxSteal:
+      when StealStrategy == StealKind.adaptative:
+        # Estimate work-stealing efficiency during the last interval
+        # If the value is below a threshold, switch strategies
+        if num_steals_exec_recently == StealAdaptativeInterval:
+          let ratio = num_tasks_exec_recently.float64 / StealAdaptativeInterval.float64
+          if stealhalf and ratio < 2:
+            stealhalf = false
+          elif not stealhalf and ratio == 1:
+            stealhalf = true
+          num_tasks_exec_recently = 0
+          num_steals_exec_recently = 0
+      # The following assertion no longer holds because we may increment
+      # channel_stack.top without decrementing requested
+      # (see dcline_steal_request):
+      # assert(requested + channel_stack.top == MaxSteal)
+      var req = steal_request_init()
+      req.state = if idle: Idle else: Working
+      assert req.retry == 0
+
+      when defined(StealLastVictim):
+        send_req_worker(steal_from(req, last_victim), req)
+      elif defined(StealLastThief):
+        send_req_worker(steal_from(req, last_thief), req)
+      else:
+        send_req_worker(next_victim(req), req)
+
+      inc requested
+      inc requests_sent
+
+      when StealStrategy == StealKind.adaptative:
+        if stealhalf:
+          inc requests_steal_half
+        else:
+          inc requests_steal_one

@@ -10,7 +10,7 @@ type
     ## WHen a workerhas become quiescent and backs off from stealing
     ## after both subtree are idles
     ## it waits for tasks from its parent
-    waiting_for_tasks: bool
+    waiting_for_tasks*: bool
 
 func left_child*(ID, maxID: int32): int32 {.inline.} =
   assert(ID >= 0 and maxID >= 0)

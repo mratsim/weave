@@ -36,19 +36,23 @@ template profile_extern_decl*(name: untyped): untyped {.dirty.} =
 
 template profile_init*(name: untyped): untyped {.dirty.} =
   bind checkName, timer_new, CpuFreqGhz
-  echo astToStr(name)
   # checkName(name)
   timer_new(`timer _ name`, CpuFreqGhz)
 
 template profile_start*(name: untyped): untyped {.dirty.} =
   bind checkName, timer_start
-  checkName(name)
+  # checkName(name)
   timer_start(`timer _ name`)
 
 template profile_stop*(name: untyped): untyped {.dirty.} =
   bind checkName, timer_end
-  checkName(name)
+  # checkName(name)
   timer_end(`timer _ name`)
+
+template profile*(name, body: untyped): untyped {.dirty.} =
+  profile_start(name)
+  body
+  profile_stop(name)
 
 template profile_results*(): untyped {.dirty.} =
   bind timer_elapsed, tkMicroseconds, timers_elapsed
