@@ -32,7 +32,7 @@ type WorkerState = enum
   Working
   Idle
 
-var ID {.threadvar.}: int32
+var ID* {.threadvar.}: int32
 var num_tasks_exec {.threadvar.}: int32
 when StealStrategy == StealKind.adaptative:
   var num_tasks_exec_recently {.threadvar.}: int32

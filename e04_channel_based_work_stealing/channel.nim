@@ -26,7 +26,7 @@ type
   # TODO: ChannelBufKind and ChannelImplKind
   #       could probably be static enums
 
-  Channel = ptr ChannelObj
+  Channel* = ptr ChannelObj
   ChannelObj = object
     head_lock, tail_lock: Lock
     owner: int32

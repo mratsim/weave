@@ -7,7 +7,7 @@ import
   ./task, ./task_stack
 
 type
-  DequeListTl = ptr DequeListTlObj
+  DequeListTl* = ptr DequeListTlObj
   DequeListTlObj = object
     head, tail: Task
     num_tasks: int32

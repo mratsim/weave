@@ -1,7 +1,7 @@
 import primitives/c
 
 type
-  BoundedStack[N: static int, T] = object
+  BoundedStack*[N: static int, T] = object
     top: int
     buffer: ptr array[N, T]
 
@@ -24,12 +24,12 @@ func bounded_stack_empty(stack: BoundedStack): bool {.inline.} =
 func bounded_stack_full(stack: BoundedStack): bool {.inline.} =
   stack.top == stack.N
 
-func bounded_stack_push[N, T](stack: var BoundedStack[N, T], elem: T) {.inline.} =
+func bounded_stack_push*[N, T](stack: var BoundedStack[N, T], elem: T) {.inline.} =
   assert not stack.bounded_stack_full()
   stack.buffer[stack.top] = elem
   inc stack.top
 
-func bounded_stack_pop[N, T](stack: var BoundedStack[N, T]): T {.inline.} =
+func bounded_stack_pop*[N, T](stack: var BoundedStack[N, T]): T {.inline.} =
   assert not stack.bounded_stack_empty()
   dec stack.top
   return stack.buffer[stack.top]
