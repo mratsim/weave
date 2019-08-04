@@ -37,7 +37,7 @@ var num_tasks_exec {.threadvar.}: int
 when StealStrategy == StealKind.adaptative:
   var num_tasks_exec_recently {.threadvar.}: int32
 var worker_state {.threadvar.}: WorkerState # unused unless manger is disabled
-var tasking_finished {.threadvar.}: bool
+var tasking_finished* {.threadvar.}: bool
 
 const MasterID* = 0'i32
 template Master*(body: untyped): untyped {.dirty.} =

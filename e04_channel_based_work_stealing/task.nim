@@ -18,8 +18,8 @@ type
     prev*: Task
     next*: Task
     fn*: proc (param: pointer) {.nimcall.} # nimcall / closure?
-    batch: int32
-    victim: int32
+    batch*: int32
+    victim*: int32
     start*: int
     cur: int
     stop*: int

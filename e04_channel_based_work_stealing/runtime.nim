@@ -39,6 +39,8 @@ proc channel_push(chan: sink Channel) {.inline.} =
 proc channel_pop(): Channel {.inline.} =
   channel_stack.bounded_stack_pop()
 
+# -------------------------------------------------------------------
+
 when defined(VictimCheck):
   # TODO - add to compilation flags
   type TaskIndicator = object
@@ -138,6 +140,8 @@ template steal_request_init(): StealRequest =
       state: Working
     )
 
+# -------------------------------------------------------------------
+
 var work_sharing_requests{.threadvar.}: BoundedQueue[2, StealRequest]
   ## Every worker has a queue where it keeps the failed steal requests of its
   ## children until work can be shared.
@@ -183,6 +187,8 @@ template lprintf(args: varargs[untyped]): untyped =
   printf(args)
   flushFile(stdout)
   release(print_mutex)
+
+# -------------------------------------------------------------------
 
 proc print_victims(victims: Bitfield[uint32], ID: int32) =
   assert my_partition.num_workers_rt in 1..32
@@ -336,6 +342,8 @@ when defined(LazyFutures):
   # TODO: add to compilation flags
   var futures_converted {.threadvar.}: int32
 
+# -------------------------------------------------------------------
+
 proc RT_init() =
   ## Initialize the multithreading runtime
 
@@ -430,6 +438,8 @@ proc RT_exit() =
     100 - random_receiver_early_exits.float64 * 100 / random_receiver_calls.float64
   )
 
+# -------------------------------------------------------------------
+
 proc task_alloc(): Task =
   deque_list_tl_task_new(deque)
 
@@ -488,6 +498,8 @@ when defined(StealLastVictim) or defined(StealLastThief):
       # Worker is unavailable, fallback to random victim selection
       return next_victim(req)
     return req.ID
+
+# -------------------------------------------------------------------
 
 # Forward declarations
 proc try_send_steal_request(idle: bool)
@@ -573,6 +585,59 @@ proc recv_task(task: var Task, idle: bool): bool =
     dec requested
     assert requested in 0 ..< MaxSteal
     assert dropped_steal_requests == 0
+
+proc recv_task(task: var Task): bool =
+  recv_task(task, true)
+
+proc forget_req(req: sink StealRequest) {.inline.}=
+  assert req.ID == ID
+  assert requested > 0
+  dec requested
+  channel_push(req.chan)
+
+var quiescent {.threadvar.}: bool
+
+proc detect_termination() {.inline.} =
+  assert ID == MasterID
+  assert tree.left_subtree_is_idle and tree.right_subtree_is_idle
+  assert not quiescent
+
+  when defined(DebugTD):
+    log(">>> Worker %d detects termination <<<\n", ID)
+  quiescent = true
+
+# Async actions : Side-effecting pseudo tasks
+# -------------------------------------------------------------------
+
+proc async_action(proc (_: pointer) {.nimcall.}, chan: Channel) =
+  ## Asynchronous call of function fn delivered via channel chan
+  ## Executed for side effects only
+
+  # Package up and send a dummy task
+  profile(send_recv_task):
+    let dummy = task_alloc()
+    dummy.fn = fn
+    dummy.batch = 1
+    when defined(StealLastVictim):
+      dummy.victim = -1
+
+    let ret = channel_send(chan, dummy, sizeof(Task))
+    assert ret
+
+proc notify_workers(_: pointer) =
+  assert not tasking_finished
+
+  if tree.left_child != -1:
+    async_action(notify_workers, chan_tasks[tree.left_child][0])
+  if tree.right_child != -1:
+    async_action(notify_workers, chan_tasks[tree.right_child][0])
+
+  Worker:
+    dec num_tasks_exec
+
+  tasking_finished = true
+
+# -------------------------------------------------------------------
 
 const StealAdaptativeInterval{.intdefine.} = 25
   ## Number of steals after which the current strategy is reevaluated
