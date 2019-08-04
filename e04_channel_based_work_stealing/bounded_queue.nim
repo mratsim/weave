@@ -16,7 +16,7 @@ proc bounded_queue_alloc*(
   if result.buffer.isNil:
     raise newException(OutOfMemError, "bounded_queue_alloc failed")
 
-func bounded_queue_free[N, T](queue: sink BoundedQueue[N, T]) {.inline.}=
+func bounded_queue_free*[N, T](queue: sink BoundedQueue[N, T]) {.inline.}=
   free(queue.buffer)
 
 func bounded_queue_empty(queue: BoundedQueue): bool {.inline.} =

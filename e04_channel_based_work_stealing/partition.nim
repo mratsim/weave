@@ -17,14 +17,14 @@ template partition_init(N: static int): untyped {.dirty.}=
 
   var
     partitions {.threadvar.}: array[N, Partition]
-    num_partitions {.threadvar.}: int32
+    num_partitions* {.threadvar.}: int32
     max_num_partitions {.threadvar.}: int32
     my_partition* {.threadvar.}: ptr Partition
     is_manager* {.threadvar.}: bool
     # Only defined for managers
     # The next manager in the logical chain of managers
-    next_manager {.threadvar.}: int32
-    next_worker {.threadvar.}: int32
+    next_manager* {.threadvar.}: int32
+    next_worker* {.threadvar.}: int32
 
   max_num_partitions = N
 
@@ -51,9 +51,9 @@ template partition_init(N: static int): untyped {.dirty.}=
             next_worker = p.workers[0]
           return
 
-template partition_reset(): untyped =
+template partition_reset*(): untyped =
   ## Requires partition_init() call
-  num_partitions = 0 # from tasking_internal_init
+  num_partitions = 0 # from partition_init
   my_partition = nil
   is_manager = false
   next_manager = 0

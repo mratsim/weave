@@ -9,7 +9,7 @@ import
 
 const
   CacheLineSize{.intdefine.} = 64 # TODO: some Samsung phone have 128 cache-line
-  ChannelCacheSize{.intdefine.} = 100
+  ChannelCacheSize*{.intdefine.} = 100
 
   # TODO: Add to compilation flags
 
@@ -102,7 +102,7 @@ proc channel_closed(chan: Channel): bool {.inline.} =
 proc channel_capacity(chan: Channel): int32 {.inline.} =
   return chan.size - 1
 
-proc channel_peek(chan: Channel): int32 =
+proc channel_peek*(chan: Channel): int32 =
   if chan.channel_unbuffered():
     return num_items_unbuf(chan)
   return num_items(chan)
@@ -143,7 +143,7 @@ proc channel_cache_alloc(
 
   return true
 
-proc channel_cache_free() =
+proc channel_cache_free*() =
   ## Frees the entire channel cache, including all channels
 
   var p = channel_cache
@@ -164,6 +164,9 @@ proc channel_cache_free() =
 
   assert(channel_cache_len == 0)
   channel_cache = nil
+
+# Channels memory ops
+# ----------------------------------------------------------------------------------
 
 proc channel_alloc*(size, n: int32, impl: ChannelImplKind): Channel =
 
@@ -209,7 +212,7 @@ proc channel_alloc*(size, n: int32, impl: ChannelImplKind): Channel =
     # Allocate a cache as well if one of the proper size doesn't exist
     discard channel_cache_alloc(size, n, impl)
 
-proc channel_free(chan: Channel) =
+proc channel_free*(chan: Channel) =
   if chan.isNil:
     return
 

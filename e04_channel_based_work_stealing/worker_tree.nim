@@ -1,12 +1,12 @@
 type
 
   WorkerTree* = object
-    left_child: int32
-    right_child: int32
+    left_child*: int32
+    right_child*: int32
     parent: int32
     num_children: int32
-    left_subtree_is_idle: bool
-    right_subtree_is_idle: bool
+    left_subtree_is_idle*: bool
+    right_subtree_is_idle*: bool
     ## WHen a workerhas become quiescent and backs off from stealing
     ## after both subtree are idles
     ## it waits for tasks from its parent

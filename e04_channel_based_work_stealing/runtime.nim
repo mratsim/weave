@@ -99,7 +99,7 @@ type
 
   StealRequest = object
     chan: Channel             # Channel for sending tasks
-    id: int32                 # ID of requesting worker
+    ID: int32                 # ID of requesting worker
     retry: int32              # 0 <= tries <= num_workers_rt
     partition: int32          # partition in which the steal request was initiated
     pID: int32                # ID of requesting worker within partition
@@ -406,3 +406,76 @@ proc RT_init() =
   profile_init(send_recv_task)
   profile_init(send_recv_req)
   profile_init(idle)
+
+proc RT_exit() =
+  deque_list_tl_delete(deque)
+  free(victims)
+
+  channel_free(chan_requests[ID])
+  when ChannelCacheSize > 0:
+    channel_cache_free()
+
+  for i in 0 ..< MaxSteal:
+    # No tasks left in channel
+    assert channel_peek(chan_tasks[ID][i]) == 0
+    channel_free(chan_tasks[ID][i])
+
+  bounded_stack_free(channel_stack)
+  bounded_queue_free(work_sharing_requests)
+
+  partition_reset()
+
+  log("Worker %d: random_receiver fast path (slow path): %3.0f %% (%3.0f %%)\n",
+    ID, random_receiver_early_exits.float64 * 100 / random_receiver_calls.float64,
+    100 - random_receiver_early_exits.float64 * 100 / random_receiver_calls.float64
+  )
+
+proc task_alloc(): Task =
+  deque_list_tl_task_new(deque)
+
+when not defined(MaxStealAttempts):
+  assert not my_partition.isNil
+  let MaxStealAttempts = my_partition.num_workers_rt - 1
+    ## Number of steal attempts before a steal request is sent back to the thief
+    ## Default value is the number of workers minus one
+
+proc next_victim(req: var StealRequest): int32 =
+  result = -1
+
+  req.victims.clearBit(ID.uint32)
+
+  if req.ID == ID:
+    assert req.retry == 0
+    # Initially: send message to random worker != ID
+    result = int32 thread_rng.rand(my_partition.num_workers_rt - 1)
+    while result == ID:
+      result = int32 thread_rng.rand(my_partition.num_workers_rt - 1)
+  elif req.retry == MaxStealAttempts:
+    # Return steal request to thief
+    # print_victims(req.victims, req.ID)
+    result = req.ID
+  else:
+    # Forward steal reques to different worker != ID, if possible
+    if tree.left_subtree_is_idle and tree.right_subtree_is_idle:
+      mark_as_idle(req.victims, ID)
+    elif tree.left_subtree_is_idle:
+      mark_as_idle(req.victims, tree.left_child)
+    elif tree.right_subtree_is_idle:
+      mark_as_idle(req.victims, tree.right_child)
+    assert not req.victims.isSet(ID)
+    result = random_victim(req.victims, req.ID)
+
+  if result == -1:
+    # Couldn't find victim; return steal request to thief
+    assert req.victims.isEmpty()
+    result = req.ID
+
+  when false:
+    if result == req.ID:
+      log("%d -{%d}-> %d after %d tries (%u ones)\n",
+        ID, req.ID, victim, req,retry, countSetBits(req.victims)
+      )
+
+  assert result in 0 ..< my_partition.num_workers_rt
+  assert result != ID
+  assert req.retry in 0 ..< MaxStealAttempts

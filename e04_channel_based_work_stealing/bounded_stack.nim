@@ -15,7 +15,7 @@ proc bounded_stack_alloc*(
   if result.buffer.isNil:
     raise newException(OutOfMemError, "bounded_stack_alloc failed")
 
-func bounded_stack_free[N, T](stack: sink BoundedStack[N, T]) {.inline.} =
+func bounded_stack_free*[N, T](stack: sink BoundedStack[N, T]) {.inline.} =
   free(stack.buffer)
 
 func bounded_stack_empty(stack: BoundedStack): bool {.inline.} =

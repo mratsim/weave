@@ -62,7 +62,7 @@ func deque_list_tl_new*(): DequeListTl =
   result.num_steals = 0
   result.freelist = task_stack_new()
 
-func deque_list_tl_delete(dq: sink DequeListTl) =
+func deque_list_tl_delete*(dq: sink DequeListTl) =
   if dq.isNil:
     return
 
@@ -119,7 +119,7 @@ func deque_list_tl_prepend(
 # Task routines
 # ---------------------------------------------------------------
 
-func deque_list_tl_task_new(dq: DequeListTl): Task =
+func deque_list_tl_task_new*(dq: DequeListTl): Task =
   assert not dq.isNil
 
   if dq.freelist.task_stack_empty():
