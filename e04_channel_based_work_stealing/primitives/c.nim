@@ -20,12 +20,23 @@ func malloc(size: csize): pointer {.header: "<stdio.h>".}
   # i.e. it never fails
   #      and we don't care about pointer addresses
 
-func malloc*(T: typedesc): ptr T =
+func malloc*(T: typedesc): ptr T {.inline.}=
   result = cast[type result](malloc(sizeof(T)))
 
-func malloc*(T: typedesc, len: Natural): ptr UncheckedArray[T] =
+func malloc*(T: typedesc, len: Natural): ptr UncheckedArray[T] {.inline.}=
   result = cast[type result](malloc(sizeof(T) * len))
 
 func free*(p: sink pointer) {.header: "<stdio.h>".}
   # We consider that free as no side-effect
   # i.e. it never fails
+
+when defined(windows):
+  proc alloca(size: csize): pointer {.importc, header: "<malloc.h>".}
+else:
+  proc alloca(size: csize): pointer {.importc, header: "<alloca.h>".}
+
+func alloca*(T: typedesc): ptr T {.inline.}=
+  result = cast[type result](alloca(sizeof(T)))
+
+func alloca*(T: typedesc, len: Natural): ptr UncheckedArray[T] {.inline.}=
+  result = cast[type result](alloca(sizeof(T) * len))

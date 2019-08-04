@@ -5,10 +5,11 @@ type
     ## Implementation of a bitfield
     ## Bit-endianness is little endian
     ## i.e. bit 0 refers to the least significant bit
-    buffer: T
+    buffer*: T
 
 template msb_pos(T: typedesc): int =
   ## Position of the most significant bit
+  # Note: that causes issue with sizeof
   sizeof(T) * 8 - 1
 
 func initBitfieldSetUpTo*[typ: SomeUnsignedInt](
@@ -26,13 +27,13 @@ func isSet*[T](bf: Bitfield[T], bit: range[0 .. msb_pos(T)]): bool {.inline.} =
   bool((bf.buffer shr bit) and 1)
 
 func setBit*[T](bf: var Bitfield[T], bit: range[0 .. msb_pos(T)]) {.inline.}=
-  bf.buffer = bf.buffer or (1.T shl bit)
+  bf.buffer.setBit(bit)
 
-func clearBit*[T](bf: var Bitfield[T], bit: range[0 .. msb_pos(T)]) {.inline.}=
-  bf.buffer = bf.buffer and not(1.T shl bit)
+func clearBit*[T](bf: var Bitfield[T], bit: T) {.inline.}=
+  bf.buffer.clearBit(bit)
 
-func toggleBit*[T](bf: var Bitfield[T], bit: range[0 .. msb_pos(T)]) {.inline.}=
-  bf.buffer = bf.buffer xor (1.T shl bit)
+func flipBit*[T](bf: var Bitfield[T], bit: range[0 .. msb_pos(T)]) {.inline.}=
+  bf.buffer.flipBit(bit)
 
 func `-`[T: SomeUnsignedInt](n: T): T {.inline.}=
   ## Unary negate. Assumes 2-complement arch
@@ -53,3 +54,8 @@ func getLSBset*[T](bf: Bitfield[T]): range[0.T .. msb_pos(T)] {.inline.}=
 func lsbSetCleared*[T](bf: Bitfield[T]): Bitfield[T] {.inline.} =
   ## Returns a new bitfield with the least significant bit set cleared.
   result.buffer = bf.buffer and (bf.buffer - 1)
+
+func countSetBits*(bf: Bitfield): int32 {.inline.} =
+  ## Returns the number of set bits
+  ## i.e. popcount or Hamming Weight
+  bf.buffer.countSetBits().int32

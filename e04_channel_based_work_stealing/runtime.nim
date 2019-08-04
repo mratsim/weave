@@ -212,11 +212,11 @@ proc init_victims(ID: int32) =
   Master log("Manager %2d: %d of %d workers available\n", ID,
              my_partition.num_workers_rt, my_partition.num_workers)
 
-var rng {.threadvar.}: Rand
+var thread_rng {.threadvar.}: Rand
 
 proc ws_init() =
   ## Initializes the context needed for work-stealing
-  rng = initRand(ID + 1000) # seed must be non-zero
+  thread_rng = initRand(ID + 1000) # seed must be non-zero
   init_victims(ID)
 
 proc mark_as_idle(victims: var BitField[uint32], n: int32) =
@@ -231,7 +231,7 @@ proc mark_as_idle(victims: var BitField[uint32], n: int32) =
     mark_as_idle(victims, left_child(n, maxID))
     mark_as_idle(victims, right_child(n, maxID))
     # Unset worker n
-    victims.clearBit(n)
+    victims.clearBit(n.uint32)
 
 func rightmost_victim(victims: Bitfield[uint32], ID: int32): int32 =
   result = getLSBset(victims)
@@ -252,3 +252,65 @@ func rightmost_victim(victims: Bitfield[uint32], ID: int32): int32 =
       # No victim found
       result == -1
     )
+
+var random_receiver_calls {.threadvar.}: int32
+var random_receiver_early_exits {.threadvar.}: int32
+
+proc random_victim(victims: BitField[uint32], ID: int32): int32 =
+  ## Choose a random victim != ID from the list of potential victims
+
+  inc random_receiver_calls
+  inc random_receiver_early_exits
+
+  # No eligible victim? Return message to sender
+  if victims.isEmpty():
+    return -1
+
+  # Try to choose a victim at random
+  for i in 0 ..< 3:
+    let victim = int32 thread_rng.rand(my_partition.num_workers_rt - 1)
+    if victims.isSet(victim) and victim != ID:
+      return victim
+
+  # We didn't early exit, i.e. not enough potential victims
+  # for completely randomized selection
+  dec random_receiver_early_exits
+
+  # Build the list of victims
+  let num_victims = countSetBits(victims)
+  assert num_victims in 0 ..< my_partition.num_workers_rt
+
+  # Length of array is upper-bounded by the number of workers but
+  # num_victims is likely less than that or we would
+  # have found a victim above
+  #
+  # Unfortunaly VLA (Variable-Length-Array) are only available in C99
+  # So we emulate them with alloca.
+  #
+  # num_victims is probably quite low compared to num_workers
+  # i.e. 2 victims for a 16-core CPU hence we save a lot of stack.
+  #
+  # Heap allocation would make the system allocator
+  # a multithreaded bottleneck on fine-grained tasks
+  var potential_victims = alloca(int32, num_victims)
+
+  # Map potential_victims with real IDs
+  var n = victims.buffer
+  var i, j: int32
+  while n != 0:
+    if bool(n and 1):
+      # Test first bit
+      potential_victims[j] = i
+      inc j
+    inc i
+    n = n shr 1
+
+  assert j == num_victims
+
+  result = potential_victims[thread_rng.rand(num_victims-1)]
+  assert victims.isSet(result)
+
+  assert(
+    ((result in 0 ..< my_partition.num_workers_rt) and
+    result != ID)
+  )
