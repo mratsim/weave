@@ -5,7 +5,7 @@ type
     head, tail: int
     buffer: ptr array[N+1, T] # One extra to distinguish between full and empty queues
 
-proc bounded_queue_alloc(
+proc bounded_queue_alloc*(
        T: typedesc,
        capacity: static int
       ): BoundedQueue[capacity, T] {.inline.}=

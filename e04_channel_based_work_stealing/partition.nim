@@ -20,19 +20,20 @@ template partition_init(N: static int): untyped {.dirty.}=
     num_partitions {.threadvar.}: int32
     max_num_partitions {.threadvar.}: int32
     my_partition* {.threadvar.}: ptr Partition
-    is_manager {.threadvar.}: bool
+    is_manager* {.threadvar.}: bool
     # Only defined for managers
     # The next manager in the logical chain of managers
     next_manager {.threadvar.}: int32
     next_worker {.threadvar.}: int32
 
-  num_partitions = N
   max_num_partitions = N
 
-  proc partition_set() =
+  proc partition_set*() =
     for i in 0 ..< num_partitions:
       let p = addr partitions[i]
+      echo p.num_workers
       for idx, worker in p[].mpairs():
+        echo "worker: ", worker
         if worker == ID: # ID is a thread-local var in tasking internals
           my_partition = p
           if worker == p.manager:
@@ -77,7 +78,11 @@ template partition_create(
   var `partition _ id` {.inject, threadvar.}: array[N+1, int32]
   `partition _ id` = value
 
-  proc `partition_assign _ id`(manager: int32) =
+  proc `partition_assign _ id`*(manager: int32) =
+    echo "Assign, N: ", N
+    echo "max_num_partitions: ", max_num_partitions
+    echo "num_partitions: ", num_partitions
+    echo num_partitions < max_num_partitions
     if num_partitions < max_num_partitions:
       if manager < num_workers:
         let p = addr partitions[num_partitions]
@@ -87,6 +92,7 @@ template partition_create(
         p.num_workers = N
         p.num_workers_rt = 0
         inc num_partitions
+        echo "Assign workers: ", p.num_workers
       else:
         for i in 0 ..< N:
           if `partition _ id`[i] < num_workers:

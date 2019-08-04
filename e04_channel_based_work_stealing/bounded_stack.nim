@@ -2,10 +2,10 @@ import primitives/c
 
 type
   BoundedStack*[N: static int, T] = object
-    top: int
+    top*: int
     buffer: ptr array[N, T]
 
-proc bounded_stack_alloc(
+proc bounded_stack_alloc*(
        T: typedesc,
        capacity: static int
      ): BoundedStack[capacity, T] {.inline.} =

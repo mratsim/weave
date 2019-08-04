@@ -6,9 +6,12 @@ import
   ./bounded_stack, ./bounded_queue,
   ./worker_tree,
   ./tasking_internal,
-  ./partition,
+  ./partition, task,
   ./platform, ./bitfield,
-  primitives/c
+  primitives/c,
+  ./profile
+
+type Channel = channel.Channel
 
 template log(args: varargs[untyped]): untyped =
   printf(args)
@@ -314,3 +317,92 @@ proc random_victim(victims: BitField[uint32], ID: int32): int32 =
     ((result in 0 ..< my_partition.num_workers_rt) and
     result != ID)
   )
+
+# To profile different parts of the runtime
+profile_decl(run_task)
+profile_decl(enq_deq_task)
+profile_decl(send_recv_task)
+profile_decl(send_recv_req)
+profile_decl(idle)
+
+var
+  requests_sent {.threadvar.}: int32
+  requests_handled {.threadvar.}: int32
+  requests_declined {.threadvar.}: int32
+  tasks_sent {.threadvar.}: int32
+  tasks_split {.threadvar.}: int32
+
+when defined(LazyFutures):
+  # TODO: add to compilation flags
+  var futures_converted {.threadvar.}: int32
+
+proc RT_init() =
+  ## Initialize the multithreading runtime
+
+  # Small sanity checks
+  # At this point, we have not yet decided who will be manager(s)
+  assert is_manager == false # from partition.nim
+  static:
+    assert sizeof(StealRequest) == 32
+    # assert sizeof(Task()[]) == 192 - checked in task.nim
+
+  # TODO: following the global variables flow is very hard
+  # This requires being called after `tasking_internal_init`
+  assert num_workers > 0
+  partition_assign_xlarge(MasterID)
+  partition_set()
+  assert not my_partition.isNil
+
+  if is_manager:
+    assert ID == MasterID
+
+  deque = deque_list_tl_new()
+
+  Master:
+    # Unprocessed update message followed by new steal request
+    # => up to two messages per worker (assuming MaxSteal == 1)
+    chan_requests[ID] = channel_alloc(
+      int32 sizeof(StealRequest), MaxSteal * num_workers * 2, Mpsc
+    )
+  Worker:
+    chan_requests[ID] = channel_alloc(
+      int32 sizeof(StealRequest), MaxSteal * num_workers, Mpsc
+    )
+
+  # At most MaxSteal steal requests and thus different channels
+  channel_stack = bounded_stack_alloc(Channel, MaxSteal)
+
+  # Being able to send N steal requests requires either a single MPSC or
+  # N SPSC channels
+  for i in 0 ..< MaxSteal:
+    chan_tasks[ID][i] = channel_alloc(int32 sizeof(Task), 1, Spsc)
+    channel_push(chan_tasks[ID][i])
+
+  assert channel_stack.top == MaxSteal
+
+  victims = cast[ptr array[MaxWorkers, int32]](malloc(int32, MaxWorkers))
+
+  ws_init()
+
+  for i in 0 ..< my_partition.num_workers_rt:
+    if ID == my_partition.workers[i]:
+      pID = i
+      break
+
+  requested = 0
+
+  when defined(VictimCheck):
+    static: assert sizeof(TaskIndicator) == 64
+    task_indicators[ID].tasks.store(false)
+
+  # a worker has between zero and 2 children
+  work_sharing_requests = bounded_queue_alloc(StealRequest, 2)
+
+  # The worker tree is a complete binary tree with worker 0 at the root
+  worker_tree_init(tree, ID, my_partition.num_workers_rt - 1)
+
+  profile_init(run_task)
+  profile_init(enq_deq_task)
+  profile_init(send_recv_task)
+  profile_init(send_recv_req)
+  profile_init(idle)

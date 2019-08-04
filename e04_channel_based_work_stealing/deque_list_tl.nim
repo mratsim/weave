@@ -49,7 +49,7 @@ func deque_list_tl_pop(dq: DequeListTl): Task =
 
   dec dq.num_tasks
 
-func deque_list_tl_new(): DequeListTl =
+func deque_list_tl_new*(): DequeListTl =
   result = malloc(DequeListTlObj)
   if result.isNil:
     raise newException(OutOfMemError, "Could not allocate memory")

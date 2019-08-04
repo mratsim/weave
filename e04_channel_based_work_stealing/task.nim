@@ -17,20 +17,25 @@ type
     parent*: Task
     prev*: Task
     next*: Task
-    fn*: proc (param: pointer) # nimcall / closure?
+    fn*: proc (param: pointer) {.nimcall.} # nimcall / closure?
     batch: int32
     victim: int32
-    start*: int32
-    cur: int32
-    stop*: int32
-    chunks: int32
-    sst: int32
+    start*: int
+    cur: int
+    stop*: int
+    chunks: int
+    sst: int
     is_loop*: bool
     has_future: bool
     # List of futures required by the current task
     futures: pointer
     # User data
     data*: array[TaskDataSize, byte]
+
+static: assert sizeof(TaskObj) == 192,
+          "TaskObj is of size " & $sizeof(TaskObj) &
+          " instead of the expected 192 bytes."
+
 
 func task_zero*(task: sink Task): Task {.inline.} =
   zeroMem(task, sizeof(TaskObj))

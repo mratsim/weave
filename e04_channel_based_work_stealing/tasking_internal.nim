@@ -33,18 +33,18 @@ type WorkerState = enum
   Idle
 
 var ID* {.threadvar.}: int32
-var num_tasks_exec {.threadvar.}: int32
+var num_tasks_exec {.threadvar.}: int
 when StealStrategy == StealKind.adaptative:
   var num_tasks_exec_recently {.threadvar.}: int32
 var worker_state {.threadvar.}: WorkerState # unused unless manger is disabled
 var tasking_finished {.threadvar.}: bool
 
-const MasterID = 0'i32
+const MasterID* = 0'i32
 template Master*(body: untyped): untyped {.dirty.} =
   bind MasterID
   if ID == MasterId:
     body
-template Worker(body: untyped): untyped {.dirty.} =
+template Worker*(body: untyped): untyped {.dirty.} =
   if ID != MasterId:
     body
 

@@ -33,7 +33,7 @@ func parent(ID: int32): int32 {.inline.} =
 
   (ID - 1) shr 1
 
-proc worker_tree_init(tree: var WorkerTree, ID, maxID: int32) =
+proc worker_tree_init*(tree: var WorkerTree, ID, maxID: int32) =
   # assert not tree.isNil
   assert ID >= 0 and maxID >= 0
   assert ID <= maxID

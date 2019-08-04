@@ -18,7 +18,7 @@ type
     Unbuffered # Unbuffered (blocking) channel
     Buffered   # Buffered (non-blocking channel)
 
-  ChannelImplKind = enum
+  ChannelImplKind* = enum
     Mpmc # Multiple producer, multiple consumer
     Mpsc # Multiple producer, single consumer
     Spsc # Single producer, single consumer
@@ -165,7 +165,7 @@ proc channel_cache_free() =
   assert(channel_cache_len == 0)
   channel_cache = nil
 
-proc channel_alloc(size, n: int32, impl: ChannelImplKind): Channel =
+proc channel_alloc*(size, n: int32, impl: ChannelImplKind): Channel =
 
   when ChannelCacheSize > 0:
     var p = channel_cache
