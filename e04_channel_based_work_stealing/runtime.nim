@@ -1,6 +1,6 @@
 import
   # Standard library
-  atomics, locks,
+  atomics, locks, random,
   # Internal
   ./deque_list_tl, ./channel,
   ./bounded_stack, ./bounded_queue,
@@ -9,6 +9,10 @@ import
   ./partition,
   ./platform, ./bitfield,
   primitives/c
+
+template log(args: varargs[untyped]): untyped =
+  printf(args)
+  flushFile(stdout)
 
 const MaxSteal {.intdefine.} = 1
   # TODO add to compile-time flags
@@ -160,7 +164,8 @@ when defined(StealLastVictim):
 when defined(StealLastThief):
   var last_thief {.threadvar.} = -1
 
-var victims {.threadvar.}: Bitfield[uint32]
+var victims {.threadvar.}: ptr array[MaxWorkers, int32]
+  # Not to be confused with victim bitfield
 
 var pID {.threadvar.}: int32
   ## A worker has a unique ID within its partition
@@ -190,3 +195,60 @@ proc print_victims(victims: Bitfield[uint32], ID: int32) =
 
   stdout.write '\n'
   release(print_mutex)
+
+proc init_victims(ID: int32) =
+  ## Currently only needed to count the number of workers
+
+  var j = 0
+
+  # Get all available worker in my_partition
+  for i in 0 ..< my_partition.num_workers:
+    let worker = my_partition.workers[i]
+    if worker < num_workers: # Global taken from WEAVE_NUM_THREADS in tasking_internals
+      victims[j] = worker
+      inc j
+      inc my_partition.num_workers_rt
+
+  Master log("Manager %2d: %d of %d workers available\n", ID,
+             my_partition.num_workers_rt, my_partition.num_workers)
+
+var rng {.threadvar.}: Rand
+
+proc ws_init() =
+  ## Initializes the context needed for work-stealing
+  rng = initRand(ID + 1000) # seed must be non-zero
+  init_victims(ID)
+
+proc mark_as_idle(victims: var BitField[uint32], n: int32) =
+  ## Requires -1 <= n < num_workers
+  if n == -1:
+    # Invalid worker ID (parent of root or out-of-bound child)
+    return
+
+  let maxID = my_partition.num_workers_rt - 1
+
+  if n < num_workers:
+    mark_as_idle(victims, left_child(n, maxID))
+    mark_as_idle(victims, right_child(n, maxID))
+    # Unset worker n
+    victims.clearBit(n)
+
+func rightmost_victim(victims: Bitfield[uint32], ID: int32): int32 =
+  result = getLSBset(victims)
+  if result == ID:
+    # If worker gets its own ID as victim
+    # TODO - why would the bitfield be set with its own worker ID?
+    let clearedLSB = victims.lsbSetCleared()
+    if clearedLSB.isEmpty():
+      result = -1
+    else:
+      result = clearedLSB.getLSBset()
+
+  {.noSideEffect.}:
+    assert(
+      # Victim found
+      ((result in 0 ..< my_partition.num_workers_rt) and
+      result != ID) or
+      # No victim found
+      result == -1
+    )

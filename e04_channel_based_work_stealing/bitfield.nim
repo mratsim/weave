@@ -1,3 +1,5 @@
+import std/bitops
+
 type
   Bitfield*[T: SomeUnsignedInt] = object
     ## Implementation of a bitfield
@@ -17,5 +19,37 @@ func initBitfieldSetUpTo*[typ: SomeUnsignedInt](
   ## up to `position` (inclusive)
   result.buffer = (1.T shl position) - 1
 
+func isEmpty*(bf: Bitfield): bool {.inline.} =
+  bf.buffer == 0
+
 func isSet*[T](bf: Bitfield[T], bit: range[0 .. msb_pos(T)]): bool {.inline.} =
   bool((bf.buffer shr bit) and 1)
+
+func setBit*[T](bf: var Bitfield[T], bit: range[0 .. msb_pos(T)]) {.inline.}=
+  bf.buffer = bf.buffer or (1.T shl bit)
+
+func clearBit*[T](bf: var Bitfield[T], bit: range[0 .. msb_pos(T)]) {.inline.}=
+  bf.buffer = bf.buffer and not(1.T shl bit)
+
+func toggleBit*[T](bf: var Bitfield[T], bit: range[0 .. msb_pos(T)]) {.inline.}=
+  bf.buffer = bf.buffer xor (1.T shl bit)
+
+func `-`[T: SomeUnsignedInt](n: T): T {.inline.}=
+  ## Unary negate. Assumes 2-complement arch
+  # assert -int(n) == not(int(n)) + 1, "Only 2-complement architectures are supported"
+  not(n) + 1
+
+func bitfieldWithOnlyLSBset(bf: Bitfield): Bitfield {.inline.}=
+  ## Returns a new bitfield with only
+  ## the least significant bit set of the input set
+  result.buffer = bf.buffer and -bf.buffer
+
+func getLSBset*[T](bf: Bitfield[T]): range[0.T .. msb_pos(T)] {.inline.}=
+  ## Returns the least significant bit set
+  ## Result is undefined if no bits are set at all
+  assert bf.buffer != 0
+  bf.bitfieldWithOnlyLSBset().buffer.fastLog2()
+
+func lsbSetCleared*[T](bf: Bitfield[T]): Bitfield[T] {.inline.} =
+  ## Returns a new bitfield with the least significant bit set cleared.
+  result.buffer = bf.buffer and (bf.buffer - 1)

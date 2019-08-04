@@ -40,7 +40,8 @@ var worker_state {.threadvar.}: WorkerState # unused unless manger is disabled
 var tasking_finished {.threadvar.}: bool
 
 const MasterID = 0'i32
-template Master(body: untyped): untyped {.dirty.} =
+template Master*(body: untyped): untyped {.dirty.} =
+  bind MasterID
   if ID == MasterId:
     body
 template Worker(body: untyped): untyped {.dirty.} =

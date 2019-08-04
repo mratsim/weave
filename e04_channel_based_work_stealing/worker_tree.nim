@@ -12,7 +12,7 @@ type
     ## it waits for tasks from its parent
     waiting_for_tasks: bool
 
-func left_child(ID, maxID: int32): int32 {.inline.} =
+func left_child*(ID, maxID: int32): int32 {.inline.} =
   assert(ID >= 0 and maxID >= 0)
   assert(ID <= maxID)
 
@@ -20,7 +20,7 @@ func left_child(ID, maxID: int32): int32 {.inline.} =
   if result > maxID:
     result = -1
 
-func right_child(ID, maxID: int32): int32 {.inline.} =
+func right_child*(ID, maxID: int32): int32 {.inline.} =
   assert(ID >= 0 and maxID >= 0)
   assert(ID <= maxID)
 
