@@ -23,7 +23,7 @@ when defined(DISABLE_MANAGER):
 
 const MaxWorkers* = 256
 
-var num_workers: int32
+var num_workers*: int32
 
 # Private state
 # ----------------------------------------------------------------------------------

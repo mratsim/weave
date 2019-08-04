@@ -1,7 +1,7 @@
 import primitives/c
 
 type
-  BoundedQueue[N: static int, T] = object
+  BoundedQueue*[N: static int, T] = object
     head, tail: int
     buffer: ptr array[N+1, T] # One extra to distinguish between full and empty queues
 
@@ -25,21 +25,21 @@ func bounded_queue_empty(queue: BoundedQueue): bool {.inline.} =
 func bounded_queue_full(queue: BoundedQueue): bool {.inline.} =
   (queue.tail + 1) mod (queue.N+1) == queue.head
 
-func bounded_queue_enqueue[N,T](queue: var BoundedQueue[N,T], elem: T){.inline.} =
+func bounded_queue_enqueue*[N,T](queue: var BoundedQueue[N,T], elem: sink T){.inline.} =
   assert not queue.bounded_queue_full()
 
   queue.buffer[queue.tail] = elem
   queue.tail = (queue.tail + 1) mod (N+1)
 
-func bounded_queue_dequeue[N,T](queue: var BoundedQueue[N,T]): T {.inline.} =
+func bounded_queue_dequeue*[N,T](queue: var BoundedQueue[N,T]): ptr T {.inline.} =
   assert not queue.bounded_queue_empty()
 
-  result = queue.buffer[queue.head]
+  result = addr queue.buffer[queue.head]
   queue.head = (queue.head + 1) mod (N+1)
 
-func bounded_queue_head[N,T](queue: BoundedQueue[N,T]): T {.inline.} =
+func bounded_queue_head*[N,T](queue: BoundedQueue[N,T]): ptr T {.inline.} =
   assert not queue.bounded_queue_empty()
-  queue.buffer[queue.head]
+  addr queue.buffer[queue.head]
 
 
 # --------------------------------------------------------------
@@ -57,7 +57,7 @@ when isMainModule:
 
   for i in countdown(10, 1):
     let n = q.bounded_queue_dequeue()
-    doAssert n == numbers[10-i]
+    doAssert n[] == numbers[10-i]
 
   doAssert q.bounded_queue_empty()
   bounded_queue_free(q)

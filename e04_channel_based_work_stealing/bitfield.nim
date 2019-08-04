@@ -17,5 +17,5 @@ func initBitfieldSetUpTo*[typ: SomeUnsignedInt](
   ## up to `position` (inclusive)
   result.buffer = (1.T shl position) - 1
 
-when isMainModule:
-  echo initBitfieldSetUpTo(uint32, 10)
+func isSet*[T](bf: Bitfield[T], bit: range[0 .. msb_pos(T)]): bool {.inline.} =
+  bool((bf.buffer shr bit) and 1)

@@ -1,27 +1,30 @@
 import
   # Standard library
-  atomics,
+  atomics, locks,
   # Internal
   ./deque_list_tl, ./channel,
-  ./bounded_stack,
+  ./bounded_stack, ./bounded_queue,
+  ./worker_tree,
   ./tasking_internal,
-  ./platform, ./bitfield
+  ./partition,
+  ./platform, ./bitfield,
+  primitives/c
 
 const MaxSteal {.intdefine.} = 1
-  ## TODO add to compile-time flags
+  # TODO add to compile-time flags
 
-# Thread-local task deque
 var deque {.threadvar.}: DequeListTL
+  ## Thread-local task deque
 
-# Worker -> worker: intra-partition steal requests (MPSC)
 var chan_requests: array[MaxWorkers, Channel]
+ ## Worker -> worker: intra-partition steal requests (MPSC)
 
-# Worker -> worker: tasks (SPSC)
 var chan_tasks: array[MaxWorkers, array[MaxSteal, Channel]]
+ ## Worker -> worker: tasks (SPSC)
 
-# Every worker maintains a stack of (recycled) channels to
-# keep track of which channels to use for the next steal requests
 var channel_stack {.threadvar.}: BoundedStack[MaxSteal, Channel]
+ ## Every worker maintains a stack of (recycled) channels to
+ ## keep track of which channels to use for the next steal requests
 
 proc channel_push(chan: sink Channel) {.inline.} =
   channel_stack.bounded_stack_push(chan)
@@ -127,3 +130,63 @@ template steal_request_init(): StealRequest =
       victims: init_victims(),
       state: Working
     )
+
+var work_sharing_requests{.threadvar.}: BoundedQueue[2, StealRequest]
+  ## Every worker has a queue where it keeps the failed steal requests of its
+  ## children until work can be shared.
+  ## A worker has between 0 and 2 children.
+
+proc enqueue_work_sharing_request(req: StealRequest) {.inline.} =
+  bounded_queue_enqueue(work_sharing_requests, req)
+
+proc dequeue_work_sharing_request(): ptr StealRequest {.inline.} =
+  bounded_queue_dequeue(work_sharing_requests)
+
+proc next_work_sharing_request(): ptr StealRequest {.inline.} =
+  bounded_queue_head(work_sharing_requests)
+
+var requested {.threadvar.}: int32
+  ## A worker can have up to MAXSTEAL outstanding steal requests
+
+var dropped_steal_requests {.threadvar.}: int32
+  ## Before a worker can become quiescent, it has to drop MAXSTEAL-1
+  ## steal requests and send the remaining one to its parent
+
+var tree {.threadvar.}: WorkerTree
+  ## Worker tree related information is collected in this struct
+
+when defined(StealLastVictim):
+  var last_victim {.threadvar.} = -1
+when defined(StealLastThief):
+  var last_thief {.threadvar.} = -1
+
+var victims {.threadvar.}: Bitfield[uint32]
+
+var pID {.threadvar.}: int32
+  ## A worker has a unique ID within its partition
+  ## 0 <= pID <= num_workers_rt
+
+var print_mutex: Lock
+initLock(print_mutex)
+
+template lprintf(args: varargs[untyped]): untyped =
+  ## Printf wrapped in a lock for multithreading consistency
+  acquire(print_mutex)
+  printf(args)
+  flushFile(stdout)
+  release(print_mutex)
+
+proc print_victims(victims: Bitfield[uint32], ID: int32) =
+  assert my_partition.num_workers_rt in 1..32
+
+  acquire(print_mutex)
+  printf("victims[%2d] = ", ID)
+
+  for i in countdown(31, my_partition.num_workers_rt):
+    stdout.write('.')
+
+  for i in countdown(my_partition.num_workers_rt-1, 0):
+    stdout.write uint8(victims.isSet(i))
+
+  stdout.write '\n'
+  release(print_mutex)
