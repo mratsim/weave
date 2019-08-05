@@ -19,7 +19,7 @@ proc bounded_queue_alloc*(
 func bounded_queue_free*[N, T](queue: sink BoundedQueue[N, T]) {.inline.}=
   free(queue.buffer)
 
-func bounded_queue_empty(queue: BoundedQueue): bool {.inline.} =
+func bounded_queue_empty*(queue: BoundedQueue): bool {.inline.} =
   queue.head == queue.tail
 
 func bounded_queue_full(queue: BoundedQueue): bool {.inline.} =
@@ -31,15 +31,15 @@ func bounded_queue_enqueue*[N,T](queue: var BoundedQueue[N,T], elem: sink T){.in
   queue.buffer[queue.tail] = elem
   queue.tail = (queue.tail + 1) mod (N+1)
 
-func bounded_queue_dequeue*[N,T](queue: var BoundedQueue[N,T]): ptr T {.inline.} =
+func bounded_queue_dequeue*[N,T](queue: var BoundedQueue[N,T]): owned T {.inline.} =
   assert not queue.bounded_queue_empty()
 
-  result = addr queue.buffer[queue.head]
+  result = queue.buffer[queue.head]
   queue.head = (queue.head + 1) mod (N+1)
 
-func bounded_queue_head*[N,T](queue: BoundedQueue[N,T]): ptr T {.inline.} =
+func bounded_queue_head*[N,T](queue: BoundedQueue[N,T]): lent T {.inline.} =
   assert not queue.bounded_queue_empty()
-  addr queue.buffer[queue.head]
+  queue.buffer[queue.head]
 
 
 # --------------------------------------------------------------

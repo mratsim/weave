@@ -59,7 +59,7 @@ proc set_current_task(task: Task) {.inline.} =
 proc get_current_task*(): Task {.inline.} =
   current_task
 
-proc is_root_task(task: Task): bool {.inline.} =
+proc is_root_task*(task: Task): bool {.inline.} =
   task.parent.isNil
 
 # Worker status
@@ -95,7 +95,7 @@ proc set_working() {.inline.} =
 # Running a task
 # ----------------------------------------------------------------------------------
 
-proc run_task(task: Task) {.inline.} =
+proc run_task*(task: Task) {.inline.} =
   when false:
     if task.is_loop:
       fprintf(stderr, "%2d: Running [%2ld,%2ld)\n", ID, task.start, task.stop)

@@ -150,10 +150,10 @@ var work_sharing_requests{.threadvar.}: BoundedQueue[2, StealRequest]
 proc enqueue_work_sharing_request(req: StealRequest) {.inline.} =
   bounded_queue_enqueue(work_sharing_requests, req)
 
-proc dequeue_work_sharing_request(): ptr StealRequest {.inline.} =
+proc dequeue_work_sharing_request(): owned StealRequest {.inline.} =
   bounded_queue_dequeue(work_sharing_requests)
 
-proc next_work_sharing_request(): ptr StealRequest {.inline.} =
+proc next_work_sharing_request(): lent StealRequest {.inline.} =
   bounded_queue_head(work_sharing_requests)
 
 var requested {.threadvar.}: int32
@@ -701,7 +701,7 @@ proc decline_steal_request(req: var StealRequest) =
   assert req.retry <= MaxStealAttempts
   inc req.retry
 
-  profile(send_recv_req):
+  block TODO_profile_send_recv_req:
     inc requests_declined
 
     if req.ID == ID:
@@ -879,6 +879,236 @@ proc handle(req: var StealRequest): bool =
 
   return false
 
+proc share_work() =
+  # Handle as many work sharing requests as possible.
+  # Leave work sharing requests that cannot be answered with tasks enqueued
+  while not bounded_queue_empty(work_sharing_requests):
+    # Don't dequeue yet
+    var req = next_work_sharing_request()
+    assert req.ID == tree.left_child or req.ID == tree.right_child
+    if handle(req):
+      if req.ID == tree.left_child:
+        assert tree.left_subtree_is_idle
+        tree.left_subtree_is_idle = false
+      else:
+        assert tree.right_subtree_is_idle
+        tree.right_subtree_is_idle = false
+      discard dequeue_work_sharing_request()
+    else:
+      break
+
+proc RT_check_for_steal_requests() =
+  ## Receive and handle steal requests
+  # Can be called from user code
+  if not bounded_queue_empty(work_sharing_requests):
+    share_work()
+
+  if channel_peek(chan_requests[ID]) != 0:
+    var req: StealRequest
+    while recv_req(req):
+      discard handle(req)
+
+proc pop(): Task
+
+proc schedule() =
+  ## Executed by worker threads
+
+  while true: # Scheduling loop
+    # 1. Private task queue
+    while (let task = pop(); not task.isNil):
+      profile(run_task):
+        run_task(task)
+      profile(enq_deq_task):
+        deque_list_tl_task_cache(deque, task)
+
+    # 2. Work-stealing request
+    try_send_steal_request(idle = true)
+    assert requested != 0
+
+    var task: Task
+    profile(idle):
+      while not recv_task(task):
+        assert deque.deque_list_tl_empty()
+        assert requested != 0
+        decline_all_steal_requests()
+
+    let loot = task.batch
+    when defined(StealLastVictim):
+      if task.victim != -1:
+        last_victim = task.victim
+        assert last_victim != ID
+    if loot > 1:
+      profile(enq_deq_task):
+        task = deque_list_tl_pop(deque_list_tl_prepend(deque, task, loot))
+        have_tasks()
+
+    when defined(VictimCheck):
+      if loot == 1 and splittable(task):
+        have_tasks()
+    when StealStrategy == StealKind.adaptative:
+      inc num_steals_exec_recently
+
+    share_work()
+
+    profile(run_task):
+      run_task(task)
+    profile(enq_deq_task):
+      deque_list_tl_task_cache(deque, task)
+
+    if tasking_done():
+      return
+
+proc RT_schedule() =
+  schedule()
+
+type GotoBlocks = enum
+  # TODO, remove the need for gotos
+  Empty_local_queue
+  RT_barrier_exit
+
+proc RT_barrier() =
+  Worker:
+    return
+
+  when defined(DebugTD):
+    log(">>> Worker %d enters barrier <<<\n", ID)
+
+  assert is_root_task(get_current_task())
+
+  var loc {.goto.} = Empty_local_queue
+  case loc
+  of Empty_local_queue:
+    while (let task = pop(); not task.isNil):
+      profile(run_task):
+        run_task(task)
+      profile(enq_deq_task):
+        deque_list_tl_task_cache(deque, task)
+
+    if num_workers == 1:
+      quiescent = true
+      loc = RT_barrier_exit
+
+    if quiescent:
+      loc = RT_barrier_exit
+
+    try_send_steal_request(idle = true)
+    assert requested != 0
+
+    var task: Task
+    profile(idle):
+      while not recv_task(task):
+        assert deque.deque_list_tl_empty()
+        assert requested != 0
+        decline_all_steal_requests()
+        if quiescent:
+          loc = RT_barrier_exit
+            # TODO: the goto will probably breaks profiling
+
+    let loot = task.batch
+    when defined(StealLastVictim):
+      if task.victim != -1:
+        last_victim = task.victim
+        assert last_victim != ID
+
+    if loot > 1:
+      profile(enq_deq_task):
+        task = deque_list_tl_pop(deque_list_tl_prepend(deque, task, loot))
+        have_tasks()
+
+    when defined(VictimCheck):
+      if loot == 1 and splittable(task):
+        have_tasks()
+
+    when StealStrategy == StealKind.adaptative:
+      inc num_steals_exec_recently
+
+    share_work()
+
+    profile(run_task):
+      run_task(task)
+    profile(enq_deq_task):
+      deque_list_tl_task_cache(deque, task)
+    loc = Empty_local_queue
+
+  of RT_barrier_exit:
+    # Execution continues but quiescent remains true until new tasks
+    # are created
+    assert quiescent
+
+    when defined(DebugTD):
+      log(">>> Worker %d leaves barrier <<<\n", ID)
+
+    return
+
+# Tasks helpers
+# -------------------------------------------------------------------
+
+proc push(task: sink Task) =
+  deque.deque_list_tl_push(task)
+  have_tasks()
+
+  profile_stop(enq_deq_task)
+
+  # Master
+  if quiescent:
+    assert ID == MasterID
+    when defined(DebugTD):
+      log(">>> Worker %d resumes execution after barrier <<<\n", ID)
+    quiescent = false
+
+  share_work()
+
+  # Check if someone requested to steal from us
+  var req: StealRequest
+  while recv_req(req):
+    handle_steal_request(req)
+
+  profile_start(enq_deq_task)
+
+when StealEarlyThreshold > 0:
+  proc try_steal() =
+    # Try to send a steal request when number of local tasks <= StealEarlyThreashold
+    if num_workers ==1:
+      return
+
+    if deque_list_tl_num_tasks(deque) <= StealEarlyThreshold:
+      # By definition not yet idle
+      try_send_steal_request(idle = false)
+
+proc pop(): Task =
+  profile(enq_deq_task):
+    result = deque_list_tl_pop(deque)
+
+  when defined(VictimCheck):
+    if task.isNil:
+      have_no_tasks()
+
+  # Sending an idle steal request at this point may lead
+  # to termination detection when we're about to quit!
+  # Steal requests with idle == false are okay.
+
+  when StealEarlyThreshold > 0:
+    if not task.isNil and not task.is_loop:
+      try_steal()
+
+  share_work()
+
+  # Check if someone requested to steal from us
+  var req: StealRequest
+  while recv_req(req):
+    # If we just popped a loop task, we may split right here
+    # Makes handle_steal_request simpler
+    if deque_list_tl_empty(deque) and splittable(result):
+      if req.ID != ID:
+        split_loop(result, req)
+      else:
+        forget_req(req)
+    else:
+      handle_steal_request(req)
+
+
+
+
 # Split loops
 # -------------------------------------------------------------------
 
@@ -971,3 +1201,5 @@ proc split_loop(task: Task, req: sink StealRequest) =
     inc tasks_split
 
   # log("Worker %2d: Continuing with [%ld, %ld)\n", ID, task->cur, task->end)
+
+RT_barrier()

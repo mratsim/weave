@@ -26,7 +26,7 @@ func deque_list_tl_num_tasks*(dq: DequeListTl): int32 {.inline.} =
   assert not dq.isNil
   result = dq.num_tasks
 
-func deque_list_tl_push(dq: DequeListTl, task: sink Task) =
+func deque_list_tl_push*(dq: DequeListTl, task: sink Task) =
   assert not dq.isNil
   assert not task.isNil
 
@@ -36,7 +36,7 @@ func deque_list_tl_push(dq: DequeListTl, task: sink Task) =
 
   inc dq.num_tasks
 
-func deque_list_tl_pop(dq: DequeListTl): Task =
+func deque_list_tl_pop*(dq: DequeListTl): Task =
   assert not dq.isNil
 
   if dq.deque_list_tl_empty():
@@ -98,7 +98,7 @@ func deque_list_tl_prepend(
 
   return dq
 
-func deque_list_tl_prepend(
+func deque_list_tl_prepend*(
        dq: sink DequeListTl,
        head: Task,
        len: int32
@@ -144,7 +144,7 @@ func deque_list_tl_pop_child(dq: DequeListTl, parent: Task): Task =
 
   dec dq.num_tasks
 
-func deque_list_tl_task_cache(dq: DequeListTl, task: Task) =
+func deque_list_tl_task_cache*(dq: DequeListTl, task: Task) =
   assert not dq.isNil
   assert not task.isNil
 
