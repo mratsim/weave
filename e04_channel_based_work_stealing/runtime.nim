@@ -440,7 +440,7 @@ proc RT_exit*() =
 
 # -------------------------------------------------------------------
 
-proc task_alloc(): Task =
+proc task_alloc*(): Task =
   deque_list_tl_task_new(deque)
 
 when not defined(MaxStealAttempts):
@@ -1117,7 +1117,7 @@ else:
 # Tasks helpers
 # -------------------------------------------------------------------
 
-proc push(task: sink Task) =
+proc push*(task: sink Task) =
   deque.deque_list_tl_push(task)
   have_tasks()
 

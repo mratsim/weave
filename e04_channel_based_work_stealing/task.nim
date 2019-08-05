@@ -6,7 +6,7 @@ import
 # ----------------------------------------------------------------------------------
 
 const
-  TaskDataSize = 192 - 96
+  TaskDataSize* = 192 - 96
 
 type
   Task* = ptr TaskObj

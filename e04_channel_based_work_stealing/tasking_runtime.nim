@@ -13,7 +13,7 @@ import
 # pthread_create initializer
 # ----------------------------------------------------------------------------------
 
-proc worker_entry_fn(id: ptr int32): pointer {.noconv.} =
+proc worker_entry_fn(id: ptr int32): pointer {.gcsafe, noconv.} =
   ID = id[]
   set_current_task(nil)
   num_tasks_exec = 0
@@ -24,8 +24,7 @@ proc worker_entry_fn(id: ptr int32): pointer {.noconv.} =
 
   # TODO: Question td_sync barrier
 
-  {.gcsafe.}: # ignore compiler gcsafe warning
-    RT_schedule()
+  RT_schedule()
   discard tasking_internal_barrier()
   tasking_internal_statistics()
   RT_exit()
