@@ -33,9 +33,9 @@ type WorkerState = enum
   Idle
 
 var ID* {.threadvar.}: int32
-var num_tasks_exec {.threadvar.}: int
+var num_tasks_exec* {.threadvar.}: int
 when StealStrategy == StealKind.adaptative:
-  var num_tasks_exec_recently {.threadvar.}: int32
+  var num_tasks_exec_recently* {.threadvar.}: int32
 var worker_state {.threadvar.}: WorkerState # unused unless manger is disabled
 var tasking_finished* {.threadvar.}: bool
 

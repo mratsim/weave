@@ -609,7 +609,7 @@ proc detect_termination() {.inline.} =
 # Async actions : Side-effecting pseudo tasks
 # -------------------------------------------------------------------
 
-proc async_action(proc (_: pointer) {.nimcall.}, chan: Channel) =
+proc async_action(fn: proc (_: pointer) {.nimcall.}, chan: Channel) =
   ## Asynchronous call of function fn delivered via channel chan
   ## Executed for side effects only
 
@@ -621,7 +621,7 @@ proc async_action(proc (_: pointer) {.nimcall.}, chan: Channel) =
     when defined(StealLastVictim):
       dummy.victim = -1
 
-    let ret = channel_send(chan, dummy, sizeof(Task))
+    let ret = channel_send(chan, dummy, int32 sizeof(Task))
     assert ret
 
 proc notify_workers(_: pointer) =
@@ -643,8 +643,8 @@ const StealAdaptativeInterval{.intdefine.} = 25
   ## Number of steals after which the current strategy is reevaluated
   # TODO: add to compile-time config
 
-var
-  num_tasks_exec_recently {.threadvar.}: int32
+var # TODO: solve variable declared in tasking_internal and runtime
+  # num_tasks_exec_recently {.threadvar.}: int32
   num_steals_exec_recently {.threadvar.}: int32
   stealhalf {.threadvar.}: bool
   requests_steal_one {.threadvar.}: int32
@@ -694,3 +694,61 @@ proc try_send_steal_request(idle: bool) =
           inc requests_steal_half
         else:
           inc requests_steal_one
+
+proc decline_steal_request(req: var StealRequest) =
+  ## Pass steal request on to another worker
+
+  assert req.retry <= MaxStealAttempts
+  inc req.retry
+
+  profile(send_recv_req):
+    inc requests_declined
+
+    if req.ID == ID:
+      # Steal request was returned
+      assert req.victims.isEmpty()
+      if req.state == Idle and tree.left_subtree_is_idle and tree.right_subtree_is_idle:
+        template lastStealRequest: untyped {.dirty.} =
+          Master:
+            detect_termination()
+            forget_req(req)
+          Worker:
+            req.state = Failed
+            when defined(DebugTD):
+              log("Worker %d sends STATE_FAILED to worker %d\n", ID, tree.parent)
+            send_req_worker(tree.parent, req)
+            assert not tree.waiting_for_tasks
+            tree.waiting_for_tasks = true
+
+        when MaxSteal > 1:
+          # Is this the last of MaxSteal Steal Request? If so we can
+          # either detect termination, knowing that all workers are idle
+          # (ID == MasterID), or we can pass this steal request on to our
+          # parent and become quiescent (ID != MasterID). If this is not
+          # the last of MaxSteal steal requests, we drop it and wait
+          # for the next steal request to be returned.
+          if requested == MaxSteal and channel_stack.top == MaxSteal - 1:
+            # MaxSteal-1 requests have been dropped as evidenced by
+            # the number of channels stashed away in channel_stack.
+            assert(dropped_steal_requests == MaxSteal-1)
+            lastStealRequest()
+          else:
+            when defined(DebugTD):
+              log("Worker %d drops steal request\n", ID)
+            # The master can safely run this assertion as it is never
+            # waiting for tasks from its parent (it has none).
+            assert not tree.waiting_for_tasks
+            # Don't decrement requested to make sure no new steal request
+            # is initiated
+            channel_push(req.chan)
+            inc dropped_steal_requests
+        else: # MaxSteal == 1
+          lastStealRequest()
+      else: # Our request but still working
+        # Continue circulating the steal request
+        # print_victims(req.victims, ID)
+        req.retry = 0
+        req.victims = init_victims()
+        send_req_worker(next_victim(req), req)
+    else: # Not our request
+      send_req_worker(next_victim(req), req)
