@@ -56,7 +56,7 @@ var current_task {.threadvar.}: Task
 proc set_current_task(task: Task) {.inline.} =
   current_task = task
 
-proc get_current_task(): Task {.inline.} =
+proc get_current_task*(): Task {.inline.} =
   current_task
 
 proc is_root_task(task: Task): bool {.inline.} =

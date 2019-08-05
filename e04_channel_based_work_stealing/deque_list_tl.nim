@@ -18,11 +18,11 @@ type
 # Basic deque routines
 # ---------------------------------------------------------------
 
-func deque_list_tl_empty(dq: DequeListTl): bool {.inline.} =
+func deque_list_tl_empty*(dq: DequeListTl): bool {.inline.} =
   assert not dq.isNil
   result = (dq.head == dq.tail) and (dq.num_tasks == 0)
 
-func deque_list_tl_num_tasks(dq: DequeListTl): int32 {.inline.} =
+func deque_list_tl_num_tasks*(dq: DequeListTl): int32 {.inline.} =
   assert not dq.isNil
   result = dq.num_tasks
 
@@ -153,7 +153,7 @@ func deque_list_tl_task_cache(dq: DequeListTl, task: Task) =
 # Work-stealing routines
 # ---------------------------------------------------------------
 
-func deque_list_tl_steal(dq: DequeListTl): Task =
+func deque_list_tl_steal*(dq: DequeListTl): Task =
   assert not dq.isNil
 
   if dq.deque_list_tl_empty():
@@ -260,7 +260,7 @@ func deque_list_tl_steal_half(
   do:
     tail = result.prev
 
-func deque_list_tl_steal_half(
+func deque_list_tl_steal_half*(
        dq: DequeListTl,
        stolen: var int32
       ): Task =

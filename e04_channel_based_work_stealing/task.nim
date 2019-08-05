@@ -21,12 +21,12 @@ type
     batch*: int32
     victim*: int32
     start*: int
-    cur: int
+    cur*: int
     stop*: int
-    chunks: int
-    sst: int
+    chunks*: int
+    sst*: int        # splittable task granularity
     is_loop*: bool
-    has_future: bool
+    has_future*: bool
     # List of futures required by the current task
     futures: pointer
     # User data

@@ -505,7 +505,7 @@ when defined(StealLastVictim) or defined(StealLastThief):
 proc try_send_steal_request(idle: bool)
 # proc decline_steal_request(req: var StealRequest)
 # proc decline_all_steal_requests()
-# proc split_loop(task: Task, req: sink StealRequest)
+proc split_loop(task: Task, req: sink StealRequest)
 
 proc send_req(chan: Channel, req: sink StealRequest) {.inline.} =
   var nfail = 0
@@ -752,3 +752,222 @@ proc decline_steal_request(req: var StealRequest) =
         send_req_worker(next_victim(req), req)
     else: # Not our request
       send_req_worker(next_victim(req), req)
+
+proc decline_all_steal_requests() =
+  var req: StealRequest
+
+  profile_stop(Idle)
+
+  if recv_req(req):
+    # decline_all_steal_requests is only called when a worker has nothing
+    # to do but relay steal requests, which means the worker is idle
+    if req.ID == ID and req.state == Working:
+      req.state = Idle
+    decline_steal_request(req)
+
+  profile_start(Idle)
+
+when defined(LazyFutures):
+  # TODO
+  proc convert_lazy_futures(task: Task) =
+    discard
+
+const StealEarlyThreshold {.intdefine.} = 0
+  ## TODO - add to compilation option
+
+proc handle_steal_request(req: var StealRequest) =
+  ## Handle a steal request by sending tasks in return
+  ## or passing it to another worker
+
+  var task: Task
+  var loot = 1'i32
+
+  if req.ID == ID:
+    assert req.state != Failed
+    task = get_current_task()
+    let tasks_left = if not task.isNil and task.is_loop:
+                       abs(task.stop - task.cur)
+                     else:
+                       0
+    # Got own steal request
+    # Forget about it if we have more tasks than previously
+    if deque_list_tl_num_tasks(deque) > StealEarlyThreshold or
+                        tasks_left > StealEarlyThreshold:
+      forget_req(req)
+      return
+    else:
+      when defined(VictimCheck):
+        # Because it's likely that, in the absence of potential victims,
+        # we'd end up sending the steal request right back to use, we just
+        # give up for now
+        forget_req(req)
+      else:
+        # TODO: Which is more reasonable: continue circulating steal
+        #       request or dropping it for now?
+
+        # forget_req(req)
+        decline_steal_request(req)
+        return
+
+  assert req.ID != ID
+
+  profile(enq_deq_task):
+    when StealStrategy == StealKind.adaptative:
+      if req.stealhalf:
+        task = deque_list_tl_steal_half(deque, loot)
+      else:
+        task = deque_list_tl_steal(deque)
+    elif StealStrategy == StealKind.half:
+      task = deque_list_tl_steal_half(deque, loot)
+    else: # steal one
+      task = deque_list_tl_steal(deque)
+
+  if not task.isNil:
+    profile(send_recv_task):
+      task.batch = loot
+      when defined(StealLastVictim):
+        task.victim = ID
+      when defined(LazyFutures):
+        var t = task
+        while not t.isNil:
+          if t.has_future:
+            convert_lazy_future(t)
+          t = t.next
+      discard channel_send(req.chan, task, int32 sizeof(Task))
+        # Cannot block as channels are properly sized.
+      # log("Worker %2d: sending %d task%s to worker %d\n",
+      #     ID, loot, if loot > 1: "s" else "", req.ID)
+      inc requests_handled
+      tasks_sent += loot
+      when defined(StealLastThief):
+        last_thief = req.ID
+  else:
+    # There is nothing we can do with this steal request except pass it on
+    # to a different worker
+    assert deque.deque_list_tl_empty()
+    decline_steal_request(req)
+    have_no_tasks()
+
+func splittable(t: Task): bool {.inline.} =
+  not t.isNil and t.is_loop and abs(t.stop - t.cur) > t.sst
+
+proc handle(req: var StealRequest): bool =
+  var this = get_current_task()
+
+  # Send independent task(s) if possible
+  if not deque_list_tl_empty(deque):
+    handle_steal_request(req)
+    return true
+
+  # Split current task if possible
+  if splittable(this):
+    if req.ID != ID:
+      split_loop(this, req)
+      return true
+    else:
+      have_no_tasks()
+      forget_req(req)
+      return false
+
+  if req.state == Failed:
+    # Don't recirculate this steal request
+    # TODO: Is this a reasonable decision?
+    assert(req.ID == tree.left_child and req.ID == tree.right_child)
+  else:
+    have_no_tasks()
+    decline_steal_request(req)
+
+  return false
+
+# Split loops
+# -------------------------------------------------------------------
+
+func split_half(task: Task): int {.inline.} =
+  # Split iteration range in half
+  task.cur + (task.stop - task.cur) div 2
+
+func split_guided(task: Task): int {.inline.} =
+  # Split iteration range based on the number of workers
+  assert task.chunks > 0
+  let iters_left = abs(task.stop - task.cur)
+  assert iters_left > task.sst
+
+  if iters_left <= task.chunks:
+    return split_half(task)
+
+  # LOG("Worker %2d: sending %ld iterations\n", ID, task.chunks)
+  return task.stop - task.chunks
+
+template idle_workers: untyped {.dirty.} =
+  channel_peek(chan_requests[ID])
+
+proc split_adaptative(task: Task): int {.inline.} =
+  ## Split iteration range based on the number of steal requests
+  let iters_left = abs(task.stop - task.cur)
+  assert iters_left > task.sst
+
+  # log("Worker %2d: %ld of %ld iterations left\n", ID, iters_left, iters_total)
+
+  # We have already received one steal request
+  let num_idle = idle_workers + 1
+
+  # log("Worker %2d: have %ld steal requests\n", ID, num_idle)
+
+  # Every thief receives a chunk
+  let chunk = max(iters_left div (num_idle + 1), 1)
+
+  assert iters_left > chunk
+
+  # log("Worker %2d: sending %ld iterations\n", ID, chunk)
+  return task.stop - chunk
+
+func split_func(task: Task): int {.inline.} =
+  when SplitStrategy == SplitKind.half:
+    split_half(task)
+  elif SplitStrategy == guided:
+    split_guided(task)
+  else:
+    split_adaptative(task)
+
+proc split_loop(task: Task, req: sink StealRequest) =
+  assert req.ID == ID
+
+  profile(enq_deq_task):
+    let dup = task_alloc()
+
+    # Copy of the current task
+    dup[] = task[]
+
+    # Split iteration range according to given strategy
+    # [start, stop[ => [start, split[ + [split, end[
+    # TODO: Nim inclusive intervals?
+    let split = split_func(task)
+
+    # New task gets upper half of iterations
+    dup.start = split
+    dup.cur = split
+    dup.stop = task.stop
+
+  log("Worker %2d: Sending [%ld, %ld) to worker %d\n", ID, dup.start, dup.stop, req.ID);
+
+  profile(send_recv_task):
+    dup.batch = 1
+    when defined(StealLastVictim):
+      dup.victim = ID
+
+    if dup.has_future:
+      # TODO
+      discard
+
+    discard channel_send(req.chan, dup, int32 sizeof(dup))
+    inc requests_handled
+    inc tasks_sent
+    when defined(StealLastThief):
+      last_thief = req.ID
+
+    # Current task continues with lower half of iterations
+    task.stop = split
+
+    inc tasks_split
+
+  # log("Worker %2d: Continuing with [%ld, %ld)\n", ID, task->cur, task->end)
