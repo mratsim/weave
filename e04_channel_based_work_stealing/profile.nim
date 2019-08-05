@@ -97,3 +97,6 @@ when isMainModule:
   profile_init(idle)
 
   profile_results()
+
+  profile(run_task):
+    discard

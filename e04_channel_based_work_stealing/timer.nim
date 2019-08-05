@@ -34,25 +34,25 @@ when defined(i386) or defined(amd64):
   # https://www.intel.com/content/dam/www/public/us/en/documents/white-papers/ia-32-ia-64-benchmark-code-execution-paper.pdf
   when not defined(vcc):
     when defined(amd64):
-      proc getticks(): int64 {.inline, sideeffect.} =
+      proc getticks(): int64 {.inline.} =
         var lo, hi: int64
         # TODO: Provide a compile-time flag for RDTSCP support
         #       and use it instead of lfence + RDTSC
         {.emit: """asm volatile(
-          "lfence"
-          "rdtsc"
-          : "=a"(`low`), "=d"(`hi`)
+          "lfence\n"
+          "rdtsc\n"
+          : "=a"(`lo`), "=d"(`hi`)
           :
           : "memory"
         );""".}
         return (hi shl 32) or lo
     else:
-      proc getticks(): int64 {.inline, sideeffect.} =
+      proc getticks(): int64 {.inline.} =
         # TODO: Provide a compile-time flag for RDTSCP support
         #       and use it instead of lfence + RDTSC
         {.emit: """asm volatile(
-          "lfence"
-          "rdtsc"
+          "lfence\n"
+          "rdtsc\n"
           : "=a"(`result`)
           :
           : "memory"
