@@ -1046,7 +1046,7 @@ when defined(LazyFutures):
 else:
   template ready(): untyped = channel_receive(chan, data, size)
 
-  proc RT_force_future(chan: Channel, data: pointer, size: int32) =
+  proc RT_force_future*(chan: Channel, data: pointer, size: int32) =
     let this = get_current_task()
 
     block RT_future_process:
