@@ -701,7 +701,7 @@ proc decline_steal_request(req: var StealRequest) =
   assert req.retry <= MaxStealAttempts
   inc req.retry
 
-  block TODO_profile_send_recv_req:
+  profile(send_recv_req):
     inc requests_declined
 
     if req.ID == ID:
@@ -1106,9 +1106,6 @@ proc pop(): Task =
     else:
       handle_steal_request(req)
 
-
-
-
 # Split loops
 # -------------------------------------------------------------------
 
@@ -1201,5 +1198,3 @@ proc split_loop(task: Task, req: sink StealRequest) =
     inc tasks_split
 
   # log("Worker %2d: Continuing with [%ld, %ld)\n", ID, task->cur, task->end)
-
-RT_barrier()
