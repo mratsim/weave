@@ -126,7 +126,7 @@ func deque_list_tl_task_new*(dq: DequeListTl): Task =
     return task_new()
   return dq.freelist.task_stack_pop()
 
-func deque_list_tl_pop_child(dq: DequeListTl, parent: Task): Task =
+func deque_list_tl_pop_child*(dq: DequeListTl, parent: Task): Task =
   assert not dq.isNil
   assert not parent.isNil
 

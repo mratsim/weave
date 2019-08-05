@@ -597,24 +597,24 @@ proc channel_open(chan: Channel): bool {.inline.}=
   ## (Re)open a channel
   close_fn[chan.impl](chan)
 
-template channel_send_loop(chan: Channel,
-                      data: sink pointer,
-                      size: int32,
-                      body: untyped): untyped =
-  while not channel_send(chan, data, size):
-    body
-
-template channel_receive_loop(chan: Channel,
-                         data: pointer,
-                         size: int32,
-                         body: untyped): untyped =
-  while not channel_receive(chan, data, size):
-    body
-
 # Tests
 # ----------------------------------------------------------------------------------
 
 when isMainModule:
+
+  template channel_send_loop(chan: Channel,
+                        data: sink pointer,
+                        size: int32,
+                        body: untyped): untyped =
+    while not channel_send(chan, data, size):
+      body
+
+  template channel_receive_loop(chan: Channel,
+                          data: pointer,
+                          size: int32,
+                          body: untyped): untyped =
+    while not channel_receive(chan, data, size):
+      body
 
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}

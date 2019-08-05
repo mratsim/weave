@@ -909,6 +909,7 @@ proc RT_check_for_steal_requests() =
       discard handle(req)
 
 proc pop(): Task
+proc pop_child(): Task
 
 proc schedule() =
   ## Executed by worker threads
@@ -1040,6 +1041,79 @@ proc RT_barrier() =
 
     return
 
+when defined(LazyFutures):
+  discard
+else:
+  template ready(): untyped = channel_receive(chan, data, size)
+
+  proc RT_force_future(chan: Channel, data: pointer, size: int32) =
+    let this = get_current_task()
+
+    block RT_future_process:
+      if ready():
+        break RT_future_process
+
+      while (let task = pop_child(); not task.isNil):
+        profile(run_task):
+          run_task(task)
+        profile(enq_deq_task):
+          deque_list_tl_task_cache(deque, task)
+        if ready():
+          break RT_future_process
+
+      assert get_current_task() == this
+
+      while not ready():
+        try_send_steal_request(idle = false)
+        var task: Task
+        profile(idle):
+          while not recv_task(task, idle = false):
+            # We might inadvertently remove our own steal request in
+            # handle_steal_request, so:
+            profile_stop(idle)
+            try_send_steal_request(idle = false)
+            # Check if someone requested to steal from us
+            var req: StealRequest
+            while recv_req(req):
+              handle_steal_request(req)
+            profile_start(idle)
+            if ready():
+              profile_stop(idle)
+              break RT_future_process
+
+        let loot = task.batch
+        when defined(StealLastVictim):
+          if task.victim != -1:
+            last_victim = task.victim
+            assert last_victim != ID
+
+        if loot > 1:
+          profile(enq_deq_task):
+            task = deque_list_tl_pop(deque_list_tl_prepend(deque, task, loot))
+            have_tasks()
+
+        when defined(VictimCheck):
+          if loot == 1 and splittable(task):
+            have_tasks()
+
+        when StealStrategy == StealKind.adaptative:
+          inc num_steals_exec_recently
+
+        share_work()
+
+        profile(run_task):
+          run_task(task)
+        profile(enq_deq_task):
+          deque_list_tl_task_cache(deque, task)
+
+      # End block RT_future_process
+    block RT_force_future_return:
+      when defined(LazyFutures):
+        # TODO
+        discard
+      else:
+        return
+
 # Tasks helpers
 # -------------------------------------------------------------------
 
@@ -1075,18 +1149,11 @@ when StealEarlyThreshold > 0:
       # By definition not yet idle
       try_send_steal_request(idle = false)
 
-proc pop(): Task =
-  profile(enq_deq_task):
-    result = deque_list_tl_pop(deque)
-
-  when defined(VictimCheck):
-    if task.isNil:
-      have_no_tasks()
+proc popImpl(task: Task) =
 
   # Sending an idle steal request at this point may lead
   # to termination detection when we're about to quit!
   # Steal requests with idle == false are okay.
-
   when StealEarlyThreshold > 0:
     if not task.isNil and not task.is_loop:
       try_steal()
@@ -1098,13 +1165,29 @@ proc pop(): Task =
   while recv_req(req):
     # If we just popped a loop task, we may split right here
     # Makes handle_steal_request simpler
-    if deque_list_tl_empty(deque) and splittable(result):
+    if deque_list_tl_empty(deque) and splittable(task):
       if req.ID != ID:
-        split_loop(result, req)
+        split_loop(task, req)
       else:
         forget_req(req)
     else:
       handle_steal_request(req)
+
+proc pop(): Task =
+  profile(enq_deq_task):
+    result = deque_list_tl_pop(deque)
+
+  when defined(VictimCheck):
+    if result.isNil:
+      have_no_tasks()
+
+  popImpl(result)
+
+proc pop_child(): Task =
+  profile(enq_deq_task):
+    result = deque_list_tl_pop_child(deque, get_current_task())
+
+  popImpl(result)
 
 # Split loops
 # -------------------------------------------------------------------
