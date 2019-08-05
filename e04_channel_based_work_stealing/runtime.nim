@@ -1,6 +1,6 @@
 import
   # Standard library
-  atomics, locks, random,
+  locks, random,
   # Internal
   ./deque_list_tl, ./channel,
   ./bounded_stack, ./bounded_queue,
@@ -344,7 +344,7 @@ when defined(LazyFutures):
 
 # -------------------------------------------------------------------
 
-proc RT_init() =
+proc RT_init*() =
   ## Initialize the multithreading runtime
 
   # Small sanity checks
@@ -415,7 +415,7 @@ proc RT_init() =
   profile_init(send_recv_req)
   profile_init(idle)
 
-proc RT_exit() =
+proc RT_exit*() =
   deque_list_tl_delete(deque)
   free(victims)
 
@@ -624,7 +624,7 @@ proc async_action(fn: proc (_: pointer) {.nimcall.}, chan: Channel) =
     let ret = channel_send(chan, dummy, int32 sizeof(Task))
     assert ret
 
-proc notify_workers(_: pointer) =
+proc notify_workers*(_: pointer) =
   assert not tasking_finished
 
   if tree.left_child != -1:
@@ -959,7 +959,7 @@ proc schedule() =
     if tasking_done():
       return
 
-proc RT_schedule() =
+proc RT_schedule*() =
   schedule()
 
 type GotoBlocks = enum
