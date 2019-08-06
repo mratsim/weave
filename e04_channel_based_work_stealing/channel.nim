@@ -26,7 +26,8 @@ type
   # TODO: ChannelBufKind and ChannelImplKind
   #       could probably be static enums
 
-  Channel* = ptr ChannelObj
+  Channel*[T] = ChannelRaw # Typed channels
+  ChannelRaw = ptr ChannelObj
   ChannelObj = object
     head_lock, tail_lock: Lock
     owner: int32
@@ -49,7 +50,7 @@ type
     chan_n: int32
     chan_impl: ChannelImplKind
     num_cached: int32
-    cache: array[ChannelCacheSize, Channel]
+    cache: array[ChannelCacheSize, ChannelRaw]
 
 # {.experimental: "notnil".} - TODO
 
@@ -61,48 +62,48 @@ func incmod(idx, size: int32): int32 {.inline.} =
 func decmod(idx, size: int32): int32 {.inline.} =
   (idx - 1) mod size
 
-func num_items(chan: Channel): int32 {.inline.} =
+func num_items(chan: ChannelRaw): int32 {.inline.} =
   (chan.size + chan.tail - chan.head) mod chan.size
 
-func is_full(chan: Channel): bool {.inline.} =
+func is_full(chan: ChannelRaw): bool {.inline.} =
   chan.num_items() == chan.size - 1
 
-func is_empty(chan: Channel): bool {.inline.} =
+func is_empty(chan: ChannelRaw): bool {.inline.} =
   chan.head == chan.tail
 
 # Unbuffered / synchronous channels
 # ----------------------------------------------------------------------------------
 
-func num_items_unbuf(chan: Channel): int32 {.inline.} =
+func num_items_unbuf(chan: ChannelRaw): int32 {.inline.} =
   # TODO: use range 0..1 but type mismatch
   chan.head
 
-func is_full_unbuf(chan: Channel): bool {.inline.} =
+func is_full_unbuf(chan: ChannelRaw): bool {.inline.} =
   chan.head == 1
 
-func is_empty_unbuf(chan: Channel): bool {.inline.} =
+func is_empty_unbuf(chan: ChannelRaw): bool {.inline.} =
   chan.head == 0
 
-# Channel kinds
+# ChannelRaw kinds
 # ----------------------------------------------------------------------------------
 
-func channel_buffered(chan: Channel): bool =
+func channel_buffered(chan: ChannelRaw): bool =
   chan.size - 1 > 0
 
-func channel_unbuffered(chan: Channel): bool =
+func channel_unbuffered(chan: ChannelRaw): bool =
   assert chan.size >= 0
   chan.size - 1 == 0
 
-# Channel status and properties
+# ChannelRaw status and properties
 # ----------------------------------------------------------------------------------
 
-proc channel_closed(chan: Channel): bool {.inline.} =
+proc channel_closed(chan: ChannelRaw): bool {.inline.} =
   load(chan.closed, moRelaxed)
 
-proc channel_capacity(chan: Channel): int32 {.inline.} =
+proc channel_capacity(chan: ChannelRaw): int32 {.inline.} =
   return chan.size - 1
 
-proc channel_peek*(chan: Channel): int32 =
+proc channel_peek*(chan: ChannelRaw): int32 =
   if chan.channel_unbuffered():
     return num_items_unbuf(chan)
   return num_items(chan)
@@ -168,7 +169,7 @@ proc channel_cache_free*() =
 # Channels memory ops
 # ----------------------------------------------------------------------------------
 
-proc channel_alloc*(size, n: int32, impl: ChannelImplKind): Channel =
+proc channel_alloc*(size, n: int32, impl: ChannelImplKind): ChannelRaw =
 
   when ChannelCacheSize > 0:
     var p = channel_cache
@@ -212,7 +213,7 @@ proc channel_alloc*(size, n: int32, impl: ChannelImplKind): Channel =
     # Allocate a cache as well if one of the proper size doesn't exist
     discard channel_cache_alloc(size, n, impl)
 
-proc channel_free*(chan: Channel) =
+proc channel_free*(chan: ChannelRaw) =
   if chan.isNil:
     return
 
@@ -244,7 +245,7 @@ proc channel_free*(chan: Channel) =
 # ----------------------------------------------------------------------------------
 
 proc channel_send_unbuffered_mpmc(
-       chan: Channel,
+       chan: ChannelRaw,
        data: sink pointer,
        size: int32
      ): bool =
@@ -268,7 +269,7 @@ proc channel_send_unbuffered_mpmc(
   return true
 
 proc channel_send_mpmc(
-       chan: Channel,
+       chan: ChannelRaw,
        data: sink pointer,
        size: int32
      ): bool =
@@ -304,7 +305,7 @@ proc channel_send_mpmc(
   return true
 
 proc channel_recv_unbuffered_mpmc(
-       chan: Channel,
+       chan: ChannelRaw,
        data: pointer,
        size: int32
      ): bool =
@@ -333,7 +334,7 @@ proc channel_recv_unbuffered_mpmc(
   return true
 
 proc channel_recv_mpmc(
-       chan: Channel,
+       chan: ChannelRaw,
        data: pointer,
        size: int32
      ): bool =
@@ -367,21 +368,21 @@ proc channel_recv_mpmc(
   release(chan.head_lock)
   return true
 
-proc channel_close_mpmc(chan: Channel): bool =
+proc channel_close_mpmc(chan: ChannelRaw): bool =
   # Unsynchronized
 
   if chan.channel_closed():
-    # Channel already closed
+    # ChannelRaw already closed
     return false
 
   store(chan.closed, true, moRelaxed)
   return true
 
-proc channel_open_mpmc(chan: Channel): bool =
+proc channel_open_mpmc(chan: ChannelRaw): bool =
   # Unsynchronized
 
   if not chan.channel_closed:
-    # Channel already open
+    # ChannelRaw already open
     return false
 
   store(chan.closed, false, moRelaxed)
@@ -391,7 +392,7 @@ proc channel_open_mpmc(chan: Channel): bool =
 # ----------------------------------------------------------------------------------
 
 proc channel_send_mpsc(
-       chan: Channel,
+       chan: ChannelRaw,
        data: sink pointer,
        size: int32
       ): bool =
@@ -399,7 +400,7 @@ proc channel_send_mpsc(
   channel_send_mpmc(chan, data, size)
 
 proc channel_recv_unbuffered_mpsc(
-       chan: Channel,
+       chan: ChannelRaw,
        data: pointer,
        size: int32
       ): bool =
@@ -419,7 +420,7 @@ proc channel_recv_unbuffered_mpsc(
   return true
 
 proc channel_recv_mpsc(
-       chan: Channel,
+       chan: ChannelRaw,
        data: pointer,
        size: int32
       ): bool =
@@ -450,7 +451,7 @@ proc channel_recv_mpsc(
   chan.head = newHead
   return true
 
-proc channel_close_mpsc(chan: Channel): bool =
+proc channel_close_mpsc(chan: ChannelRaw): bool =
   # Unsynchronized
   assert not chan.isNil
 
@@ -461,7 +462,7 @@ proc channel_close_mpsc(chan: Channel): bool =
   chan.closed.store(true, moRelaxed)
   return true
 
-proc channel_open_mpsc(chan: Channel): bool =
+proc channel_open_mpsc(chan: ChannelRaw): bool =
   # Unsynchronized
   assert not chan.isNil
 
@@ -476,7 +477,7 @@ proc channel_open_mpsc(chan: Channel): bool =
 # ----------------------------------------------------------------------------------
 
 proc channel_send_unbuffered_spsc(
-       chan: Channel,
+       chan: ChannelRaw,
        data: sink pointer,
        size: int32
       ): bool =
@@ -493,7 +494,7 @@ proc channel_send_unbuffered_spsc(
   return true
 
 proc channel_send_spsc(
-       chan: Channel,
+       chan: ChannelRaw,
        data: sink pointer,
        size: int32
       ): bool =
@@ -522,14 +523,14 @@ proc channel_send_spsc(
   return true
 
 proc channel_recv_spsc(
-       chan: Channel,
+       chan: ChannelRaw,
        data: pointer,
        size: int32
       ): bool =
   # Cannot be inline due to function table
   channel_recv_mpsc(chan, data, size)
 
-proc channel_close_spsc(chan: Channel): bool =
+proc channel_close_spsc(chan: ChannelRaw): bool =
   # Unsynchronized
   assert not chan.isNil
 
@@ -540,7 +541,7 @@ proc channel_close_spsc(chan: Channel): bool =
   chan.closed.store(true, moRelaxed)
   return true
 
-proc channel_open_spsc(chan: Channel): bool =
+proc channel_open_spsc(chan: ChannelRaw): bool =
   # Unsynchronized
   assert not chan.isNil
 
@@ -579,37 +580,57 @@ const
     Spsc: channel_open_spsc
   ]
 
-proc channel_send*(chan: Channel, data: sink pointer, size: int32): bool {.inline.}=
+proc channel_send(chan: ChannelRaw, data: sink pointer, size: int32): bool {.inline.}=
   ## Send item to the channel (FIFO queue)
   ## (Insert at last)
   send_fn[chan.impl](chan, data, size)
 
-proc channel_receive*(chan: Channel, data: pointer, size: int32): bool {.inline.}=
+proc channel_receive(chan: ChannelRaw, data: pointer, size: int32): bool {.inline.}=
   ## Receive an item from the channel
   ## (Remove the first item)
   recv_fn[chan.impl](chan, data, size)
 
-proc channel_close(chan: Channel): bool {.inline.}=
+proc channel_close(chan: ChannelRaw): bool {.inline.}=
   ## Close a channel
   close_fn[chan.impl](chan)
 
-proc channel_open(chan: Channel): bool {.inline.}=
+proc channel_open(chan: ChannelRaw): bool {.inline.}=
   ## (Re)open a channel
   close_fn[chan.impl](chan)
+
+proc channel_send*[T: ptr](chan: Channel[T], data: T, size: int32): bool {.inline.}=
+  ## Send item to the channel (FIFO queue)
+  ## (Insert at last)
+  send_fn[chan.impl](chan, data, size)
+
+proc channel_receive*[T: ptr](chan: Channel[T], data: T, size: int32): bool {.inline.}=
+  ## Receive an item from the channel
+  ## (Remove the first item)
+  recv_fn[chan.impl](chan, data, size)
+
+proc channel_send*[T: object](chan: Channel[T], data: ptr T, size: int32): bool {.inline.}=
+  ## Send item to the channel (FIFO queue)
+  ## (Insert at last)
+  send_fn[chan.impl](chan, data, size)
+
+proc channel_receive*[T: object](chan: Channel[T], data: ptr T, size: int32): bool {.inline.}=
+  ## Receive an item from the channel
+  ## (Remove the first item)
+  recv_fn[chan.impl](chan, data, size)
 
 # Tests
 # ----------------------------------------------------------------------------------
 
 when isMainModule:
 
-  template channel_send_loop(chan: Channel,
+  template channel_send_loop(chan: ChannelRaw,
                         data: sink pointer,
                         size: int32,
                         body: untyped): untyped =
     while not channel_send(chan, data, size):
       body
 
-  template channel_receive_loop(chan: Channel,
+  template channel_receive_loop(chan: ChannelRaw,
                           data: pointer,
                           size: int32,
                           body: untyped): untyped =
@@ -626,7 +647,7 @@ when isMainModule:
 
   type ThreadArgs = object
     ID: int32
-    chan: Channel
+    chan: ChannelRaw
 
   template Worker(id: int32, body: untyped): untyped {.dirty.}=
     if args.ID == id:
@@ -643,7 +664,7 @@ when isMainModule:
              fn: proc(args: ptr ThreadArgs): pointer {.noconv, gcsafe.}
            ) =
     suite name:
-      var chan: Channel
+      var chan: ChannelRaw
 
       for impl in Mpmc .. Spsc:
         for i in Unbuffered .. Buffered:
@@ -715,11 +736,11 @@ when isMainModule:
 
     return nil
 
-  runSuite("[Channel] 2 threads can send data", thread_func)
+  runSuite("[ChannelRaw] 2 threads can send data", thread_func)
 
   # ----------------------------------------------------------------------------------
 
-  iterator pairs(chan: Channel, T: typedesc): (int, T) =
+  iterator pairs(chan: ChannelRaw, T: typedesc): (int, T) =
     var
       i: int
       x: T
@@ -763,11 +784,11 @@ when isMainModule:
 
     return nil
 
-  runSuite("[Channel] channel_close, channel_free, channel_cache", thread_func_2)
+  runSuite("[ChannelRaw] channel_close, channel_free, channel_cache", thread_func_2)
 
   # ----------------------------------------------------------------------------------
 
-  proc is_cached(chan: Channel): bool =
+  proc is_cached(chan: ChannelRaw): bool =
     assert not chan.isNil
 
     var p = channel_cache
@@ -784,7 +805,7 @@ when isMainModule:
       p = p.next
     return false
 
-  suite "[Channel] Channel caching implementation":
+  suite "[ChannelRaw] ChannelRaw caching implementation":
 
     # Start from clean cache slate
     channel_cache_free()
@@ -808,7 +829,7 @@ when isMainModule:
         channel_cache_len == 3
 
     # ---------------------------------
-    var chan, stash: array[10, Channel]
+    var chan, stash: array[10, ChannelRaw]
 
     test "Implicit caches allocation":
 

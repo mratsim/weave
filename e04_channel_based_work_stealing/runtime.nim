@@ -11,64 +11,6 @@ import
   primitives/c,
   ./profile
 
-type Channel = channel.Channel
-
-template log(args: varargs[untyped]): untyped =
-  printf(args)
-  flushFile(stdout)
-
-const MaxSteal {.intdefine.} = 1
-  # TODO add to compile-time flags
-
-var deque {.threadvar.}: DequeListTL
-  ## Thread-local task deque
-
-var chan_requests: array[MaxWorkers, Channel]
- ## Worker -> worker: intra-partition steal requests (MPSC)
-
-var chan_tasks: array[MaxWorkers, array[MaxSteal, Channel]]
- ## Worker -> worker: tasks (SPSC)
-
-var channel_stack {.threadvar.}: BoundedStack[MaxSteal, Channel]
- ## Every worker maintains a stack of (recycled) channels to
- ## keep track of which channels to use for the next steal requests
-
-proc channel_push(chan: sink Channel) {.inline.} =
-  channel_stack.bounded_stack_push(chan)
-
-proc channel_pop(): Channel {.inline.} =
-  channel_stack.bounded_stack_pop()
-
-# -------------------------------------------------------------------
-
-when defined(VictimCheck):
-  # TODO - add to compilation flags
-  type TaskIndicator = object
-    tasks: Atomic[bool]
-    padding: array[64 - sizeof(Atomic[bool]), byte]
-
-  var task_indicators: array[MaxWorkers, TaskIndicator]
-
-  template likely_has_tasks(id: int32): bool {.dirty.} =
-    task_indicators[id].tasks.load(moRelaxed) > 0
-
-  template have_tasks() {.dirty.} =
-    task_indicators[id].tasks.store(true, moRelaxed)
-
-  template have_no_tasks() {.dirty.} =
-    task_indicators[id].tasks.store(false, moRelaxed)
-
-else:
-  template likely_has_tasks(id: int32): bool =
-    true
-
-  template have_tasks() {.dirty.} =
-    discard
-
-  template have_no_tasks() {.dirty.} =
-    discard
-
-
 # When a steal request is returned to its sender after MAX_STEAL_ATTEMPTS
 # unsuccessful attempts, the steal request changes state to STATE_FAILED and
 # is then passed on to tree.parent as a work sharing request: the parent holds
@@ -99,8 +41,11 @@ type
     Idle
     Failed
 
+  Channel[T] = channel.Channel[T]
+    # COnflicts with system.nim default channels
+
   StealRequest = object
-    chan: Channel             # Channel for sending tasks
+    chan: Channel[Task]       # Channel for sending tasks
     ID: int32                 # ID of requesting worker
     retry: int32              # 0 <= tries <= num_workers_rt
     partition: int32          # partition in which the steal request was initiated
@@ -112,6 +57,63 @@ type
       pad: array[2, byte]
     else:
       pad: array[3, byte]
+
+# -------------------------------------------------------------------
+
+template log(args: varargs[untyped]): untyped =
+  printf(args)
+  flushFile(stdout)
+
+const MaxSteal {.intdefine.} = 1
+  # TODO add to compile-time flags
+
+var deque {.threadvar.}: DequeListTL
+  ## Thread-local task deque
+
+var chan_requests: array[MaxWorkers, Channel[StealRequest]]
+ ## Worker -> worker: intra-partition steal requests (MPSC)
+
+var chan_tasks: array[MaxWorkers, array[MaxSteal, Channel[Task]]]
+ ## Worker -> worker: tasks (SPSC)
+
+var channel_stack {.threadvar.}: BoundedStack[MaxSteal, Channel[Task]]
+ ## Every worker maintains a stack of (recycled) channels to
+ ## keep track of which channels to use for the next steal requests
+
+proc channel_push(chan: sink Channel[Task]) {.inline.} =
+  channel_stack.bounded_stack_push(chan)
+
+proc channel_pop(): Channel[Task] {.inline.} =
+  channel_stack.bounded_stack_pop()
+
+# -------------------------------------------------------------------
+
+when defined(VictimCheck):
+  # TODO - add to compilation flags
+  type TaskIndicator = object
+    tasks: Atomic[bool]
+    padding: array[64 - sizeof(Atomic[bool]), byte]
+
+  var task_indicators: array[MaxWorkers, TaskIndicator]
+
+  template likely_has_tasks(id: int32): bool {.dirty.} =
+    task_indicators[id].tasks.load(moRelaxed) > 0
+
+  template have_tasks() {.dirty.} =
+    task_indicators[id].tasks.store(true, moRelaxed)
+
+  template have_no_tasks() {.dirty.} =
+    task_indicators[id].tasks.store(false, moRelaxed)
+
+else:
+  template likely_has_tasks(id: int32): bool =
+    true
+
+  template have_tasks() {.dirty.} =
+    discard
+
+  template have_no_tasks() {.dirty.} =
+    discard
 
 template init_victims(): untyped =
   # `my_partition`: thread-local from partition.nim after running `partition_init`
@@ -319,7 +321,10 @@ proc random_victim(victims: uint32, ID: int32): int32 =
   assert j == num_victims
 
   result = potential_victims[thread_rng.rand(num_victims-1)]
-  assert potential_victim(victims, result) != 0
+  # print_victims(victims, ID)
+  log("Worker %d: Potential victim: %d\n", ID, result)
+  # log("Returned bitfield: %d\n", potential_victim(victims, result))
+  assert potential_victim(victims, result) != 0'u32
 
   assert(
     ((result in 0 ..< my_partition.num_workers_rt) and
@@ -380,7 +385,7 @@ proc RT_init*() =
     )
 
   # At most MaxSteal steal requests and thus different channels
-  channel_stack = bounded_stack_alloc(Channel, MaxSteal)
+  channel_stack = bounded_stack_alloc(Channel[Task], MaxSteal)
 
   # Being able to send N steal requests requires either a single MPSC or
   # N SPSC channels
@@ -476,7 +481,7 @@ proc next_victim(req: var StealRequest): int32 =
       mark_as_idle(req.victims, tree.left_child)
     elif tree.right_subtree_is_idle:
       mark_as_idle(req.victims, tree.right_child)
-    assert potential_victim(ID) != 0
+    assert potential_victim(ID) == 0
     result = random_victim(req.victims, req.ID)
 
   if result == -1:
@@ -511,7 +516,7 @@ proc try_send_steal_request(idle: bool)
 # proc decline_all_steal_requests()
 proc split_loop(task: Task, req: sink StealRequest)
 
-proc send_req(chan: Channel, req: sink StealRequest) {.inline.} =
+proc send_req(chan: Channel[StealRequest], req: sink StealRequest) {.inline.} =
   var nfail = 0
   while not channel_send(chan, req.unsafeAddr, int32 sizeof(req)):
     inc nfail
@@ -553,9 +558,10 @@ proc recv_req(req: var StealRequest): bool =
 proc recv_task(task: var Task, idle: bool): bool =
   profile(send_recv_task):
     for i in 0 ..< MaxSteal:
-      result = channel_receive(chan_tasks[ID][i], task.addr, int32 sizeof(Task))
+      result = channel_receive(chan_tasks[ID][i], task, int32 sizeof(Task))
       if result:
         channel_push(chan_tasks[ID][i])
+        log("Worker %d received a task with function address %d\n", ID, task.fn)
         break
 
   if not result:
@@ -613,7 +619,7 @@ proc detect_termination() {.inline.} =
 # Async actions : Side-effecting pseudo tasks
 # -------------------------------------------------------------------
 
-proc async_action(fn: proc (_: pointer) {.nimcall.}, chan: Channel) =
+proc async_action(fn: proc (_: pointer) {.nimcall.}, chan: Channel[Task]) =
   ## Asynchronous call of function fn delivered via channel chan
   ## Executed for side effects only
 
@@ -626,6 +632,7 @@ proc async_action(fn: proc (_: pointer) {.nimcall.}, chan: Channel) =
       dummy.victim = -1
 
     let ret = channel_send(chan, dummy, int32 sizeof(Task))
+    log("Worker %2d: sending %d async_action\n", ID)
     assert ret
 
 proc notify_workers*(_: pointer) =
@@ -837,10 +844,11 @@ proc handle_steal_request(req: var StealRequest) =
           if t.has_future:
             convert_lazy_future(t)
           t = t.next
+      log("Worker %2d: preparing a task with function address %d\n", ID, task.fn)
       discard channel_send(req.chan, task, int32 sizeof(Task))
         # Cannot block as channels are properly sized.
-      # log("Worker %2d: sending %d task%s to worker %d\n",
-      #     ID, loot, if loot > 1: "s" else "", req.ID)
+      log("Worker %2d: sending %d task%s to worker %d\n",
+          ID, loot, if loot > 1: "s" else: "", req.ID)
       inc requests_handled
       tasks_sent += loot
       when defined(StealLastThief):
@@ -921,6 +929,7 @@ proc schedule() =
   while true: # Scheduling loop
     # 1. Private task queue
     while (let task = pop(); not task.isNil):
+      assert not task.fn.isNil, "Thread: " & $ID & " received a null task function."
       profile(run_task):
         run_task(task)
       profile(enq_deq_task):
@@ -936,6 +945,8 @@ proc schedule() =
         assert deque.deque_list_tl_empty()
         assert requested != 0
         decline_all_steal_requests()
+
+    assert not task.fn.isNil, "Thread: " & $ID & " received a null task function."
 
     let loot = task.batch
     when defined(StealLastVictim):
@@ -963,7 +974,7 @@ proc schedule() =
     if tasking_done():
       return
 
-proc RT_schedule*() =
+proc RT_schedule*() {.inline.}=
   schedule()
 
 type GotoBlocks = enum
@@ -1048,9 +1059,12 @@ proc RT_barrier*() =
 when defined(LazyFutures):
   discard
 else:
+  type Future = object
+    # TODO
+
   template ready(): untyped = channel_receive(chan, data, size)
 
-  proc RT_force_future*(chan: Channel, data: pointer, size: int32) =
+  proc RT_force_future*(chan: Channel[Future], data: ptr Future, size: int32) =
     let this = get_current_task()
 
     block RT_future_process:
@@ -1122,6 +1136,7 @@ else:
 # -------------------------------------------------------------------
 
 proc push*(task: sink Task) =
+  assert not task.fn.isNil, "Thread: " & $ID & " pushed a null task function."
   deque.deque_list_tl_push(task)
   have_tasks()
 

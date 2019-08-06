@@ -36,7 +36,6 @@ static: assert sizeof(TaskObj) == 192,
           "TaskObj is of size " & $sizeof(TaskObj) &
           " instead of the expected 192 bytes."
 
-
 func task_zero*(task: sink Task): Task {.inline.} =
   zeroMem(task, sizeof(TaskObj))
   return task

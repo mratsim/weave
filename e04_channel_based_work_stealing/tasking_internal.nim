@@ -100,16 +100,44 @@ template log(args: varargs[untyped]): untyped =
   printf(args)
   flushFile(stdout)
 
+type
+  WorkerState2 = enum
+    ## Steal requests carry one of the following states:
+    ## - STATE_WORKING means the requesting worker is (likely) still busy
+    ## - STATE_IDLE means the requesting worker has run out of tasks
+    ## - STATE_FAILED means the requesting worker backs off and waits for tasks
+    ##   from its parent worker
+    Working2
+    Idle2
+    Failed2
+
+  StealRequest = object
+    chan: pointer             # Channel for sending tasks
+    ID: int32                 # ID of requesting worker
+    retry: int32              # 0 <= tries <= num_workers_rt
+    partition: int32          # partition in which the steal request was initiated
+    pID: int32                # ID of requesting worker within partition
+    victims: uint32           # bitfield of potential victims (max 32)
+    state: WorkerState2        # State of steal request and by extension requestion worker
+    when StealStrategy == StealKind.adaptative:
+      stealhalf: bool
+      pad: array[2, byte]
+    else:
+      pad: array[3, byte]
+
 proc run_task*(task: Task) {.inline.} =
+  assert not task.fn.isNil, "Thread: " & $ID & " received a null task function."
+  if task.fn.isNil:
+    let sr = cast[ptr StealRequest](task)
+    log("Worker %d: StealRequest from %d, state %d\n", ID, sr.ID, sr.state)
+
   when false:
     if task.is_loop:
       fprintf(stderr, "%2d: Running [%2ld,%2ld)\n", ID, task.start, task.stop)
 
   let this = get_current_task()
   set_current_task(task)
-  log("TID: %d, Task address: %d\n", ID, task)
   task.fn(task.data.addr)
-  log("TID: %d, here\n", ID)
   set_current_task(this)
   if task.is_loop:
     # We have executed |stop-start| iterations
