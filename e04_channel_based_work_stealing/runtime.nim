@@ -2,14 +2,15 @@ import
   # Standard library
   locks,
   # Internal
-  ./deque_list_tl, ./channel,
+  ./deque_list_tl,
   ./bounded_stack, ./bounded_queue,
   ./worker_tree,
   ./tasking_internal,
   ./partition, task,
   ./platform, ./bit,
   primitives/c,
-  ./profile
+  ./profile,
+  ./channel
 
 # When a steal request is returned to its sender after MAX_STEAL_ATTEMPTS
 # unsuccessful attempts, the steal request changes state to STATE_FAILED and
@@ -123,7 +124,7 @@ template steal_request_init(): StealRequest =
   when StealStrategy == StealKind.adaptative:
     StealRequest(
       chan: channel_pop(),
-      id: ID, # thread-local var from tasking_internal.ni
+      ID: ID, # thread-local var from tasking_internal.nim
       retry: 0,
       partition: my_partition.number, # `my_partition`: thread-local from partition.nim after running `partition_init`
       pID: pID, # thread-local from runtime.nim, defined later
@@ -192,7 +193,7 @@ template lprintf(args: varargs[untyped]): untyped =
 
 # -------------------------------------------------------------------
 
-proc print_victims(victims: uint32, ID: int32) =
+proc print_victims(victims: uint32, ID: int32) {.inline.} =
 
   template victim(victims, n: untyped): untyped =
     if (victims and bit(n)) != 0: '1'
@@ -235,7 +236,7 @@ proc ws_init() =
   seed = ID.uint32 # Seed for thread-safe PRNG provided by Linux kernel
   init_victims(ID)
 
-proc mark_as_idle(victims: var uint32, n: int32) =
+proc mark_as_idle(victims: var uint32, n: int32) {.inline.} =
   ## Requires -1 <= n < num_workers
   if n == -1:
     # Invalid worker ID (parent of root or out-of-bound child)
@@ -249,7 +250,7 @@ proc mark_as_idle(victims: var uint32, n: int32) =
     # Unset worker n
     victims = victims and not bit(n)
 
-func rightmost_victim(victims: uint32, ID: int32): int32 =
+func rightmost_victim(victims: uint32, ID: int32): int32 {.inline.}=
   result = rightmost_one_bit_pos(victims)
   if result == ID:
     result = rightmost_one_bit_pos(zero_rightmost_one_bit(victims))
@@ -266,7 +267,7 @@ func rightmost_victim(victims: uint32, ID: int32): int32 =
 var random_receiver_calls {.threadvar.}: int32
 var random_receiver_early_exits {.threadvar.}: int32
 
-proc random_victim(victims: uint32, ID: int32): int32 =
+proc random_victim(victims: uint32, ID: int32): int32 {.inline.}=
   ## Choose a random victim != ID from the list of potential victims
 
   inc random_receiver_calls
@@ -332,24 +333,6 @@ proc random_victim(victims: uint32, ID: int32): int32 =
     ((result in 0 ..< my_partition.num_workers_rt) and
     result != ID)
   )
-
-# To profile different parts of the runtime
-profile_decl(run_task)
-profile_decl(enq_deq_task)
-profile_decl(send_recv_task)
-profile_decl(send_recv_req)
-profile_decl(idle)
-
-var
-  requests_sent {.threadvar.}: int32
-  requests_handled {.threadvar.}: int32
-  requests_declined {.threadvar.}: int32
-  tasks_sent {.threadvar.}: int32
-  tasks_split {.threadvar.}: int32
-
-when defined(LazyFutures):
-  # TODO: add to compilation flags
-  var futures_converted {.threadvar.}: int32
 
 # -------------------------------------------------------------------
 
@@ -535,7 +518,7 @@ proc send_req_worker(ID: int32, req: sink StealRequest) {.inline.} =
 proc send_req_manager(req: sink StealRequest) {.inline.} =
   send_req(chan_requests[my_partition.manager], req)
 
-proc recv_req(req: var StealRequest): bool =
+proc recv_req(req: var StealRequest): bool {.inline.}=
   profile(send_recv_req):
     result = channel_receive(chan_requests[ID], req.addr, int32 sizeof(req))
     while result and req.state == Failed:
@@ -557,7 +540,7 @@ proc recv_req(req: var StealRequest): bool =
     # No special treatment for other states
     assert((result and req.state != Failed) or not result)
 
-proc recv_task(task: var Task, idle: bool): bool =
+proc recv_task(task: var Task, idle: bool): bool {.inline.} =
   profile(send_recv_task):
     for i in 0 ..< MaxSteal:
       result = channel_receive(chan_tasks[ID][i], task.addr, int32 sizeof(Task))
@@ -599,7 +582,7 @@ proc recv_task(task: var Task, idle: bool): bool =
     assert requested in 0 ..< MaxSteal
     assert dropped_steal_requests == 0
 
-proc recv_task(task: var Task): bool =
+proc recv_task(task: var Task): bool {.inline.} =
   recv_task(task, true)
 
 proc forget_req(req: sink StealRequest) {.inline.}=
@@ -662,8 +645,6 @@ var # TODO: solve variable declared in tasking_internal and runtime
   # num_tasks_exec_recently {.threadvar.}: int32
   num_steals_exec_recently {.threadvar.}: int32
   stealhalf {.threadvar.}: bool
-  requests_steal_one {.threadvar.}: int32
-  requests_steal_half {.threadvar.}: int32
 
 proc try_send_steal_request(idle: bool) =
   ## Try to send a steal request
@@ -869,7 +850,7 @@ proc handle_steal_request(req: var StealRequest) =
 func splittable(t: Task): bool {.inline.} =
   not t.isNil and t.is_loop and abs(t.stop - t.cur) > t.sst
 
-proc handle(req: var StealRequest): bool =
+proc handle(req: var StealRequest): bool {.inline.}=
   var this = get_current_task()
 
   # Send independent task(s) if possible
@@ -897,7 +878,7 @@ proc handle(req: var StealRequest): bool =
 
   return false
 
-proc share_work() =
+proc share_work() {.inline.} =
   # Handle as many work sharing requests as possible.
   # Leave work sharing requests that cannot be answered with tasks enqueued
   while not bounded_queue_empty(work_sharing_requests):
@@ -1164,10 +1145,10 @@ proc push*(task: sink Task) =
 
   profile_start(enq_deq_task)
 
-when StealEarlyThreshold > 0:
-  proc try_steal() =
+when StealEarlyThreshold >= 0:
+  proc try_steal() {.inline.} =
     # Try to send a steal request when number of local tasks <= StealEarlyThreashold
-    if num_workers ==1:
+    if num_workers == 1:
       return
 
     if deque_list_tl_num_tasks(deque) <= StealEarlyThreshold:
@@ -1179,7 +1160,7 @@ proc popImpl(task: Task) =
   # Sending an idle steal request at this point may lead
   # to termination detection when we're about to quit!
   # Steal requests with idle == false are okay.
-  when StealEarlyThreshold > 0:
+  when StealEarlyThreshold >= 0:
     if not task.isNil and not task.is_loop:
       try_steal()
 
@@ -1256,7 +1237,7 @@ proc split_adaptative(task: Task): int {.inline.} =
   # log("Worker %2d: sending %ld iterations\n", ID, chunk)
   return task.stop - chunk
 
-func split_func(task: Task): int {.inline.} =
+proc split_func(task: Task): int {.inline.} =
   when SplitStrategy == SplitKind.half:
     split_half(task)
   elif SplitStrategy == guided:

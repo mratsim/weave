@@ -56,32 +56,32 @@ type
 
 # ----------------------------------------------------------------------------------
 
-func incmod(idx, size: int32): int32 {.inline.} =
+template incmod(idx, size: int32): int32 =
   (idx + 1) mod size
 
-func decmod(idx, size: int32): int32 {.inline.} =
+template decmod(idx, size: int32): int32 =
   (idx - 1) mod size
 
-func num_items(chan: ChannelRaw): int32 {.inline.} =
+template num_items(chan: ChannelRaw): int32 =
   (chan.size + chan.tail - chan.head) mod chan.size
 
-func is_full(chan: ChannelRaw): bool {.inline.} =
+template is_full(chan: ChannelRaw): bool =
   chan.num_items() == chan.size - 1
 
-func is_empty(chan: ChannelRaw): bool {.inline.} =
+template is_empty(chan: ChannelRaw): bool =
   chan.head == chan.tail
 
 # Unbuffered / synchronous channels
 # ----------------------------------------------------------------------------------
 
-func num_items_unbuf(chan: ChannelRaw): int32 {.inline.} =
+template num_items_unbuf(chan: ChannelRaw): int32 =
   # TODO: use range 0..1 but type mismatch
   chan.head
 
-func is_full_unbuf(chan: ChannelRaw): bool {.inline.} =
+template is_full_unbuf(chan: ChannelRaw): bool =
   chan.head == 1
 
-func is_empty_unbuf(chan: ChannelRaw): bool {.inline.} =
+template is_empty_unbuf(chan: ChannelRaw): bool =
   chan.head == 0
 
 # ChannelRaw kinds
