@@ -563,7 +563,8 @@ proc recv_task(task: var Task, idle: bool): bool =
       result = channel_receive(chan_tasks[ID][i], task.addr, int32 sizeof(Task))
       if result:
         channel_push(chan_tasks[ID][i])
-        log("Worker %d received a task with function address %d\n", ID, task.fn)
+        when defined(debug):
+          log("Worker %d received a task with function address %d\n", ID, task.fn)
         break
 
   if not result:
@@ -634,11 +635,11 @@ proc async_action(fn: proc (_: pointer) {.nimcall.}, chan: Channel[Task]) =
       dummy.victim = -1
 
     let ret = channel_send(chan, dummy, int32 sizeof(Task))
-    log("Worker %2d: sending %d async_action\n", ID)
+    when defined(debug):
+      log("Worker %2d: sending %d async_action\n", ID)
     assert ret
 
 proc notify_workers*(_: pointer) =
-  log("Worker %d: Notifying, Am I already finished?: %d\n", ID, tasking_finished)
   assert not tasking_finished
 
   if tree.left_child != -1:
@@ -847,11 +848,13 @@ proc handle_steal_request(req: var StealRequest) =
           if t.has_future:
             convert_lazy_future(t)
           t = t.next
-      log("Worker %2d: preparing a task with function address %d\n", ID, task.fn)
+      when defined(debug):
+        log("Worker %2d: preparing a task with function address %d\n", ID, task.fn)
       discard channel_send(req.chan, task, int32 sizeof(Task))
         # Cannot block as channels are properly sized.
-      log("Worker %2d: sending %d task%s to worker %d\n",
-          ID, loot, if loot > 1: "s" else: "", req.ID)
+      when defined(debug):
+        log("Worker %2d: sending %d task%s to worker %d\n",
+            ID, loot, if loot > 1: "s" else: "", req.ID)
       inc requests_handled
       tasks_sent += loot
       when defined(StealLastThief):
@@ -912,7 +915,7 @@ proc share_work() =
     else:
       break
 
-proc RT_check_for_steal_requests() =
+proc RT_check_for_steal_requests*() =
   ## Receive and handle steal requests
   # Can be called from user code
   if not bounded_queue_empty(work_sharing_requests):

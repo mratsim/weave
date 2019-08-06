@@ -127,9 +127,6 @@ type
 
 proc run_task*(task: Task) {.inline.} =
   assert not task.fn.isNil, "Thread: " & $ID & " received a null task function."
-  if task.fn.isNil:
-    let sr = cast[ptr StealRequest](task)
-    log("Worker %d: StealRequest from %d, state %d\n", ID, sr.ID, sr.state)
 
   when false:
     if task.is_loop:

@@ -5,10 +5,12 @@ import
   ./tasking_internal, ./task,
   ./profile, ./runtime
 
+export supportsCopyMem
+
 # TODO:
 # overload with loop bounds for task splitting
 
-macro async(funcCall: typed): untyped =
+macro async*(funcCall: typed): untyped =
   # We take typed argument so that overloading resolution
   # is already done and arguments are semchecked
   funcCall.expectKind(nnkCall)
