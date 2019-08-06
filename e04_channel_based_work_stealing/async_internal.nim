@@ -3,6 +3,7 @@ import
   macros, typetraits,
   # Internal
   ./tasking_internal, ./task,
+  ./future_internal,
   ./profile, ./runtime
 
 export supportsCopyMem
@@ -15,6 +16,10 @@ macro async*(funcCall: typed): untyped =
   # is already done and arguments are semchecked
   funcCall.expectKind(nnkCall)
   result = newStmtList()
+
+  # Get the return type if any
+  let retType = funcCall[0].getImpl[3][0]
+  let needFuture = retType.kind != nnkEmpty
 
   # Get a serialized type and data for all function arguments
   # We use adhoc tuple
@@ -42,51 +47,119 @@ macro async*(funcCall: typed): untyped =
 
   # Create the async function
   let async_fn = ident("async_" & fnName)
-  let param = ident("param") # type-erased pointer to data
-  let data = ident("data")   # typed pointer to data
   var fnCall = newCall(fn)
-  if funcCall.len == 2:
-    # With only 1 arg, the tuple syntax doesn't construct a tuple
-    # let data = (123) # is an int
-    fnCall.add nnkDerefExpr.newTree(data)
-  else: # This handles the 0 arg case as well
+  let data = ident("data")   # typed pointer to data
+
+  if not needFuture:
+    if funcCall.len == 2:
+      # With only 1 arg, the tuple syntax doesn't construct a tuple
+      # let data = (123) # is an int
+      fnCall.add nnkDerefExpr.newTree(data)
+    else: # This handles the 0 arg case as well
+      for i in 1 ..< funcCall.len:
+        fnCall.add nnkBracketExpr.newTree(
+          data,
+          newLit i-1
+        )
+
+    # Create the async call
+    result.add quote do:
+      proc `async_fn`(param: pointer) {.nimcall.} =
+        let this = get_current_task()
+        assert not is_root_task(this)
+
+        let `data` = cast[ptr `argsTy`](param) # TODO - restrict
+        `fnCall`
+    # Create the task
+    result.add quote do:
+      profile(enq_deq_task):
+        let task = task_alloc()
+        task.parent = get_current_task()
+        task.fn = `async_fn`
+        cast[ptr `argsTy`](task.data.addr)[] = `args`
+        push task
+
+  else: ################ Need a future
+    # We repack fut + args.
+    let fut = ident("fut")
+
+    # data[0] will be the future.
+
+    var futArgs = nnkPar.newTree
+    var futArgsTy = nnkPar.newTree
+    futArgs.add fut
+    futArgsTy.add nnkBracketExpr.newTree(
+      ident"Future",
+      retType
+    )
+    for i in 1 ..< funcCall.len:
+      futArgsTy.add getTypeInst(funcCall[i])
+      futArgs.add funcCall[i]
+
     for i in 1 ..< funcCall.len:
       fnCall.add nnkBracketExpr.newTree(
         data,
-        newLit i-1
+        newLit i
       )
-  result.add quote do:
-    proc `async_fn`(param: pointer) {.nimcall.} =
-      let this = get_current_task()
-      assert not is_root_task(this)
 
-      let `data` = cast[ptr `argsTy`](param) # TODO - restrict
-      `fnCall`
+    result.add quote do:
+      proc `async_fn`(param: pointer) {.nimcall.} =
+        let this = get_current_task()
+        assert not is_root_task(this)
 
-  # Create the task
-  result.add quote do:
-    profile(enq_deq_task):
-      let task = task_alloc()
-      task.parent = get_current_task()
-      task.fn = `async_fn`
-      cast[ptr `argsTy`](task.data.addr)[] = `args`
-      push task
+        let `data` = cast[ptr `futArgsTy`](param) # TODO - restrict
+        static:
+          echo `data`.type
+        let res = `fnCall`
+        `data`[0].future_set(res)
+
+    # Create the task
+    let freshIdent = ident($retType)
+    result.add quote do:
+      profile(enq_deq_task):
+        let task = task_alloc()
+        task.parent = get_current_task()
+        task.fn = `async_fn`
+        task.has_future = true
+        let `fut` = future_alloc(`freshIdent`)
+        cast[ptr `futArgsTy`](task.data.addr)[] = `futArgs`
+        push task
+
+      # Return the future
+      `fut`
 
   # echo result.toStrLit
 
 when isMainModule:
   import ./tasking
 
-  proc main() =
-    tasking_init()
+  # block: # Async without result
 
-    proc display_int(x: int) =
-      stdout.write(x)
-      stdout.write(" - SUCCESS\n")
+  #   proc display_int(x: int) =
+  #     stdout.write(x)
+  #     stdout.write(" - SUCCESS\n")
 
-    async display_int(123456)
+  #   proc main() =
+  #     tasking_init()
 
-    tasking_barrier()
-    tasking_exit()
+  #     async display_int(123456)
 
-  main()
+  #     tasking_barrier()
+  #     tasking_exit()
+
+  #   main()
+
+  block: # Async with result
+
+    proc async_fib(n: int): int =
+
+      if n < 2:
+        return n
+
+      let x = async async_fib(n-1)
+      let y = async_fib(n-2)
+
+      # result = await(x) + y
+
+    # proc main2() =
+    #   tasking_init()
