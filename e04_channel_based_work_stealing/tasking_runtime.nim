@@ -56,6 +56,7 @@ proc tasking_internal_init*() =
   # After set_thread_affinity(0), cpu_count() would return 1, and every
   # thread would end up being pinned to processor 0.
   let num_cpus {.global.} = cpu_count()
+  printf("Number of CPUs: %d\n", num_cpus)
 
   when defined(DISABLE_MANAGER):
     # Global - Reserve cache lines to avoid false sharing

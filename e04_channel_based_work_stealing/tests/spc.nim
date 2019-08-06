@@ -1,12 +1,14 @@
 import
   # STD lib
-  times, os, strutils,
+  os, strutils,
   # Internal
   ../async_internal,
   ../profile,
   ../runtime,
   ../primitives/c,
-  ../tasking
+  ../tasking,
+  # bench
+  ./wtime
 
 var NumTasksTotal: int32
 var TaskGranularity: int32 # microsecond
@@ -39,12 +41,12 @@ proc spc_consume(usec: int32) =
 
   var RT_poll_elapsed = 0'f64
 
-  let start = epochTime()
+  let start = Wtime_usec()
   let stop = usec.float64
   poll_elapsed = PollInterval
 
   while true:
-    var elapsed = epochTime() - start
+    var elapsed = Wtime_usec() - start
     elapsed -= RT_poll_elapsed
     if elapsed >= stop:
       break
@@ -52,20 +54,20 @@ proc spc_consume(usec: int32) =
     dummy_cpt()
 
     if elapsed >= poll_elapsed:
-      let RT_poll_start = epochTime()
+      let RT_poll_start = Wtime_usec()
       RT_check_for_steal_requests()
-      RT_poll_elapsed += epochTime() - RT_poll_start
+      RT_poll_elapsed += Wtime_usec() - RT_poll_start
       poll_elapsed += PollInterval
 
   # printf("Elapsed: %.2lfus\n", elapsed)
 
 proc spc_consume_nopoll(usec: int32) =
 
-  let start = epochTime()
+  let start = Wtime_usec()
   let stop = usec.float64
 
   while true:
-    var elapsed = epochTime() - start
+    var elapsed = Wtime_usec() - start
     if elapsed >= stop:
       break
 
@@ -93,13 +95,13 @@ proc main() =
 
   tasking_init()
 
-  let start = epochTime()
+  let start = Wtime_usec()
 
   # spc_produce_seq(NumTasksTotal)
   spc_produce(NumTasksTotal)
   tasking_barrier()
 
-  let stop = epochTime()
+  let stop = Wtime_usec()
 
   printf("Elapsed wall time: %.2lf ms (%d us per task)\n", stop-start, TASK_GRANULARITY)
 
