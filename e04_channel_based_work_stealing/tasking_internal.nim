@@ -95,6 +95,11 @@ proc set_working() {.inline.} =
 # Running a task
 # ----------------------------------------------------------------------------------
 
+# Debug
+template log(args: varargs[untyped]): untyped =
+  printf(args)
+  flushFile(stdout)
+
 proc run_task*(task: Task) {.inline.} =
   when false:
     if task.is_loop:
@@ -102,7 +107,9 @@ proc run_task*(task: Task) {.inline.} =
 
   let this = get_current_task()
   set_current_task(task)
+  log("TID: %d, Task address: %d\n", ID, task)
   task.fn(task.data.addr)
+  log("TID: %d, here\n", ID)
   set_current_task(this)
   if task.is_loop:
     # We have executed |stop-start| iterations

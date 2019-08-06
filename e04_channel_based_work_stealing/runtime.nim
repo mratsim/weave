@@ -7,7 +7,7 @@ import
   ./worker_tree,
   ./tasking_internal,
   ./partition, task,
-  ./platform, ./bitfield,
+  ./platform, ./bit,
   primitives/c,
   ./profile
 
@@ -105,7 +105,7 @@ type
     retry: int32              # 0 <= tries <= num_workers_rt
     partition: int32          # partition in which the steal request was initiated
     pID: int32                # ID of requesting worker within partition
-    victims: Bitfield[uint32] # Bitfield of potential victims
+    victims: uint32           # bitfield of potential victims (max 32)
     state: WorkerState        # State of steal request and by extension requestion worker
     when StealStrategy == StealKind.adaptative:
       stealhalf: bool
@@ -115,7 +115,7 @@ type
 
 template init_victims(): untyped =
   # `my_partition`: thread-local from partition.nim after running `partition_init`
-  initBitfieldSetUpTo(uint32, my_partition.num_workers_rt)
+  0xFFFFFFFF'u32 and bit_mask_32(my_partition.num_workers_rt)
 
 template steal_request_init(): StealRequest =
   when StealStrategy == StealKind.adaptative:
@@ -190,7 +190,12 @@ template lprintf(args: varargs[untyped]): untyped =
 
 # -------------------------------------------------------------------
 
-proc print_victims(victims: Bitfield[uint32], ID: int32) =
+proc print_victims(victims: uint32, ID: int32) =
+
+  template victim(victims, n: untyped): untyped =
+    if (victims and bit(n)) != 0: '1'
+    else: '0'
+
   assert my_partition.num_workers_rt in 1..32
 
   acquire(print_mutex)
@@ -200,7 +205,7 @@ proc print_victims(victims: Bitfield[uint32], ID: int32) =
     stdout.write('.')
 
   for i in countdown(my_partition.num_workers_rt-1, 0):
-    stdout.write uint8(victims.isSet(i))
+    stdout.write victim(victims, i)
 
   stdout.write '\n'
   release(print_mutex)
@@ -228,7 +233,7 @@ proc ws_init() =
   thread_rng = initRand(ID + 1000) # seed must be non-zero
   init_victims(ID)
 
-proc mark_as_idle(victims: var BitField[uint32], n: int32) =
+proc mark_as_idle(victims: var uint32, n: int32) =
   ## Requires -1 <= n < num_workers
   if n == -1:
     # Invalid worker ID (parent of root or out-of-bound child)
@@ -240,18 +245,12 @@ proc mark_as_idle(victims: var BitField[uint32], n: int32) =
     mark_as_idle(victims, left_child(n, maxID))
     mark_as_idle(victims, right_child(n, maxID))
     # Unset worker n
-    victims.clearBit(n.uint32)
+    victims = victims and not bit(n)
 
-func rightmost_victim(victims: Bitfield[uint32], ID: int32): int32 =
-  result = getLSBset(victims)
+func rightmost_victim(victims: uint32, ID: int32): int32 =
+  result = rightmost_one_bit_pos(victims)
   if result == ID:
-    # If worker gets its own ID as victim
-    # TODO - why would the bitfield be set with its own worker ID?
-    let clearedLSB = victims.lsbSetCleared()
-    if clearedLSB.isEmpty():
-      result = -1
-    else:
-      result = clearedLSB.getLSBset()
+    result = rightmost_one_bit_pos(zero_rightmost_one_bit(victims))
 
   {.noSideEffect.}:
     assert(
@@ -265,20 +264,23 @@ func rightmost_victim(victims: Bitfield[uint32], ID: int32): int32 =
 var random_receiver_calls {.threadvar.}: int32
 var random_receiver_early_exits {.threadvar.}: int32
 
-proc random_victim(victims: BitField[uint32], ID: int32): int32 =
+proc random_victim(victims: uint32, ID: int32): int32 =
   ## Choose a random victim != ID from the list of potential victims
 
   inc random_receiver_calls
   inc random_receiver_early_exits
 
   # No eligible victim? Return message to sender
-  if victims.isEmpty():
+  if victims == 0:
     return -1
+
+  template potential_victim(victims, n: untyped): untyped =
+    victims and bit(n)
 
   # Try to choose a victim at random
   for i in 0 ..< 3:
     let victim = int32 thread_rng.rand(my_partition.num_workers_rt - 1)
-    if victims.isSet(victim) and victim != ID:
+    if potential_victim(victims, victim) != 0 and victim != ID:
       return victim
 
   # We didn't early exit, i.e. not enough potential victims
@@ -286,7 +288,7 @@ proc random_victim(victims: BitField[uint32], ID: int32): int32 =
   dec random_receiver_early_exits
 
   # Build the list of victims
-  let num_victims = countSetBits(victims)
+  let num_victims = count_one_bits(victims)
   assert num_victims in 0 ..< my_partition.num_workers_rt
 
   # Length of array is upper-bounded by the number of workers but
@@ -304,10 +306,10 @@ proc random_victim(victims: BitField[uint32], ID: int32): int32 =
   var potential_victims = alloca(int32, num_victims)
 
   # Map potential_victims with real IDs
-  var n = victims.buffer
+  var n = victims
   var i, j: int32
   while n != 0:
-    if bool(n and 1):
+    if potential_victim(n, 0) != 0:
       # Test first bit
       potential_victims[j] = i
       inc j
@@ -317,7 +319,7 @@ proc random_victim(victims: BitField[uint32], ID: int32): int32 =
   assert j == num_victims
 
   result = potential_victims[thread_rng.rand(num_victims-1)]
-  assert victims.isSet(result)
+  assert potential_victim(victims, result) != 0
 
   assert(
     ((result in 0 ..< my_partition.num_workers_rt) and
@@ -451,7 +453,10 @@ when not defined(MaxStealAttempts):
 proc next_victim(req: var StealRequest): int32 =
   result = -1
 
-  req.victims.clearBit(ID.uint32)
+  req.victims = req.victims and not bit(ID)
+
+  template potential_victim(n: untyped): untyped {.dirty.}=
+    req.victims and bit(n)
 
   if req.ID == ID:
     assert req.retry == 0
@@ -471,18 +476,18 @@ proc next_victim(req: var StealRequest): int32 =
       mark_as_idle(req.victims, tree.left_child)
     elif tree.right_subtree_is_idle:
       mark_as_idle(req.victims, tree.right_child)
-    assert not req.victims.isSet(ID)
+    assert potential_victim(ID) != 0
     result = random_victim(req.victims, req.ID)
 
   if result == -1:
     # Couldn't find victim; return steal request to thief
-    assert req.victims.isEmpty()
+    assert req.victims == 0
     result = req.ID
 
   when false:
     if result == req.ID:
       log("%d -{%d}-> %d after %d tries (%u ones)\n",
-        ID, req.ID, victim, req,retry, countSetBits(req.victims)
+        ID, req.ID, victim, req,retry, count_one_bits(req.victims)
       )
 
   assert result in 0 ..< my_partition.num_workers_rt
@@ -705,7 +710,7 @@ proc decline_steal_request(req: var StealRequest) =
 
     if req.ID == ID:
       # Steal request was returned
-      assert req.victims.isEmpty()
+      assert req.victims == 0
       if req.state == Idle and tree.left_subtree_is_idle and tree.right_subtree_is_idle:
         template lastStealRequest: untyped {.dirty.} =
           Master:
