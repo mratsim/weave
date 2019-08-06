@@ -108,8 +108,6 @@ macro async*(funcCall: typed): untyped =
         assert not is_root_task(this)
 
         let `data` = cast[ptr `futArgsTy`](param) # TODO - restrict
-        static:
-          echo `data`.type
         let res = `fnCall`
         `data`[0].future_set(res)
 
@@ -130,26 +128,29 @@ macro async*(funcCall: typed): untyped =
 
   # echo result.toStrLit
 
+proc await[T](fut: Future[T]): T =
+  future_get(fut, result)
+
 when isMainModule:
   import ./tasking
 
-  # block: # Async without result
+  block: # Async without result
 
-  #   proc display_int(x: int) =
-  #     stdout.write(x)
-  #     stdout.write(" - SUCCESS\n")
+    proc display_int(x: int) =
+      stdout.write(x)
+      stdout.write(" - SUCCESS\n")
 
-  #   proc main() =
-  #     tasking_init()
+    proc main() =
+      tasking_init()
 
-  #     async display_int(123456)
+      async display_int(123456)
 
-  #     tasking_barrier()
-  #     tasking_exit()
+      tasking_barrier()
+      tasking_exit()
 
-  #   main()
+    main()
 
-  block: # Async with result
+  block: # Async/Await
 
     proc async_fib(n: int): int =
 
@@ -159,7 +160,16 @@ when isMainModule:
       let x = async async_fib(n-1)
       let y = async_fib(n-2)
 
-      # result = await(x) + y
+      result = await(x) + y
 
-    # proc main2() =
-    #   tasking_init()
+    proc main2() =
+      tasking_init()
+
+      let f = async_fib(40)
+
+      tasking_barrier()
+      tasking_exit()
+
+      echo f
+
+    main2()

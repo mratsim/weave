@@ -10,6 +10,7 @@ import
   ./platform, ./bit,
   primitives/c,
   ./profile,
+  ./future_internal,
   ./channel
 
 # When a steal request is returned to its sender after MAX_STEAL_ATTEMPTS
@@ -1046,12 +1047,9 @@ proc RT_barrier*() =
 when defined(LazyFutures):
   discard
 else:
-  type Future = object
-    # TODO
+  template ready(): untyped = channel_receive(chan, data.addr, size)
 
-  template ready(): untyped = channel_receive(chan, addr(data), size)
-
-  proc RT_force_future*(chan: Channel[Future], data: var Future, size: int32) =
+  proc RT_force_future*[T](chan: Future[T], data: var T, size: int32) =
     let this = get_current_task()
 
     block RT_future_process:

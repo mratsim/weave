@@ -33,8 +33,8 @@ else:
   proc future_set*[T](fut: Future[T], res: T) =
     discard channel_send(fut, res, int32 sizeof(res))
 
-  proc future_get*[T](fut: Future, res: var T) =
-    RT_force_future(fut, res, sizeof(T))
+  proc future_get*[T](fut: Future[T], res: var T) =
+    RT_force_future(fut, res, int32 sizeof(T))
     channel_free(fut)
 
   #  template reduce_impl[T](op: untyped, accum: var T): T =
