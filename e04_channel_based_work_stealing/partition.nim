@@ -1,5 +1,11 @@
 from ./tasking_internal import ID, num_workers
 
+# Debug
+# import ./primitives/c
+# template log(args: varargs[untyped]): untyped =
+#   printf(args)
+#   flushFile(stdout)
+
 type
   Partition = object
     number*: int32 # index of partition: 0 <= number < partitions
@@ -18,7 +24,6 @@ template partition_init(N: static int): untyped {.dirty.}=
   var
     partitions {.threadvar.}: array[N, Partition]
     num_partitions* {.threadvar.}: int32
-    max_num_partitions {.threadvar.}: int32
     my_partition* {.threadvar.}: ptr Partition
     is_manager* {.threadvar.}: bool
     # Only defined for managers
@@ -26,14 +31,12 @@ template partition_init(N: static int): untyped {.dirty.}=
     next_manager* {.threadvar.}: int32
     next_worker* {.threadvar.}: int32
 
-  max_num_partitions = N
+  const max_num_partitions: int32 = N
 
   proc partition_set*() =
     for i in 0 ..< num_partitions:
       let p = addr partitions[i]
-      echo p.num_workers
       for idx, worker in p[].mpairs():
-        echo "worker: ", worker
         if worker == ID: # ID is a thread-local var in tasking internals
           my_partition = p
           if worker == p.manager:
@@ -76,13 +79,11 @@ template partition_create(
   ## If no worker is available, the partition is unused
 
   var `partition _ id` {.inject, threadvar.}: array[N+1, int32]
-  `partition _ id` = value
 
   proc `partition_assign _ id`*(manager: int32) =
-    echo "Assign, N: ", N
-    echo "max_num_partitions: ", max_num_partitions
-    echo "num_partitions: ", num_partitions
-    echo num_partitions < max_num_partitions
+    `partition _ id` = value # Each thread needs to assign value to thread-local storage
+                             # Somehow in the original repo the global macro works.
+
     if num_partitions < max_num_partitions:
       if manager < num_workers:
         let p = addr partitions[num_partitions]
@@ -92,7 +93,6 @@ template partition_create(
         p.num_workers = N
         p.num_workers_rt = 0
         inc num_partitions
-        echo "Assign workers: ", p.num_workers
       else:
         for i in 0 ..< N:
           if `partition _ id`[i] < num_workers:
@@ -103,9 +103,9 @@ template partition_create(
             p.num_workers = N
             p.num_workers_rt = 0
             inc num_partitions
-            # echo &"Changing manager from {manager} to {p.manager}
+            # log("Changing manager from %d to %d\n", manager, p.manager)
             return
-        # echo &"Partition {num_partitions+1} is empty"
+        # log("Partition %d is empty\n", num_partitions+1)
 
 const Partitions {.intdefine.}: range[1 .. 4] = 1
   ## TODO add to compile flag

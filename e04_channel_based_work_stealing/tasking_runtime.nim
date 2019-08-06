@@ -13,7 +13,7 @@ import
 # pthread_create initializer
 # ----------------------------------------------------------------------------------
 
-proc worker_entry_fn(id: ptr int32): pointer {.gcsafe, noconv.} =
+proc worker_entry_fn(id: ptr int32): pointer {.noconv.} =
   ID = id[]
   set_current_task(nil)
   num_tasks_exec = 0
@@ -24,7 +24,8 @@ proc worker_entry_fn(id: ptr int32): pointer {.gcsafe, noconv.} =
 
   # TODO: Question td_sync barrier
 
-  RT_schedule()
+  {.gcsafe.}: # Not GC-safe when multi-threaded due to globals
+    RT_schedule()
   discard tasking_internal_barrier()
   tasking_internal_statistics()
   RT_exit()
@@ -34,7 +35,7 @@ proc worker_entry_fn(id: ptr int32): pointer {.gcsafe, noconv.} =
 # Init tasking system
 # ----------------------------------------------------------------------------------
 
-proc tasking_internal_init() =
+proc tasking_internal_init*() =
   # TODO detect hyper-threading
 
   if existsEnv"WEAVE_NUM_THREADS":
@@ -55,7 +56,6 @@ proc tasking_internal_init() =
   # After set_thread_affinity(0), cpu_count() would return 1, and every
   # thread would end up being pinned to processor 0.
   let num_cpus {.global.} = cpu_count()
-  printf "Number of CPUs: %d\n", num_cpus
 
   when defined(DISABLE_MANAGER):
     # Global - Reserve cache lines to avoid false sharing
@@ -90,6 +90,6 @@ proc tasking_internal_init() =
 # Teardown runtime system
 # ----------------------------------------------------------------------------------
 
-proc tasking_internal_exit_signal() =
+proc tasking_internal_exit_signal*() =
   notify_workers(nil)
   tasking_finished = true

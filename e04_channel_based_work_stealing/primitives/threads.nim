@@ -84,7 +84,7 @@ proc pthread_getaffinity_np*(
   ## Get bitset in `cpuset` representing the processors
   ## the thread can run on.
 
-proc pthread_set_affinity_np*(
+proc pthread_setaffinity_np*(
        thread: Pthread,
        cpuset_size: csize,
        cpuset: CpuSet

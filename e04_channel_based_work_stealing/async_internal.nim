@@ -43,11 +43,16 @@ macro async(funcCall: typed): untyped =
   let param = ident("param") # type-erased pointer to data
   let data = ident("data")   # typed pointer to data
   var fnCall = newCall(fn)
-  for i in 1 ..< funcCall.len:
-    fnCall.add nnkBracketExpr.newTree(
-      data,
-      newLit i-1
-    )
+  if funcCall.len == 2:
+    # With only 1 arg, the tuple syntax doesn't construct a tuple
+    # let data = (123) # is an int
+    fnCall.add nnkDerefExpr.newTree(data)
+  else: # This handles the 0 arg case as well
+    for i in 1 ..< funcCall.len:
+      fnCall.add nnkBracketExpr.newTree(
+        data,
+        newLit i-1
+      )
   result.add quote do:
     proc `async_fn`(param: pointer) {.nimcall.} =
       let this = get_current_task()
@@ -66,3 +71,19 @@ macro async(funcCall: typed): untyped =
       push task
 
   # echo result.toStrLit
+
+when isMainModule:
+  import ./tasking
+
+  proc main() =
+    tasking_init()
+
+    proc display_int(x: int) =
+      stdout.write(x)
+
+    async display_int(123456)
+
+    tasking_barrier()
+    tasking_exit()
+
+  main()

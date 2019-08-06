@@ -7,6 +7,9 @@ type
     ## i.e. bit 0 refers to the least significant bit
     buffer*: T
 
+# TODO: mask when CPU > msb_pos
+# TODO: consider bloom filters?
+
 template msb_pos(T: typedesc): int =
   ## Position of the most significant bit
   # Note: that causes issue with sizeof
@@ -14,11 +17,14 @@ template msb_pos(T: typedesc): int =
 
 func initBitfieldSetUpTo*[typ: SomeUnsignedInt](
         T: typedesc[typ],
-        position: range[0 .. msb_pos(T)]
+        position: SomeInteger # range[0 .. msb_pos(T)]
       ): BitField[T] {.inline.} =
   ## Init a bitfield with all bits set to 1
   ## up to `position` (inclusive)
-  result.buffer = (1.T shl position) - 1
+  if position >= msb_pos(T):
+    result.buffer = msb_pos(T)
+  else:
+    result.buffer = (1.T shl position) - 1
 
 func isEmpty*(bf: Bitfield): bool {.inline.} =
   bf.buffer == 0

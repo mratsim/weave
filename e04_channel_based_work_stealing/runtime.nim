@@ -444,8 +444,7 @@ proc task_alloc*(): Task =
   deque_list_tl_task_new(deque)
 
 when not defined(MaxStealAttempts):
-  assert not my_partition.isNil
-  let MaxStealAttempts = my_partition.num_workers_rt - 1
+  template MaxStealAttempts: int32 = my_partition.num_workers_rt - 1
     ## Number of steal attempts before a steal request is sent back to the thief
     ## Default value is the number of workers minus one
 
@@ -967,7 +966,7 @@ type GotoBlocks = enum
   Empty_local_queue
   RT_barrier_exit
 
-proc RT_barrier() =
+proc RT_barrier*() =
   Worker:
     return
 
