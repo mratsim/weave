@@ -19,4 +19,4 @@ proc tasking_exit*() =
   discard tasking_internal_barrier()
   tasking_internal_statistics()
   RT_exit()
-  tasking_exit()
+  tasking_internal_exit()

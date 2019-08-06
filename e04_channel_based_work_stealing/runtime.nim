@@ -305,25 +305,27 @@ proc random_victim(victims: uint32, ID: int32): int32 =
   #
   # Heap allocation would make the system allocator
   # a multithreaded bottleneck on fine-grained tasks
-  var potential_victims = alloca(int32, num_victims)
+  #
+  # var potential_victims = alloca(int32, num_victims)
+  var potential_victims: array[MaxWorkers, int32]
 
   # Map potential_victims with real IDs
-  var n = victims
-  var i, j: int32
-  while n != 0:
-    if potential_victim(n, 0) != 0:
-      # Test first bit
-      potential_victims[j] = i
-      inc j
-    inc i
-    n = n shr 1
+  block:
+    var n = victims
+    var i, j = 0'i32
+    while n != 0:
+      if potential_victim(n, 0) != 0:
+        # Test first bit
+        potential_victims[j] = i
+        inc j
+      inc i
+      n = n shr 1
 
-  assert j == num_victims
+    assert j == num_victims
 
-  result = potential_victims[thread_rng.rand(num_victims-1)]
-  # print_victims(victims, ID)
-  log("Worker %d: Potential victim: %d\n", ID, result)
-  # log("Returned bitfield: %d\n", potential_victim(victims, result))
+  let rng = int32 thread_rng.rand(num_victims-1)
+  result = potential_victims[rng]
+  # log("Worker %d: rng %d, vict: %d\n", ID, rng, result)
   assert potential_victim(victims, result) != 0'u32
 
   assert(
@@ -636,6 +638,7 @@ proc async_action(fn: proc (_: pointer) {.nimcall.}, chan: Channel[Task]) =
     assert ret
 
 proc notify_workers*(_: pointer) =
+  log("Worker %d: Notifying, Am I already finished?: %d\n", ID, tasking_finished)
   assert not tasking_finished
 
   if tree.left_child != -1:
@@ -884,7 +887,7 @@ proc handle(req: var StealRequest): bool =
   if req.state == Failed:
     # Don't recirculate this steal request
     # TODO: Is this a reasonable decision?
-    assert(req.ID == tree.left_child and req.ID == tree.right_child)
+    assert(req.ID == tree.left_child or req.ID == tree.right_child)
   else:
     have_no_tasks()
     decline_steal_request(req)

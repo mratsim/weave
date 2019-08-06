@@ -187,10 +187,10 @@ when defined(LazyFutures):
 
 proc tasking_internal_statistics*() =
   Master:
-    printf"\n"
-    printf"+========================================+\n"
-    printf"|  Per-worker statistics                 |\n"
-    printf"+========================================+\n"
+    printf("\n")
+    printf("+========================================+\n")
+    printf("|  Per-worker statistics                 |\n")
+    printf("+========================================+\n")
 
   discard tasking_internal_barrier()
 
@@ -233,7 +233,7 @@ proc tasking_internal_statistics*() =
 # Teardown tasking system
 # ----------------------------------------------------------------------------------
 
-proc tasking_internal_exit() =
+proc tasking_internal_exit*() =
   # Join worker threads
   for i in 1 ..< num_workers:
     discard pthread_join(worker_threads[i], nil)

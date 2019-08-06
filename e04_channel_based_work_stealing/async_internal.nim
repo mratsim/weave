@@ -80,6 +80,7 @@ when isMainModule:
 
     proc display_int(x: int) =
       stdout.write(x)
+      stdout.write(" - SUCCESS\n")
 
     async display_int(123456)
 
