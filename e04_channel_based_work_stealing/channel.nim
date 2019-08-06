@@ -598,22 +598,12 @@ proc channel_open(chan: ChannelRaw): bool {.inline.}=
   ## (Re)open a channel
   close_fn[chan.impl](chan)
 
-proc channel_send*[T: ptr](chan: Channel[T], data: T, size: int32): bool {.inline.}=
+proc channel_send*[T](chan: Channel[T], data: sink T, size: int32): bool {.inline.}=
   ## Send item to the channel (FIFO queue)
   ## (Insert at last)
-  send_fn[chan.impl](chan, data, size)
+  send_fn[chan.impl](chan, data.unsafeAddr, size)
 
-proc channel_receive*[T: ptr](chan: Channel[T], data: T, size: int32): bool {.inline.}=
-  ## Receive an item from the channel
-  ## (Remove the first item)
-  recv_fn[chan.impl](chan, data, size)
-
-proc channel_send*[T: object](chan: Channel[T], data: ptr T, size: int32): bool {.inline.}=
-  ## Send item to the channel (FIFO queue)
-  ## (Insert at last)
-  send_fn[chan.impl](chan, data, size)
-
-proc channel_receive*[T: object](chan: Channel[T], data: ptr T, size: int32): bool {.inline.}=
+proc channel_receive*[T](chan: Channel[T], data: ptr T, size: int32): bool {.inline.}=
   ## Receive an item from the channel
   ## (Remove the first item)
   recv_fn[chan.impl](chan, data, size)

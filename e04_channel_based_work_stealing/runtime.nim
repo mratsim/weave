@@ -42,7 +42,7 @@ type
     Failed
 
   Channel[T] = channel.Channel[T]
-    # COnflicts with system.nim default channels
+    # Conflicts with system.nim default channels
 
   StealRequest = object
     chan: Channel[Task]       # Channel for sending tasks
@@ -518,7 +518,7 @@ proc split_loop(task: Task, req: sink StealRequest)
 
 proc send_req(chan: Channel[StealRequest], req: sink StealRequest) {.inline.} =
   var nfail = 0
-  while not channel_send(chan, req.unsafeAddr, int32 sizeof(req)):
+  while not channel_send(chan, req, int32 sizeof(req)):
     inc nfail
     if nfail mod 3 == 0:
       log("*** Worker %d: blocked on channel send\n", ID)
@@ -558,7 +558,7 @@ proc recv_req(req: var StealRequest): bool =
 proc recv_task(task: var Task, idle: bool): bool =
   profile(send_recv_task):
     for i in 0 ..< MaxSteal:
-      result = channel_receive(chan_tasks[ID][i], task, int32 sizeof(Task))
+      result = channel_receive(chan_tasks[ID][i], task.addr, int32 sizeof(Task))
       if result:
         channel_push(chan_tasks[ID][i])
         log("Worker %d received a task with function address %d\n", ID, task.fn)
@@ -1062,9 +1062,9 @@ else:
   type Future = object
     # TODO
 
-  template ready(): untyped = channel_receive(chan, data, size)
+  template ready(): untyped = channel_receive(chan, addr(data), size)
 
-  proc RT_force_future*(chan: Channel[Future], data: ptr Future, size: int32) =
+  proc RT_force_future*(chan: Channel[Future], data: var Future, size: int32) =
     let this = get_current_task()
 
     block RT_future_process:
