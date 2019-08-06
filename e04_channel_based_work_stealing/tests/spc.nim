@@ -47,7 +47,7 @@ proc spc_consume(usec: int32) =
 
   while true:
     var elapsed = Wtime_usec() - start
-    elapsed -= RT_poll_elapsed
+    elapsed = elapsed - RT_poll_elapsed # Somehow this shows up in VTune ...
     if elapsed >= stop:
       break
 

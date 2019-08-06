@@ -307,8 +307,8 @@ proc random_victim(victims: uint32, ID: int32): int32 {.inline.}=
   # Heap allocation would make the system allocator
   # a multithreaded bottleneck on fine-grained tasks
   #
-  # var potential_victims = alloca(int32, num_victims)
-  var potential_victims: array[MaxWorkers, int32]
+  var potential_victims = alloca(int32, num_victims)
+  # var potential_victims: array[MaxWorkers, int32]
 
   # Map potential_victims with real IDs
   block:
