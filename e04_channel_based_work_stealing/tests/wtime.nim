@@ -8,3 +8,4 @@ const cHeader = csourcesPath / "wtime.h"
 {.passC: "-I" & cSourcesPath .}
 
 proc Wtime_usec*: float64 {.header: cHeader.}
+proc Wtime_msec*: float64 {.header: cHeader.}

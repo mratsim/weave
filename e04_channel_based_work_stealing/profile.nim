@@ -27,7 +27,7 @@ template checkName(name: untyped) =
 template profile_decl*(name: untyped): untyped {.dirty.} =
   bind checkName, Timer
   checkName(name)
-  var `timer _ name`{.inject.}: Timer
+  var `timer _ name`*{.inject.}: Timer
 
 template profile_extern_decl*(name: untyped): untyped {.dirty.} =
   bind checkName, Timer

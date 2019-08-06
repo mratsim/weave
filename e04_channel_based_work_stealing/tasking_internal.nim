@@ -113,10 +113,10 @@ proc run_task*(task: Task) {.inline.} =
   set_current_task(this)
   if task.is_loop:
     # We have executed |stop-start| iterations
-    let n = abs(task.stop - task.start)
+    let n = int abs(task.stop - task.start)
     num_tasks_exec += n
     when StealStrategy == StealKind.adaptative:
-      num_tasks_exec_recently += n
+      num_tasks_exec_recently += n.int32
   else:
     inc num_tasks_exec
     when StealStrategy == StealKind.adaptative:
@@ -143,18 +143,18 @@ profile_extern_decl(send_recv_req)
 profile_extern_decl(idle)
 
 var
-  requests_sent{.threadvar.}, requests_handled{.threadvar.}: uint32
-  requests_declined{.threadvar.}, tasks_sent{.threadvar.}: uint32
-  tasks_split{.threadvar.}: uint32
+  requests_sent*{.threadvar.}, requests_handled*{.threadvar.}: int32
+  requests_declined*{.threadvar.}, tasks_sent*{.threadvar.}: int32
+  tasks_split*{.threadvar.}: int32
 
 when defined(StealBackoff):
   # TODO: add to compilation flags list
-  var requests_resent{.threadvar.}: uint32
+  var requests_resent*{.threadvar.}: int32
 when StealStrategy == StealKind.adaptative:
-  var requests_steal_one{.threadvar.}: uint32
-  var requests_steal_half{.threadvar.}: uint32
+  var requests_steal_one*{.threadvar.}: int32
+  var requests_steal_half*{.threadvar.}: int32
 when defined(LazyFutures):
-  var futures_converted{.threadvar.}: uint32
+  var futures_converted*{.threadvar.}: int32
 
 
 proc tasking_internal_statistics*() =

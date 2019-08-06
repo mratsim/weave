@@ -95,13 +95,13 @@ proc main() =
 
   tasking_init()
 
-  let start = Wtime_usec()
+  let start = Wtime_msec()
 
   # spc_produce_seq(NumTasksTotal)
   spc_produce(NumTasksTotal)
   tasking_barrier()
 
-  let stop = Wtime_usec()
+  let stop = Wtime_msec()
 
   printf("Elapsed wall time: %.2lf ms (%d us per task)\n", stop-start, TASK_GRANULARITY)
 

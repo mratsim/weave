@@ -15,8 +15,8 @@ type
 
 const
   # Platform{.strdefine.} = "SHM"
-  Steal{.strdefine.} = "one"
-  Split{.strdefine.} = "half"
+  Steal{.strdefine.} = "adaptative"
+  Split{.strdefine.} = "adaptative"
 
   StealStrategy* = parseEnum[StealKind](Steal)
   SplitStrategy* = parseEnum[SplitKind](Split)
