@@ -1,6 +1,6 @@
 import
   # Standard library
-  locks, random,
+  locks,
   # Internal
   ./deque_list_tl, ./channel,
   ./bounded_stack, ./bounded_queue,
@@ -228,11 +228,11 @@ proc init_victims(ID: int32) =
   Master log("Manager %2d: %d of %d workers available\n", ID,
              my_partition.num_workers_rt, my_partition.num_workers)
 
-var thread_rng {.threadvar.}: Rand
+var seed {.threadvar.}: uint32
 
 proc ws_init() =
   ## Initializes the context needed for work-stealing
-  thread_rng = initRand(ID + 1000) # seed must be non-zero
+  seed = ID.uint32 # Seed for thread-safe PRNG provided by Linux kernel
   init_victims(ID)
 
 proc mark_as_idle(victims: var uint32, n: int32) =
@@ -281,7 +281,7 @@ proc random_victim(victims: uint32, ID: int32): int32 =
 
   # Try to choose a victim at random
   for i in 0 ..< 3:
-    let victim = int32 thread_rng.rand(my_partition.num_workers_rt - 1)
+    let victim = rand_r(seed) mod my_partition.num_workers_rt
     if potential_victim(victims, victim) != 0 and victim != ID:
       return victim
 
@@ -323,8 +323,8 @@ proc random_victim(victims: uint32, ID: int32): int32 =
 
     assert j == num_victims
 
-  let rng = int32 thread_rng.rand(num_victims-1)
-  result = potential_victims[rng]
+  let idx = rand_r(seed) mod num_victims
+  result = potential_victims[idx]
   # log("Worker %d: rng %d, vict: %d\n", ID, rng, result)
   assert potential_victim(victims, result) != 0'u32
 
@@ -468,9 +468,9 @@ proc next_victim(req: var StealRequest): int32 =
   if req.ID == ID:
     assert req.retry == 0
     # Initially: send message to random worker != ID
-    result = int32 thread_rng.rand(my_partition.num_workers_rt - 1)
+    result = rand_r(seed) mod my_partition.num_workers_rt
     while result == ID:
-      result = int32 thread_rng.rand(my_partition.num_workers_rt - 1)
+      result = rand_r(seed) mod my_partition.num_workers_rt
   elif req.retry == MaxStealAttempts:
     # Return steal request to thief
     # print_victims(req.victims, req.ID)

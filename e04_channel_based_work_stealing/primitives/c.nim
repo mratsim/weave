@@ -31,12 +31,19 @@ func free*(p: sink pointer) {.header: "<stdio.h>".}
   # i.e. it never fails
 
 when defined(windows):
-  proc alloca(size: csize): pointer {.importc, header: "<malloc.h>".}
+  proc alloca(size: csize): pointer {.header: "<malloc.h>".}
 else:
-  proc alloca(size: csize): pointer {.importc, header: "<alloca.h>".}
+  proc alloca(size: csize): pointer {.header: "<alloca.h>".}
 
 func alloca*(T: typedesc): ptr T {.inline.}=
   result = cast[type result](alloca(sizeof(T)))
 
 func alloca*(T: typedesc, len: Natural): ptr UncheckedArray[T] {.inline.}=
   result = cast[type result](alloca(sizeof(T) * len))
+
+# Random
+# -------------------------------------------------------
+
+proc rand_r*(seed: var uint32): int32 {.header: "<stdlib.h>".}
+  ## Random number generator
+  ## Threadsafe but small amount of state
