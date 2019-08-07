@@ -766,8 +766,13 @@ proc decline_all_steal_requests() =
 
 when defined(LazyFutures):
   # TODO
-  proc convert_lazy_futures(task: Task) =
-    discard
+  proc convert_lazy_future(task: Task) =
+    var f: LazyFuture
+    copyMem(f.addr, task.data.addr, sizeof(LazyFuture))
+    if not f.has_channel:
+      f.has_channel = true
+      f.chan = channel_alloc(int32 sizeof(f.buf), 0, Spsc)
+      inc futures_converted
 
 const StealEarlyThreshold {.intdefine.} = 0
   ## TODO - add to compilation option
@@ -1045,77 +1050,90 @@ proc RT_barrier*() =
     return
 
 when defined(LazyFutures):
-  discard
+  template ready(): untyped =
+    (fut.has_channel and
+      channel_receive(fut.chan, data.addr, size)
+    ) or fut.isSet
+
+
 else:
-  template ready(): untyped = channel_receive(chan, data.addr, size)
+  template ready(): untyped = channel_receive(fut, data.addr, size)
 
-  proc RT_force_future*[T](chan: Future[T], data: var T, size: int32) =
-    let this = get_current_task()
+proc RT_force_future*[T](fut: Future[T], data: var T, size: int32) =
+  let this = get_current_task()
 
-    block RT_future_process:
+  # when not defined(LazyFutures):
+  #   fut.impl == Spsc
+
+  block RT_future_process:
+    if ready():
+      break RT_future_process
+
+    while (let task = pop_child(); not task.isNil):
+      profile(run_task):
+        run_task(task)
+      profile(enq_deq_task):
+        deque_list_tl_task_cache(deque, task)
       if ready():
         break RT_future_process
 
-      while (let task = pop_child(); not task.isNil):
-        profile(run_task):
-          run_task(task)
-        profile(enq_deq_task):
-          deque_list_tl_task_cache(deque, task)
-        if ready():
-          break RT_future_process
+    assert get_current_task() == this
 
-      assert get_current_task() == this
-
-      while not ready():
-        try_send_steal_request(idle = false)
-        var task: Task
-        profile(idle):
-          while not recv_task(task, idle = false):
-            # We might inadvertently remove our own steal request in
-            # handle_steal_request, so:
+    while not ready():
+      try_send_steal_request(idle = false)
+      var task: Task
+      profile(idle):
+        while not recv_task(task, idle = false):
+          # We might inadvertently remove our own steal request in
+          # handle_steal_request, so:
+          profile_stop(idle)
+          try_send_steal_request(idle = false)
+          # Check if someone requested to steal from us
+          var req: StealRequest
+          while recv_req(req):
+            handle_steal_request(req)
+          profile_start(idle)
+          if ready():
             profile_stop(idle)
-            try_send_steal_request(idle = false)
-            # Check if someone requested to steal from us
-            var req: StealRequest
-            while recv_req(req):
-              handle_steal_request(req)
-            profile_start(idle)
-            if ready():
-              profile_stop(idle)
-              break RT_future_process
+            break RT_future_process
 
-        let loot = task.batch
-        when defined(StealLastVictim):
-          if task.victim != -1:
-            last_victim = task.victim
-            assert last_victim != ID
+      let loot = task.batch
+      when defined(StealLastVictim):
+        if task.victim != -1:
+          last_victim = task.victim
+          assert last_victim != ID
 
-        if loot > 1:
-          profile(enq_deq_task):
-            task = deque_list_tl_pop(deque_list_tl_prepend(deque, task, loot))
-            have_tasks()
-
-        when defined(VictimCheck):
-          if loot == 1 and splittable(task):
-            have_tasks()
-
-        when StealStrategy == StealKind.adaptative:
-          inc num_steals_exec_recently
-
-        share_work()
-
-        profile(run_task):
-          run_task(task)
+      if loot > 1:
         profile(enq_deq_task):
-          deque_list_tl_task_cache(deque, task)
+          task = deque_list_tl_pop(deque_list_tl_prepend(deque, task, loot))
+          have_tasks()
 
-      # End block RT_future_process
-    block RT_force_future_return:
-      when defined(LazyFutures):
-        # TODO
-        discard
+      when defined(VictimCheck):
+        if loot == 1 and splittable(task):
+          have_tasks()
+
+      when StealStrategy == StealKind.adaptative:
+        inc num_steals_exec_recently
+
+      share_work()
+
+      profile(run_task):
+        run_task(task)
+      profile(enq_deq_task):
+        deque_list_tl_task_cache(deque, task)
+
+    # End block RT_future_process
+  block RT_force_future_return:
+    when defined(LazyFutures):
+      if not fut.has_channel:
+        assert fut.isSet
+        copyMem(data.addr, fut.buf.addr, size)
       else:
-        return
+        assert not fut.chan.isNil
+        # assert fut.chan.impl == Spsc
+        channel_free(fut.chan)
+    else:
+      return
 
 # Tasks helpers
 # -------------------------------------------------------------------
