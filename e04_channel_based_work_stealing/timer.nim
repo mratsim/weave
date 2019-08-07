@@ -38,13 +38,18 @@ when defined(i386) or defined(amd64):
         var lo, hi: int64
         # TODO: Provide a compile-time flag for RDTSCP support
         #       and use it instead of lfence + RDTSC
-        {.emit: """asm volatile(
-          "lfence\n"
-          "rdtsc\n"
-          : "=a"(`lo`), "=d"(`hi`)
-          :
-          : "memory"
-        );""".}
+        when defined(useUpstreamTimers):
+          # For comparison with upstream
+          # we need timers without memory fences or compiler barrier
+          {.emit: """asm volatile("rdtsc" : "=a" (lo), "=d" (hi));""".}
+        else:
+          {.emit: """asm volatile(
+            "lfence\n"
+            "rdtsc\n"
+            : "=a"(`lo`), "=d"(`hi`)
+            :
+            : "memory"
+          );""".}
         return (hi shl 32) or lo
     else:
       proc getticks(): int64 {.inline.} =

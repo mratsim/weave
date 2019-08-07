@@ -11,7 +11,7 @@ import
   primitives/c,
   ./profile,
   ./future_internal,
-  ../build/debug/channel
+  ./channel
 
 # When a steal request is returned to its sender after MAX_STEAL_ATTEMPTS
 # unsuccessful attempts, the steal request changes state to STATE_FAILED and
@@ -82,10 +82,10 @@ var channel_stack {.threadvar.}: BoundedStack[MaxSteal, Channel[Task]]
  ## Every worker maintains a stack of (recycled) channels to
  ## keep track of which channels to use for the next steal requests
 
-proc channel_push(chan: sink Channel[Task]) {.inline.} =
+template channel_push(chan: sink Channel[Task]) =
   channel_stack.bounded_stack_push(chan)
 
-proc channel_pop(): Channel[Task] {.inline.} =
+template channel_pop(): Channel[Task] =
   channel_stack.bounded_stack_pop()
 
 # -------------------------------------------------------------------
@@ -151,13 +151,13 @@ var work_sharing_requests{.threadvar.}: BoundedQueue[2, StealRequest]
   ## children until work can be shared.
   ## A worker has between 0 and 2 children.
 
-proc enqueue_work_sharing_request(req: StealRequest) {.inline.} =
+template enqueue_work_sharing_request(req: StealRequest) =
   bounded_queue_enqueue(work_sharing_requests, req)
 
-proc dequeue_work_sharing_request(): owned StealRequest {.inline.} =
+template dequeue_work_sharing_request(): owned StealRequest =
   bounded_queue_dequeue(work_sharing_requests)
 
-proc next_work_sharing_request(): lent StealRequest {.inline.} =
+template next_work_sharing_request(): lent StealRequest =
   bounded_queue_head(work_sharing_requests)
 
 var requested {.threadvar.}: int32
@@ -502,7 +502,7 @@ proc try_send_steal_request(idle: bool)
 # proc decline_all_steal_requests()
 proc split_loop(task: Task, req: sink StealRequest)
 
-proc send_req(chan: Channel[StealRequest], req: sink StealRequest) {.inline.} =
+template send_req(chan: Channel[StealRequest], req: sink StealRequest) =
   var nfail = 0
   while not channel_send(chan, req, int32 sizeof(req)):
     inc nfail
@@ -513,13 +513,13 @@ proc send_req(chan: Channel[StealRequest], req: sink StealRequest) {.inline.} =
     if tasking_done():
       break
 
-proc send_req_worker(ID: int32, req: sink StealRequest) {.inline.} =
+template send_req_worker(ID: int32, req: sink StealRequest) =
   send_req(chan_requests[ID], req)
 
-proc send_req_manager(req: sink StealRequest) {.inline.} =
+template send_req_manager(req: sink StealRequest) =
   send_req(chan_requests[my_partition.manager], req)
 
-proc recv_req(req: var StealRequest): bool =
+proc recv_req(req: var StealRequest): bool {.inline.} =
   profile(send_recv_req):
     result = channel_receive(chan_requests[ID], req.addr, int32 sizeof(req))
     while result and req.state == Failed:
@@ -586,7 +586,7 @@ proc recv_task(task: var Task, idle: bool): bool {.inline.} =
 proc recv_task(task: var Task): bool {.inline.} =
   recv_task(task, true)
 
-proc forget_req(req: sink StealRequest) {.inline.}=
+template forget_req(req: sink StealRequest) =
   assert req.ID == ID
   assert requested > 0
   dec requested
@@ -848,7 +848,7 @@ proc handle_steal_request(req: var StealRequest) =
     decline_steal_request(req)
     have_no_tasks()
 
-func splittable(t: Task): bool {.inline.} =
+template splittable(t: Task): bool =
   not t.isNil and t.is_loop and abs(t.stop - t.cur) > t.sst
 
 proc handle(req: var StealRequest): bool {.inline.}=
@@ -908,8 +908,8 @@ proc RT_check_for_steal_requests*() =
     while recv_req(req):
       discard handle(req)
 
-proc pop(): Task
-proc pop_child(): Task
+proc pop(): Task {.inline.}
+proc pop_child(): Task {.inline.}
 
 proc schedule() =
   ## Executed by worker threads
@@ -1177,7 +1177,7 @@ proc popImpl(task: Task) =
     else:
       handle_steal_request(req)
 
-proc pop(): Task =
+proc pop(): Task {.inline.}=
   profile(enq_deq_task):
     result = deque_list_tl_pop(deque)
 
@@ -1187,7 +1187,7 @@ proc pop(): Task =
 
   popImpl(result)
 
-proc pop_child(): Task =
+proc pop_child(): Task {.inline.}=
   profile(enq_deq_task):
     result = deque_list_tl_pop_child(deque, get_current_task())
 

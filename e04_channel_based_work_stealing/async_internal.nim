@@ -6,8 +6,6 @@ import
   ./future_internal,
   ./profile, ./runtime
 
-export timer_enq_deq_task # Why is this needed
-
 # TODO:
 # overload with loop bounds for task splitting
 

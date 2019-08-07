@@ -163,6 +163,7 @@ proc tasking_internal_statistics*() =
     printf("+========================================+\n")
     printf("|  Per-worker statistics                 |\n")
     printf("+========================================+\n")
+    printf("  / use -d:profile for high-res timers /  \n")
 
   discard tasking_internal_barrier()
 
@@ -187,7 +188,7 @@ proc tasking_internal_statistics*() =
   when defined(LazyFutures):
     printf("Worker %d: %u futures converted\n", ID, futures_converted)
 
-  # profile_results()
+  profile_results()
   flushFile(stdout)
 
 # pthread_create initializer
