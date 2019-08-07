@@ -8,7 +8,7 @@ Fibonacci benchmark has 3 draws:
 
 1. It's very simple to implement
 2. It's unbalanced and efficiency requires distributions to avoid idle cores.
-3. It's a very effective scheduler overhead benchmark, because the basic task is very trivial.
+3. It's a very effective scheduler overhead benchmark, because the basic task is very  trivial and the task spawning grows at 2^n scale.
 
 
 Want to know the difference between low and high overhead?
