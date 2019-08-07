@@ -6,7 +6,7 @@ import
   ./future_internal,
   ./profile, ./runtime
 
-export supportsCopyMem
+export timer_enq_deq_task # Why is this needed
 
 # TODO:
 # overload with loop bounds for task splitting
@@ -30,14 +30,16 @@ macro async*(funcCall: typed): untyped =
     args.add funcCall[i]
 
   # Check that the type are safely serializable
+  # TODO: we need to check the return type as well
+  #       so we can merge both future and no future code path
   let fn = funcCall[0]
   let fnName = $fn
   result.add quote do:
     static:
-      assert `argsTy`.supportsCopyMem, "\n\n" & `fnName` &
+      assert supportsCopyMem(`argsTy`), "\n\n" & `fnName` &
         " has arguments managed by GC (ref/seq/strings),\n" &
         "  they cannot be distributed across threads.\n" &
-        "  Argument types: " & `argsTy`.name & "\n\n"
+        "  Argument types: " & $`argsTy` & "\n\n"
 
       assert sizeof(`argsTy`) <= TaskDataSize, "\n\n" & `fnName` &
         " has arguments that do not fit in the async data buffer.\n" &
@@ -89,7 +91,7 @@ macro async*(funcCall: typed): untyped =
     var futArgsTy = nnkPar.newTree
     futArgs.add fut
     futArgsTy.add nnkBracketExpr.newTree(
-      ident"Future",
+      bindSym"Future",
       retType
     )
     for i in 1 ..< funcCall.len:
@@ -109,7 +111,7 @@ macro async*(funcCall: typed): untyped =
 
         let `data` = cast[ptr `futArgsTy`](param) # TODO - restrict
         let res = `fnCall`
-        `data`[0].future_set(res)
+        future_set(`data`[0], res)
 
     # Create the task
     let freshIdent = ident($retType)
@@ -128,7 +130,7 @@ macro async*(funcCall: typed): untyped =
 
   # echo result.toStrLit
 
-proc await[T](fut: Future[T]): T =
+proc await*[T](fut: Future[T]): T =
   future_get(fut, result)
 
 when isMainModule:
@@ -163,13 +165,13 @@ when isMainModule:
       result = await(x) + y
 
     proc main2() =
-      tasking_init()
-
       let f = async_fib(40)
+
+      tasking_init()
 
       tasking_barrier()
       tasking_exit()
 
       echo f
 
-    main2()
+    # main2()

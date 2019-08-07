@@ -4,9 +4,9 @@
 
 type
   Timer* = object
-    start, stop: int64
-    elapsed: int64
-    ghz: float64
+    start*, stop*: int64
+    elapsed*: int64
+    ghz*: float64
 
   TimerKind* = enum
     tkMicroseconds
@@ -67,17 +67,17 @@ when defined(i386) or defined(amd64):
 else:
   {.error: "getticks is not supported on this CPU architecture".}
 
-func timer_new*(timer: var Timer, ghz: float64) {.inline.}=
+template timer_new*(timer: var Timer, ghzClock: float64) =
   timer.elapsed = 0
-  timer.ghz = ghz
+  timer.ghz = ghzClock
 
-func timer_reset(timer: var Timer, ghz: float64) {.inline.}=
-  timer_new(timer, ghz)
+template timer_reset(timer: var Timer, ghzClock: float64) =
+  timer_new(timer, ghzClock)
 
-proc timer_start*(timer: var Timer) {.inline.}=
+template timer_start*(timer: var Timer) =
   timer.start = getticks()
 
-proc timer_end*(timer: var Timer) {.inline.}=
+template timer_end*(timer: var Timer) =
   timer.stop = getticks()
   timer.elapsed += timer.stop - timer.start
 

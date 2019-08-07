@@ -11,7 +11,7 @@ import
   primitives/c,
   ./profile,
   ./future_internal,
-  ./channel
+  ../build/debug/channel
 
 # When a steal request is returned to its sender after MAX_STEAL_ATTEMPTS
 # unsuccessful attempts, the steal request changes state to STATE_FAILED and
@@ -519,7 +519,7 @@ proc send_req_worker(ID: int32, req: sink StealRequest) {.inline.} =
 proc send_req_manager(req: sink StealRequest) {.inline.} =
   send_req(chan_requests[my_partition.manager], req)
 
-proc recv_req(req: var StealRequest): bool {.inline.}=
+proc recv_req(req: var StealRequest): bool =
   profile(send_recv_req):
     result = channel_receive(chan_requests[ID], req.addr, int32 sizeof(req))
     while result and req.state == Failed:
@@ -1120,9 +1120,9 @@ else:
 # Tasks helpers
 # -------------------------------------------------------------------
 
-proc push*(task: sink Task) =
+template push*(task: sink Task) =
   assert not task.fn.isNil, "Thread: " & $ID & " pushed a null task function."
-  deque.deque_list_tl_push(task)
+  deque_list_tl_push(deque, task)
   have_tasks()
 
   profile_stop(enq_deq_task)

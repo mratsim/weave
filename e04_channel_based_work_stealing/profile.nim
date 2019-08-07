@@ -27,24 +27,24 @@ template checkName(name: untyped) =
 template profile_decl*(name: untyped): untyped {.dirty.} =
   bind checkName, Timer
   checkName(name)
-  var `timer _ name`*{.inject.}: Timer
+  var `timer _ name`{.inject, threadvar.}: Timer
 
 template profile_extern_decl*(name: untyped): untyped {.dirty.} =
   bind checkName, Timer
   checkName(name)
-  var `timer _ name`*{.inject.}: Timer
+  var `timer _ name`*{.inject, threadvar.}: Timer
 
-template profile_init*(name: untyped): untyped {.dirty.} =
+template profile_init*(name: untyped) {.dirty.} =
   bind checkName, timer_new, CpuFreqGhz
   # checkName(name)
   timer_new(`timer _ name`, CpuFreqGhz)
 
-template profile_start*(name: untyped): untyped {.dirty.} =
+template profile_start*(name: untyped) {.dirty.} =
   bind checkName, timer_start
   # checkName(name)
   timer_start(`timer _ name`)
 
-template profile_stop*(name: untyped): untyped {.dirty.} =
+template profile_stop*(name: untyped) {.dirty.} =
   bind checkName, timer_end
   # checkName(name)
   timer_end(`timer _ name`)
