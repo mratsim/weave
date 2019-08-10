@@ -163,9 +163,10 @@ when isMainModule:
       result = await(x) + y
 
     proc main2() =
-      let f = async_fib(40)
 
       tasking_init()
+
+      let f = async_fib(40)
 
       tasking_barrier()
       tasking_exit()
