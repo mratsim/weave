@@ -63,6 +63,13 @@ type
 const
   PTHREAD_BARRIER_SERIAL_THREAD = Errno(1)
 
+proc pthread_cond_broadcast(cond: var Cond): Errno {.header:"<pthread.h>".}
+  ## Nim only signal one thread in locks
+  ## We need to unblock all
+
+proc broadcast(cond: var Cond) {.inline.}=
+  discard pthread_cond_broadcast(cond)
+
 func pthread_barrier_init*(
         barrier: var PthreadBarrier,
         attr: ptr PthreadAttr,
@@ -73,25 +80,27 @@ func pthread_barrier_init*(
     barrier.cond.initCond()
     barrier.left = count
   barrier.count = count
+  # barrier.sense = false
 
 proc pthread_barrier_wait*(barrier: var PthreadBarrier): Errno =
   barrier.lock.acquire()
   {.locks: [barrier.lock].}:
     var local_sense = barrier.sense # Thread local sense
-    dec barrier.count
+    dec barrier.left
 
     if barrier.left == 0:
       # Last thread to arrive at the barrier
       # Reverse phase and release it
       barrier.left = barrier.count
       barrier.sense = not barrier.sense
-      barrier.cond.signal()
+      barrier.cond.broadcast()
       barrier.lock.release()
       return PTHREAD_BARRIER_SERIAL_THREAD
 
     while barrier.sense == local_sense:
       # We are waiting for threads
       # Wait for the sense to reverse
+      # while loop because we might have spurious wakeups
       barrier.cond.wait(barrier.lock)
 
     # Reversed, we can leave the barrier
