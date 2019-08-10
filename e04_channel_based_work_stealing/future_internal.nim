@@ -8,12 +8,13 @@ type
   Channel[T] = channel.Channel[T]
     # We don't want system.Channel
 
+  LazyChan {.union.} = object
+    chan*: ChannelRaw
+    buf*: array[sizeof(ChannelRaw), byte]
+
   LazyFutureObj = object
-    case has_channel*: bool
-    of true:
-      chan*: ChannelRaw
-    of false:
-      buf*: array[sizeof(ChannelRaw), byte]
+    lazy_chan*: LazyChan
+    has_channel*: bool
     isSet*: bool
 
   # Regular, eagerly allocated futures
@@ -26,20 +27,27 @@ else:
 # note with lazy futures runtime imports this module
 # but it's the contrary with eager futures ...
 when defined(LazyFutures):
-  proc future_alloc*(T: typedesc): Future[T] {.inline.}=
+  template future_alloc*(T: typedesc): Future[T] =
     ## Allocated in the stack frame of the caller
-    result = alloca(LazyFutureObj)
-    zeroMem(result, sizeof(result))
+    ## This must be a template, for alloca to return a valid
+    ## address
+    var fut = cast[Future[T]](alloca(LazyFutureObj))
+    fut.lazy_chan.chan = nil
+    fut.has_channel = false
+    fut.isSet = false
+    fut
+
 
   template future_set*[T](fut: Future[T], res: T) =
     if not fut.has_channel:
-      copyMem(fut.buf.addr, res.unsafeaddr, sizeof(res))
+      copyMem(fut.lazy_chan.buf.addr, res.unsafeaddr, sizeof(res))
       # TODO: What if sizeof(res) > buffer
       # I suppose res is a pointer we take the address of
       fut.isSet = true
+      assert fut.has_channel == false
     else:
-      assert not fut.chan.isNil
-      discard channel_send(fut.chan, res, int32 sizeof(res))
+      assert not fut.lazy_chan.chan.isNil
+      discard channel_send(fut.lazy_chan.chan, res, int32 sizeof(res))
 
   template future_get*[T](fut: Future[T], res: var T) =
     RT_force_future(fut, res, int32 sizeof(T))

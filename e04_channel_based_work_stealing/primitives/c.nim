@@ -35,11 +35,11 @@ when defined(windows):
 else:
   proc alloca(size: csize): pointer {.header: "<alloca.h>".}
 
-func alloca*(T: typedesc): ptr T {.inline.}=
-  result = cast[type result](alloca(sizeof(T)))
+template alloca*(T: typedesc): ptr T =
+  cast[ptr T](alloca(sizeof(T)))
 
-func alloca*(T: typedesc, len: Natural): ptr UncheckedArray[T] {.inline.}=
-  result = cast[type result](alloca(sizeof(T) * len))
+template alloca*(T: typedesc, len: Natural): ptr UncheckedArray[T] =
+  cast[ptr UncheckedArray[T]](alloca(sizeof(T) * len))
 
 # Random
 # -------------------------------------------------------

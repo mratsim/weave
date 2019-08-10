@@ -770,13 +770,12 @@ proc decline_all_steal_requests() =
   profile_start(Idle)
 
 when defined(LazyFutures):
-  # TODO
   proc convert_lazy_future(task: Task) =
     var f: LazyFuture
     copyMem(f.addr, task.data.addr, sizeof(LazyFuture))
     if not f.has_channel:
-      f.has_channel = true
-      f.chan = channel_alloc(int32 sizeof(f.buf), 0, Spsc)
+      f.has_channel = true # TODO union to avoid nimOldCaseObject
+      f.lazy_chan.chan = channel_alloc(int32 sizeof(f.lazy_chan), 0, Spsc)
       inc futures_converted
 
 const StealEarlyThreshold {.intdefine.} = 0
@@ -1056,9 +1055,11 @@ proc RT_barrier*() =
 
 when defined(LazyFutures):
   template ready(): untyped =
-    (fut.has_channel and
-      channel_receive(fut.chan, data.addr, size)
-    ) or fut.isSet
+    if fut.has_channel:
+      assert not fut.lazy_chan.chan.isNil
+      channel_receive(fut.lazy_chan.chan, data.addr, size)
+    else:
+      fut.isSet
 
 
 else:
@@ -1132,11 +1133,11 @@ proc RT_force_future*[T](fut: Future[T], data: var T, size: int32) =
     when defined(LazyFutures):
       if not fut.has_channel:
         assert fut.isSet
-        copyMem(data.addr, fut.buf.addr, size)
+        copyMem(data.addr, fut.lazy_chan.buf.addr, size)
       else:
-        assert not fut.chan.isNil
+        assert not fut.lazy_chan.chan.isNil
         # assert fut.chan.impl == Spsc
-        channel_free(fut.chan)
+        channel_free(fut.lazy_chan.chan)
     else:
       return
 
