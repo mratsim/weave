@@ -24,6 +24,7 @@ public:
 
         long long x, y;
         FibTask& a = *new( allocate_child() ) FibTask(n-1,&x);
+        // how to compute b in the current task?
         FibTask& b = *new( allocate_child() ) FibTask(n-2,&y);
         // Set ref_count to 'two children plus one for the wait".
         set_ref_count(3);
