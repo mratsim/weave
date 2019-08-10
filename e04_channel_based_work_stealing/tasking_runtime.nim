@@ -13,7 +13,7 @@ import
 # pthread_create initializer
 # ----------------------------------------------------------------------------------
 
-proc worker_entry_fn(id: ptr int32): pointer {.noconv.} =
+proc worker_entry_fn(id: ptr int32): pointer {.cdecl.} =
   ID = id[]
   set_current_task(nil)
   num_tasks_exec = 0
@@ -48,14 +48,7 @@ proc tasking_internal_init*() =
   else:
     num_workers = countProcessors().int32
 
-  # TODO Question, why the convoluted cpu_count()
-  # when countProcessors / sysconf(_SC_NPROCESSORS_ONLN)
-  # is easy
-  #
-  # Call cpu_count() only once, before changing the affinity of thread 0!
-  # After set_thread_affinity(0), cpu_count() would return 1, and every
-  # thread would end up being pinned to processor 0.
-  let num_cpus {.global.} = cpu_count()
+  let num_cpus {.global.} = countProcessors().int32
   printf("Number of CPUs: %d\n", num_cpus)
 
   when defined(DISABLE_MANAGER):
