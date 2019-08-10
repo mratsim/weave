@@ -19,7 +19,7 @@ when defined(USE_COZ):
 # ----------------------------------------------------------------------------------
 
 when defined(DISABLE_MANAGER):
-  var td_count: ptr Atomic[int32]
+  var td_count*: ptr Atomic[int32]
 
 const MaxWorkers* = 256
 
@@ -74,8 +74,8 @@ when defined(DISABLE_MANAGER):
 
     worker_state = state
     case worker_state
-    of Working: atomicDec(td_count)
-    of Idle: atomicInc(td_count)
+    of Working: atomicDec(td_count[])
+    of Idle: atomicInc(td_count[])
 else:
   proc set_worker_state(state: WorkerState) {.inline.} =
     worker_state = state

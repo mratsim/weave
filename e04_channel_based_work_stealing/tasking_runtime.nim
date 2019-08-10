@@ -10,6 +10,9 @@ import
   ./tasking_internal, ./task,
   ./runtime
 
+when defined(DISABLE_MANAGER):
+  import atomics
+
 # pthread_create initializer
 # ----------------------------------------------------------------------------------
 
