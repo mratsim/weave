@@ -483,11 +483,8 @@ proc next_victim(req: var StealRequest): int32 =
 
   assert result in 0 ..< my_partition.num_workers_rt
   assert result != ID
-  assert( # TODO why do we need leniency on OSX
-    # req.retry in 0 ..< MaxStealAttempts,
-    req.retry in 0 .. MaxStealAttempts, # More lenient for OSX
-    $req.retry & " attempts while " &
-      $MaxStealAttempts & " expected at most."
+  assert(
+    req.retry in 0 .. MaxStealAttempts,
   )
 
 when defined(StealLastVictim) or defined(StealLastThief):
