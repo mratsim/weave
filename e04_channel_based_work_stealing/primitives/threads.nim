@@ -21,13 +21,22 @@ type CpuMaskType = culong
 when defined(debug):
   var Debug_CPU_SETSIZE {.importc: "CPU_SETSIZE", header: "<sched.h>".}: int
   assert Debug_CPU_SETSIZE == CpuSetSize, "Platform is misconfigured"
+
+when defined(osx):
+  import ./pthread_barrier_osx
+  export PthreadAttr, PthreadBarrier, Errno
+elif defined(linux):
+  type
+    PthreadAttr* {.byref, importc: "pthread_attr_t", header: "<sys/types.h>".} = object
+    PthreadBarrier* {.byref, importc: "pthread_barrier_t", header: "<sys/types.h>".} = object
+
+    Errno* = distinct cint
+else:
+  {.error: "Platform not supported".}
+
+
 type
   Pthread* {.importc: "pthread_t", header: "<sys/types.h>".} = distinct culong
-  PthreadAttr* {.byref, importc: "pthread_attr_t", header: "<sys/types.h>".} = object
-  PthreadBarrier* {.byref, importc: "pthread_barrier_t", header: "<sys/types.h>".} = object
-
-  Errno* = distinct cint
-
   CpuSet* {.byref, importc: "cpu_set_t", header: "<sched.h>".} = object
     ## A set of CPUs for affinity manipulation.
     ## Implemented as an opaque bitset manipulated by C macros.
@@ -59,22 +68,25 @@ proc pthread_join*(
 proc pthread_self*(): Pthread {.header: "<pthread.h>".}
   ## Obtain the identifier of the current thread
 
-proc pthread_barrier_init*(
-       barrier: PthreadBarrier,
-       attr: PthreadAttr or ptr PthreadAttr,
-       count: range[0'i32..high(int32)]
-     ): Errno {.header: "<pthread.h>".}
-  ## Initialize `narrier` with the attributes `attr`.
-  ## The barrier is opened when `count` waiters arrived.
+when defined(linux):
+  proc pthread_barrier_init*(
+        barrier: PthreadBarrier,
+        attr: PthreadAttr or ptr PthreadAttr,
+        count: range[0'i32..high(int32)]
+      ): Errno {.header: "<pthread.h>".}
+    ## Initialize `barrier` with the attributes `attr`.
+    ## The barrier is opened when `count` waiters arrived.
 
-proc pthread_barrier_destroy*(
-       barrier: sink PthreadBarrier): Errno {.header: "<pthread.h>".}
-  ## Destroy a previously dynamically initialized `barrier`.
+  proc pthread_barrier_destroy*(
+        barrier: sink PthreadBarrier): Errno {.header: "<pthread.h>".}
+    ## Destroy a previously dynamically initialized `barrier`.
 
-proc pthread_barrier_wait*(
-       barrier: var PthreadBarrier
-     ): Errno {.header: "<pthread.h>".}
-  ## Wait on `barrier`
+  proc pthread_barrier_wait*(
+        barrier: var PthreadBarrier
+      ): Errno {.header: "<pthread.h>".}
+    ## Wait on `barrier`
+elif defined(osx):
+  export pthread_barrier_init, pthread_barrier_wait, pthread_barrier_destroy
 
 proc pthread_getaffinity_np*(
        thread: Pthread,
