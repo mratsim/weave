@@ -13,8 +13,12 @@ import
 # pthread_create initializer
 # ----------------------------------------------------------------------------------
 
-proc worker_entry_fn(id: ptr int32): pointer {.cdecl.} =
-  ID = id[]
+when compileOption("tlsemulation"):
+  {.error: "This requires --tlsemulation:off compilation flag (default on Linux, not default on OSX)".}
+
+proc worker_entry_fn(id: ptr int32): pointer {.noconv.} =
+  let a = id[]
+  ID = a # If this crashes, you need --tlsemulation:off
   set_current_task(nil)
   num_tasks_exec = 0
   tasking_finished = false
