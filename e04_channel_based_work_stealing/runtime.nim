@@ -1265,7 +1265,7 @@ proc split_func(task: Task): int {.inline.} =
     split_adaptative(task)
 
 proc split_loop(task: Task, req: sink StealRequest) =
-  assert req.ID == ID
+  assert req.ID != ID
 
   profile(enq_deq_task):
     let dup = task_alloc()
@@ -1305,4 +1305,4 @@ proc split_loop(task: Task, req: sink StealRequest) =
 
     inc tasks_split
 
-  # log("Worker %2d: Continuing with [%ld, %ld)\n", ID, task->cur, task->end)
+  # log("Worker %2d: Continuing with [%ld, %ld)\n", ID, task->cur, task->stop)

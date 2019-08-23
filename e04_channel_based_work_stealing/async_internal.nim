@@ -32,18 +32,20 @@ macro async*(funcCall: typed): untyped =
   #       so we can merge both future and no future code path
   let fn = funcCall[0]
   let fnName = $fn
-  result.add quote do:
-    static:
-      assert supportsCopyMem(`argsTy`), "\n\n" & `fnName` &
-        " has arguments managed by GC (ref/seq/strings),\n" &
-        "  they cannot be distributed across threads.\n" &
-        "  Argument types: " & $`argsTy` & "\n\n"
+  let withArgs = args.len > 0
+  if withArgs:
+    result.add quote do:
+      static:
+        assert supportsCopyMem(`argsTy`), "\n\n" & `fnName` &
+          " has arguments managed by GC (ref/seq/strings),\n" &
+          "  they cannot be distributed across threads.\n" &
+          "  Argument types: " & $`argsTy` & "\n\n"
 
-      assert sizeof(`argsTy`) <= TaskDataSize, "\n\n" & `fnName` &
-        " has arguments that do not fit in the async data buffer.\n" &
-        "  Argument types: " & `argsTy`.name & "\n" &
-        "  Current size: " & $sizeof(`argsTy`) & "\n" &
-        "  Maximum size allowed: " & $TaskDataSize & "\n\n"
+        assert sizeof(`argsTy`) <= TaskDataSize, "\n\n" & `fnName` &
+          " has arguments that do not fit in the async data buffer.\n" &
+          "  Argument types: " & `argsTy`.name & "\n" &
+          "  Current size: " & $sizeof(`argsTy`) & "\n" &
+          "  Maximum size allowed: " & $TaskDataSize & "\n\n"
 
   # Create the async function
   let async_fn = ident("async_" & fnName)
@@ -68,7 +70,8 @@ macro async*(funcCall: typed): untyped =
         let this = get_current_task()
         assert not is_root_task(this)
 
-        let `data` = cast[ptr `argsTy`](param) # TODO - restrict
+        when bool(`withArgs`):
+          let `data` = cast[ptr `argsTy`](param) # TODO - restrict
         `fnCall`
     # Create the task
     result.add quote do:
@@ -76,7 +79,8 @@ macro async*(funcCall: typed): untyped =
         let task = task_alloc()
         task.parent = get_current_task()
         task.fn = `async_fn`
-        cast[ptr `argsTy`](task.data.addr)[] = `args`
+        when bool(`withArgs`):
+          cast[ptr `argsTy`](task.data.addr)[] = `args`
         push task
 
   else: ################ Need a future
