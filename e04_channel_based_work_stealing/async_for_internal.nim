@@ -27,9 +27,11 @@ template forEach*(idx: untyped{ident}, body: untyped): untyped =
   let this = get_current_task()
   assert this.is_loop
   assert this.start == this.cur
+  var idx {.inject.} = this.start
   inc this.cur
-  for idx{.inject.} in this.start ..< this.stop:
+  while idx < this.stop:
     body
+    inc idx
     inc this.cur
     RT_check_for_steal_requests()
 
@@ -125,15 +127,18 @@ macro async_for*(
 
 
 when isMainModule:
-  import ./tasking
+  import ./tasking, ./primitives/c
+
+  template log(args: varargs[untyped]): untyped =
+    printf(args)
+    flushFile(stdout)
 
   block: # Async without result
 
     proc display_range() =
       forEach(i):
-        stdout.write(i)
-        stdout.write('\n')
-      stdout.write(" - SUCCESS\n")
+        log("%d (thread %d)\n", i, ID)
+      log("Thread %d - SUCCESS\n", ID)
 
     proc main() =
       tasking_init()

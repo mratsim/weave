@@ -1256,7 +1256,7 @@ proc split_adaptative(task: Task): int {.inline.} =
   # log("Worker %2d: sending %ld iterations\n", ID, chunk)
   return task.stop - chunk
 
-proc split_func(task: Task): int {.inline.} =
+template split_func(task: Task): int =
   when SplitStrategy == SplitKind.half:
     split_half(task)
   elif SplitStrategy == guided:
