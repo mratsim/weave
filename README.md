@@ -6,6 +6,15 @@ This is also a good pretext to try the new Nim runtime and memory safety semanti
 
 https://github.com/nim-lang/Nim/wiki/Destructors,-2nd-edition#sink-parameters
 
+## Proof-of-Concept
+
+PoC is successful and has been formalized in a Nim RFC to improve the language:
+You can read (a lot) more at https://github.com/nim-lang/RFCs/issues/160
+
+The production implementation will start in this repo in the picasso subfolder
+but will be moved in its own repo when it's ready for use.
+
+_"Good artists borrow, great artists steal."_ -- Pablo Picasso
 
 ## Challenges
 
