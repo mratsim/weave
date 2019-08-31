@@ -31,44 +31,48 @@ proc `=destroy`[N: static int, T](pool: var ObjectPool[N, T]) =
   if not pool.rawMem.isNil:
     dealloc(pool.rawMem)
 
-template registerPool*(PoolSize: static int, T: typedesc): untyped =
-  ## Register an object pool of a specific size on each active threads.
+proc initialize*[N: static int, T](pool: var ObjectPool[N, T]) =
+  ## Initialize an object pool
+  ## - Reserve raw memory
+  ## - Create pooled objects
   static:
     assert T.supportsCopyMem, "Only trivial objects (no GC, default copy and destructor) are supported in the ObjectPool"
 
-  proc bootstrap(pool: var ObjectPool[PoolSize, T]) =
-    pool.rawMem = cast[ptr array[PoolSize, T]](createU(T, PoolSize))
-    for i in 0 ..< PoolSize:
-      pool.stack[i].base = pool.rawMem[i].addr
-    pool.remaining = PoolSize
+  pool.rawMem = cast[ptr array[N, T]](createU(T, N))
+  for i in 0 ..< N:
+    pool.stack[i].base = pool.rawMem[i].addr
+  pool.remaining = N
 
-  var `pool T` {.threadvar.}: ObjectPool[PoolSize, T]
-  bootstrap(`pool T`)
-
-  proc getPool*(ObjT: type T): ptr ObjectPool[PoolSize, T] {.inline.} =
-    ## Get the thread-local pool that manages ObjectType (size: PoolSize)
-    ##
-    ## It is intended that there can only be one object pool per type per scope
-    `pool T`.addr
-
-func recycle[N: static int, T](pool: ptr ObjectPool[N, T], obj: var Pooled[T]) {.inline.} =
+func recycle[N: static int, T](pool: var ObjectPool[N, T], obj: var Pooled[T]) {.inline.} =
   ## Return a Pooled object to its pool.
   assert pool.remaining < N, "An extra pooled object mysteriously slipped in."
   pool.stack[pool.remaining] = move obj
   pool.remaining += 1
 
-func get*[N: static int, T](pool: ptr ObjectPool[N, T]): Pooled[T] {.inline.} =
+func get*[N: static int, T](pool: var ObjectPool[N, T]): Pooled[T] {.inline.} =
   ## Get an object from the pool.
   ## The object must be properly initialized by the caller
   assert pool.remaining > 0, "Object pool depleted."
   pool.remaining -= 1
   result = move pool.stack[pool.remaining]
 
+template associate*[N: static int, T](pool: var ObjectPool[N, T]): untyped =
+  ## Bind the object type T to the input pool in the current scope
+  proc getPool(ObjT: type T): var ObjectPool[N, T] {.inline.} =
+    ## Get the thread-local pool that manages ObjectType (size: T)
+    ##
+    ## It is intended that there can only be one object pool per type per scope
+    pool
+
 # Pooled object
 # ------------------------------------------------------------------------------
 
 proc `=`[T](dest: var Pooled[T], source: Pooled[T]) {.error: "A pooled object cannot be copied".}
 proc `=destroy`[T](x: var Pooled[T]) =
+  mixin getPool
+  when not compiles(T.getPool()):
+    {.fatal: "The object pool for type \"" & $T & "\" was not associated.".}
+
   T.getPool().recycle(x)
 
 # Sanity checks
@@ -78,9 +82,10 @@ when isMainModule:
   type Foo = object
     x: int
 
-  registerPool(10, Foo)
+  var pool{.threadvar.}: ObjectPool[10, Foo]
+  pool.associate()
 
-  let pool = getPool(Foo)
+  pool.initialize()
 
   proc foo() =
     let p = pool.get()
