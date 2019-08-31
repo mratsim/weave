@@ -4,7 +4,7 @@ There are many ways to implement channels with different use-cases and different
 
 Implementations will follow the following scheme
 
-`channel_`+ sync + `_` + kind + + buf/unbuf + optional_name
+`channel_`+ sync + `_` + kind + `_` + buf/unbuf + `_` + optional_name
 
 sync is underlying synchronization method:
   - shm for shared memory
@@ -15,9 +15,10 @@ kind:
   - mpsc: Multi Producer Single Consumer
   - mpmc: Multi Producer Multi Consumer
 
-buf/unbuf:
-  - buf: buffered channel. Non-blocking for sender unless full.
+unbuf/bounded/unbounded:
   - unbuf: unbuffered channel (also called rendezvous). Blocking.
+  - bounded: channel has a max pre-allocated capacity. Usually array-based.
+  - unbounded: channel has no max capacity. List-based.
 
 optional_name:
   if the channel implementation is following a paper

@@ -5,7 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import typetraits
+import std/typetraits
 
 type
   Pooled*[T] = object
@@ -26,8 +26,10 @@ type
 # ------------------------------------------------------------------------------
 
 proc `=destroy`[N: static int, T](pool: var ObjectPool[N, T]) =
-  # No destructors to run per object
-  static: assert T.supportsCopyMem
+  if not T.supportsCopyMem():
+    # T has custom destructors or ref objects
+    for i in 0 ..< N:
+      `=destroy`(pool.rawMem[i])
   if not pool.rawMem.isNil:
     dealloc(pool.rawMem)
 
@@ -35,9 +37,9 @@ proc initialize*[N: static int, T](pool: var ObjectPool[N, T]) =
   ## Initialize an object pool
   ## - Reserve raw memory
   ## - Create pooled objects
-  static:
-    assert T.supportsCopyMem, "Only trivial objects (no GC, default copy and destructor) are supported in the ObjectPool"
-
+  ##
+  ## Important: pool objects are created uninitialized.
+  ##            Make sure you properly initialize them before use.
   pool.rawMem = cast[ptr array[N, T]](createU(T, N))
   for i in 0 ..< N:
     pool.stack[i].base = pool.rawMem[i].addr
