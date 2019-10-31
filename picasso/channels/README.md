@@ -30,6 +30,29 @@ API:
 
 For now we follow Nim channels example with the channel being shared
 between senders and receivers however it might be interesting to explore
-Rust design where creating a channel returns distinct receiver and sender
+[Rust's Crossbeam](https://docs.rs/crossbeam-channel/0.3.9/crossbeam_channel/) or [Adobe's Stlab](http://stlab.cc/libraries/concurrency/channel/channel.html) design where creating a channel returns distinct receiver and sender
 endpoints with only the recv and send proc implemented.
 Furthermore we can add a "can only be moved" restrictions for single consumer or single receiver endpoints.
+
+It prevents misuse of channels however for Picasso:
+- We store all channels in a context/global, with the sender/receiver distinction
+  it will be twice the size (and potentially twice the cache misses).
+- It would require tracing for the channel buffer to be destroyed
+  when no more receivers and/or senders exists, increasing book keeping overhead.
+- Reference counting would have to be done manually and in a thread-safe manner as there is no way to use Nim's GC and a custom object pool.
+- In our case the context/global owns the channels so tracing is not required
+- For this reason, using a raw pointer instead of owned ref
+  in the Sender[T] and Receiver[T] wrapper is possible.
+  ```Nim
+  type
+    Channel[Capacity: static int, T] = object
+      ...
+    Sender[Capacity: static int, T] = object
+      chan: ptr Channel[Capacity, T]
+    Receiver[Capacity: static int, T] = object
+      chan: ptr Channel[Capacity, T]
+  ```
+- However the safety gains seem low compared to cognitive overhead as
+  channel lifetime, non-copiable SPSC, performance are already addressed
+  by a channel pool. Receiver/Sender would be 2 more types to manage/alias.
+- And having a pointer indirection increases cache misses.

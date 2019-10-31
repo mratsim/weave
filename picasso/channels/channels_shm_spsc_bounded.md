@@ -33,6 +33,7 @@ So we want to solve 2 problems:
   - the cost of modulo
   - the extra unused element overhead, which creates
     off-by-one error opportunity and is bloat on small queues.
+    For Picasso each worker has a channel of size 1 per other existing worker
 
 ### Example naive implementation
 
@@ -101,18 +102,35 @@ A similar technique in the chip design paper in page 3:
 
 In summary those 2 techniques use extra bit(s) on the head and tail index to save on extra logic to disambiguate empty and full.
 
-They require size to be a power of 2 however for efficient rollover via a right shift instead of modulo.
+They require size to be a power of 2 however for efficient rollover via a right shift instead of modulo probably would use more space than just using an extra empty-slot.
 
 #### On the modulo
 
-Instead of having a positive range, we can use a (-size, +size)
-range and just substract 2*size when we go over +size.
-
-This is very efficient, an `if size > Capacity: size -= 2 * Capacity`, can be well predicted by the hardware. The difference
+We can use a substraction `if tail >= Capacity: tail -= Capacity`, can be well predicted by the hardware. The difference
 with shifting is negligeable.
 
-Furthermore we allocate exactly what was specified and do not waste
-on extra space to round to power-of-2
+The compiler would probably convert it to a conditional mov on x86
+
+or more explicitly:
+```Nim
+chan.tail += if chan.tail + 1 >= Capacity: 1 - Capacity
+             else: 1
+```
+
+Or with bit twiddling
+```Nim
+x -= N and -int(x >= N)
+``\
+
+Or we can even use weird ASM tricks
+```asm
+                  ; precondition: 0 <= x <= N
+                  ; (N is constant)
+    mov y, 0      ; set up mask
+    cmp x, N-1    ; set carry flag if x >= N
+    sbb y, 0      ; subtract 1 from y if carry flag set
+    and x, y      ; set x to zero if x == N
+```
 
 ## SPSC Queue formal verification:
 - Correct and Efficient Bounded FIFO Queues, Nhat Minh Le et al:
@@ -121,6 +139,12 @@ on extra space to round to power-of-2
 
   SPSC Queue for weak memory model with formal proof.
   It also supports batch enqueue/deque
+
+- Critical Sections and Producer Consumer Queues in Weak Memory Systems
+
+  Higham & Kawash
+
+  https://prism.ucalgary.ca/bitstream/handle/1880/46030/1997-604-06.pdf
 
 ## Implementations and write-up
 
@@ -132,6 +156,10 @@ on extra space to round to power-of-2
 
   http://psy-lob-saw.blogspot.com/p/lock-free-queues.html
 
+- The Lynx Queue
+
+  http://www-dyn.cl.cam.ac.uk/~tmj32/wordpress/the-lynx-queue/
+
 - C++ SPSC queues with in-depth dive into memory models
 
   https://kjellkod.wordpress.com/2012/11/28/c-debt-paid-in-full-wait-free-lock-free-queue/
@@ -141,6 +169,8 @@ on extra space to round to power-of-2
   https://pdfs.semanticscholar.org/1b0c/2563aecc2062298cd71850bdece32caeed6d.pdf
 
 - FastForward Queues (minimal modification of Lamport for significant perf increase on shared-memory system)
+
+  _requires elements to be nullable (i.e. pointers or Options) for isEmpty or isFull to not use head+tail at the same time and touch 2 cache lines._
 
   https://www2.cs.fau.de/teaching/WS2014/ParAlg/slides/insecure/material/queue-concurrent_lock-free.pdf
 
