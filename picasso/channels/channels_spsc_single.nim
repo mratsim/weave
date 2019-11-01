@@ -15,7 +15,7 @@ const CacheLineSize {.intdefine.} = 64
 type
   ChannelShmSpscSingle*[T] = object
     ## Wait-free bounded single-producer single-consumer channel
-    ## That can only buffer a single item (a Picasso task)
+    ## that can only buffer a single item (a Picasso task)
     ## Properties:
     ##   - wait-free
     ##   - supports weak memory models
