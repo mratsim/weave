@@ -158,6 +158,8 @@ func tryRecv*[T](chan: var Channel[T], dst: var T): bool =
 # Sanity checks
 # ------------------------------------------------------------------------------
 when isMainModule:
+  import strutils
+
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}
 
@@ -179,11 +181,17 @@ when isMainModule:
       chan: ptr Channel[int]
 
     WorkerKind = enum
-      Sender
       Receiver
+      Sender1
+      Sender2
+      Sender3
 
   template Worker(id: WorkerKind, body: untyped): untyped {.dirty.} =
     if args.ID == id:
+      body
+
+  template Worker(id: Slice[WorkerKind], body: untyped): untyped {.dirty.} =
+    if args.ID in id:
       body
 
   proc thread_func(args: ThreadArgs) =
@@ -201,37 +209,46 @@ when isMainModule:
     # chan <- 64
     Worker(Receiver):
       var val: int
-      for j in 0 ..< 10:
+      var counts: array[Sender1..Sender3, int]
+      for j in 0 ..< 30:
         args.chan[].recvLoop(val):
           # Busy loop, in prod we might want to yield the core/thread timeslice
           discard
-        echo "                  Receiver got: ", val
-        doAssert val == 42 + j*11
+        echo "Receiver got: ", val
+        let sender = WorkerKind(val div 10)
+        doAssert val == counts[sender] + ord(sender) * 10, "Incorrect value: " & $val
+        inc counts[sender]
 
-    Worker(Sender):
+    Worker(Sender1..Sender3):
       doAssert args.chan[].isFull() == false
       for j in 0 ..< 10:
-        let val = 42 + j*11
+        let val = ord(args.ID) * 10 + j
         args.chan[].sendLoop(val):
           # Busy loop, in prod we might want to yield the core/thread timeslice
           discard
-        echo "Sender sent: ", val
+
+        const pad = spaces(18)
+        echo pad.repeat(ord(args.ID)), $args.ID, " sent: ", val
 
   proc main(capacity: int) =
-    echo "Testing if 2 threads can send data - channel capacity: ", capacity
-    echo "-----------------------------------"
-    var threads: array[2, Thread[ThreadArgs]]
+    echo "Testing if 3 threads can send data to 1 consumer - channel capacity: ", capacity
+    echo "------------------------------------------------------------------------"
+    var threads: array[4, Thread[ThreadArgs]]
     let chan = createU(Channel[int]) # CreateU is not zero-init
     chan[].initialize(capacity)
 
     createThread(threads[0], thread_func, ThreadArgs(ID: Receiver, chan: chan))
-    createThread(threads[1], thread_func, ThreadArgs(ID: Sender, chan: chan))
+    createThread(threads[1], thread_func, ThreadArgs(ID: Sender1, chan: chan))
+    createThread(threads[2], thread_func, ThreadArgs(ID: Sender2, chan: chan))
+    createThread(threads[3], thread_func, ThreadArgs(ID: Sender3, chan: chan))
 
     joinThread(threads[0])
     joinThread(threads[1])
+    joinThread(threads[2])
+    joinThread(threads[3])
 
     dealloc(chan)
-    echo "-----------------------------------"
+    echo "------------------------------------------------------------------------"
     echo "Success"
 
   main(2)
