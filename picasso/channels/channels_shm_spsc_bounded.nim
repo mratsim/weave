@@ -79,7 +79,7 @@ proc `=destroy`[T](chan: var Channel[T]) {.inline.} =
 
 func clear*(chan: var Channel) {.inline.} =
   ## Reinitialize the data in the channel
-  ## We assume the buffer is already allocated
+  ## We assume the buffer was already used
   ##
   ## This is not threadsafe
   assert not chan.buffer.isNil

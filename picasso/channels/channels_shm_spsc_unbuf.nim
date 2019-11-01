@@ -5,7 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import std/atomics, std/typetraits
+import std/atomics
 
 const CacheLineSize {.intdefine.} = 64
   ## True on most machines
@@ -27,6 +27,10 @@ type
     ##   - Linearizable
     ##
     ## Requires T to fit in a CacheLine
+    ##
+    ## Usage:
+    ##   - Must be heap-allocated
+    ##   - There is no need to zero-out the padding fields
     pad0: array[CacheLineSize, byte] # If used in a sequence of channels
     buffer: T
     pad1: array[CacheLineSize  - sizeof(T), byte]
@@ -40,8 +44,22 @@ proc `=`[T](
     source: Channel[T]
   ) {.error: "A channel cannot be copied".}
 
+func initialize*[T](chan: var Channel[T]) {.inline.} =
+  ## Creates a new Shared Memory Single Producer Single Consumer Bounded channel
+
+  # No init, we don't need to zero-mem the padding
+  # `createU` is thread-local allocation.
+  # No risk of false-sharing
+  assert cast[ByteAddress](chan.full.addr) -
+    cast[ByteAddress](chan.buffer.addr) >= CacheLineSize
+
+  chan.buffer = default(T)
+  chan.full.store(false, moRelaxed)
+
 func clear*(chan: var Channel) {.inline.} =
   ## Reinitialize the data in the channel
+  ## We assume the buffer was already used
+  ##
   ## This is not thread-safe.
   assert chan.full.load(moRelaxed) == true
   `=destroy`(chan.buffer)
@@ -137,7 +155,8 @@ when isMainModule:
     echo "Testing if 2 threads can send data"
     echo "-----------------------------------"
     var threads: array[2, Thread[ThreadArgs]]
-    let chan = create(Channel[int]) # Create is zero-init
+    let chan = createU(Channel[int]) # CreateU is not zero-init
+    chan[].initialize()
 
     createThread(threads[0], thread_func, ThreadArgs(ID: Receiver, chan: chan))
     createThread(threads[1], thread_func, ThreadArgs(ID: Sender, chan: chan))
