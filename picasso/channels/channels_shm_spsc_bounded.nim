@@ -93,7 +93,7 @@ func isEmpty(chan: Channel): bool {.inline.} =
   ## Check if channel is empty
   ## ⚠ Use only in:
   ##   - the consumer thread that owns (write) to the "front" index
-  ##     (dequeue / popFront)
+  ##     (receive / dequeue / popFront)
   let front = chan.front.load(moRelaxed)
   result = front == chan.back.load(moAcquire)
 
@@ -101,9 +101,9 @@ func isFull(chan: Channel): bool {.inline.} =
   ## Check if channel is full
   ## ⚠ Use only in:
   ##   - the producer thread that owns (write) to the "back" index
-  ##     (enqueue / pushBack)
+  ##     (send / enqueue / pushBack)
   let back = chan.back.load(moRelaxed)
-  var num_items = back - chan.front.load(moAcquire)
+  let num_items = back - chan.front.load(moAcquire)
   result = abs(num_items) == chan.capacity
 
 func trySend*[T](chan: var Channel[T], dst: var T): bool =
