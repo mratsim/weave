@@ -2,6 +2,23 @@
 
 Note: Channels are queues
 
+## Usage in the project
+
+Channels are used for the following types:
+
+- Task:
+  - ptr objects
+  - SPSC channels
+  - buffered - 1 item
+- Futures
+  - ptr objects
+  - SPSC channels
+  - unbuffered (rendezvous / blocking)
+- StealRequest
+  - object of size 32 bytes
+  - MPSC channels
+  - buffered - "MaxSteal * num_workers" or "2 * MaxSteal * num_workers" (Main thread)
+
 ## Bounded channel optimization notes
 
 ### Context
@@ -132,6 +149,24 @@ Or we can even use weird ASM tricks
     and x, y      ; set x to zero if x == N
 ```
 
+### Advanced performance issues
+
+Even once the previous modulo/size issues, a naive design of the queue will be subject to cache thrashing due to false sharing.
+
+Padding by a single cache line might not be enough due to prefetching.
+
+Every send/recv operations will need to access contested cache-line to read or write the head and tail indices. In the litterature (see MCRingBUffer paper or B-Queue paper) one way around that is to cache on the producer/consumer cache-line a valid index up to which no isEmpty/isFull check is required.
+
+Designers of the queue then have tradeoffs:
+  - regarding the distance between the head and tail, to always keep a cache-line in-between them
+  - regarding batching to limit reading from the read/write index in the other thread cacheline
+    - which requires unused memory slots
+    - is only useful if a batch is bigger than a cacheline
+    - might deadlock in a case of MCRingBuffer (see B-Queue paper http://psy-lob-saw.blogspot.com/2013/11/spsc-iv-look-at-bqueue.html blog on B-Queue)
+    - Latency to fight the empty queue cache thrashing with thee temporal slipping technique
+  - regarding a queue optimized for always near-full scenarios or always near empty (Liberty Queue paper)
+  - regarding using data null/not-null values to check for fullness/emptiness
+
 ## SPSC Queue formal verification:
 - Correct and Efficient Bounded FIFO Queues, Nhat Minh Le et al:
 
@@ -148,6 +183,10 @@ Or we can even use weird ASM tricks
 
 ## Implementations and write-up
 
+- @Deaod extensive SPSC queue benchmarks:
+
+  https://github.com/Deaod/RingBufferBenchmark
+
 - Dmitry Vyukov review of [FastFlow](http://calvados.di.unipi.it/) SPSC queue:
 
   http://www.1024cores.net/home/lock-free-algorithms/queues/fastflow
@@ -155,6 +194,24 @@ Or we can even use weird ASM tricks
 - SPSC Queues in Java, with steps by steps optimizations
 
   http://psy-lob-saw.blogspot.com/p/lock-free-queues.html
+
+- B-Queue, Efficient and Practical Queuing for FastCore-to-Core Communication
+
+  Junchang Wang, Kai Zhang, Xinan Tang, Bei Hua
+
+  http://staff.ustc.edu.cn/~bhua/publications/IJPP_draft.pdf
+
+- Liberty Queues for EPIC architecture
+
+  Jablin et al
+
+  https://pdfs.semanticscholar.org/0e6d/a0e2d7b4e45764dc2e8a3a8d1ae903fd70cd.pdf
+
+- A Lock-Free, Cache-Efficient Shared Ring Buffer for Multi-Core Architectures
+
+  Patrick P. C. Lee, Tian Bu, Girish Chandranmenon
+
+  http://www.cse.cuhk.edu.hk/~pclee/www/pubs/ancs09poster.pdf
 
 - The Lynx Queue
 
