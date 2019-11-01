@@ -6,18 +6,20 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 type
-  StealableTask* = concept x, var v
-    # x is a ptr object and has a next/prev field
+  StealableTask* = concept task, var mutTask, type Task
+    # task is a ptr object and has a next/prev field
     # for intrusive doubly-linked list based deque
-    x is ptr
-    x.prev is ptr
-    x.next is ptr
-    # x has a "fn" field with the proc to run
-    x.fn is proc (param: pointer) {.nimcall.}
+    task is ptr
+    task.prev is Task
+    task.next is Task
+    # A task has a parent field
+    task.parent is Task
+    # task has a "fn" field with the proc to run
+    task.fn is proc (param: pointer) {.nimcall.}
     # var x has allocate proc
-    allocate(v)
+    allocate(mutTask)
     # x has delete proc
-    delete(x)
+    delete(task)
 
     # TODO: closures instead of nimcall would be much nicer and would
     # allow syntax like:
@@ -65,15 +67,15 @@ type
     ## and requiring a backoff mechanism.
 
     head, tail: T
-    pending_tasks*: int32
-    # num_steals: int
+    pendingTasks*: range[0'i32 .. high(int32)]
+    # numSteals: int
 
 # Basic routines
 # ---------------------------------------------------------------
 
 func isEmpty*(dq: PrellDeque): bool {.inline.} =
   # when empty dq.head == dq.tail == dummy node
-  (dq.head == dq.tail) and (dq.pending_tasks == 0)
+  (dq.head == dq.tail) and (dq.pendingTasks == 0)
 
 func addFirst*[T](dq: var PrellDeque[T], task: sink T) =
   ## Prepend a task to the beginning of the deque
@@ -83,7 +85,7 @@ func addFirst*[T](dq: var PrellDeque[T], task: sink T) =
   dq.head.prev = task
   dq.head = task
 
-  dq.pending_tasks += 1
+  dq.pendingTasks += 1
 
 func popFirst*[T](dq: var PrellDeque): T =
   ## Pop the last task from the deque
@@ -95,7 +97,7 @@ func popFirst*[T](dq: var PrellDeque): T =
   dq.head.prev = nil
   result.next = nil
 
-  dq.pending_tasks -= 1
+  dq.pendingTasks -= 1
 
 # Creation / Destruction
 # ---------------------------------------------------------------
@@ -105,14 +107,14 @@ func newPrellDeque*(T: typedesc[StealableTask]): PrellDeque[T] {.noinit.} =
   # Dummy to easily assert things going wrong
   result.head.fn = cast[proc (param: pointer){.nimcall.}](ByteAddress 0xCAFE)
   result.tail = result.head
-  result.pending_tasks = 0
-  # result.num_steals = 0
+  result.pendingTasks = 0
+  # result.numSteals = 0
 
 func `=destroy`[T](dq: var PrellDeque[T]) =
   # Free all remaining tasks
   while (let task = dq.popLast(); not task.isNil):
     delete(task)
-  assert dq.pending_tasks == 0
+  assert dq.pendingTasks == 0
   assert dq.isEmpty
   # Free dummy node
   delete(dq.head)
@@ -132,7 +134,7 @@ func addListFirst[T](dq: var PrellDeque[T], head, tail: T, len: int32) =
 
   # Update state of the deque
   dq.head = head
-  dq.pending_tasks += len
+  dq.pendingTasks += len
 
 func addListFirst*[T](dq: var PrellDeque[T], head, len: int32) =
   assert not head.isNil
@@ -149,5 +151,154 @@ func addListFirst*[T](dq: var PrellDeque[T], head, len: int32) =
   assert index == len
   dq.addListFirst(head, tail, len)
 
-# Task routines
+# Task-specific routines
 # ---------------------------------------------------------------
+
+func popFirstIfChild*[T](dq: var PrellDeque[T], parentTask: T): T =
+  assert not parentTask.isNil
+
+  if dq.isEmpty():
+    return nil
+
+  result = dq.head
+  if result.parent != parentTask:
+    # Not a child, don't pop it
+    return nil
+
+  dq.head = dq.head.next
+  dq.head.prev = nil
+  result.next = nil
+
+  dec dq.num_tasks
+
+# Work-stealing routines
+# ---------------------------------------------------------------
+
+func steal*[T](dq: PrellDeque[T]): T =
+  # Steal a task from the end of the deque
+  if dq.isEmpty():
+    return nil
+
+  # Should be the dummy
+  result = dq.tail
+  assert result.fn == cast[proc (param: pointer){.nimcall.}](0xCAFE)
+
+  # Steal the true task
+  result = result.prev
+  result.next = nil
+  # Update dummy reference to previous task
+  dq.tail.prev = result.prev
+  # Solen task has no predecessor anymore
+  result.prev = nil
+
+  if dq.tail.prev.isNil:
+    # Stealing last task of the deque
+    assert dq.head == result
+    dq.head = dq.tail # isEmpty() condition
+  else:
+    dq.tail.prev.next = dq.tail # last task points to dummy
+
+  dq.pendingTasks -= 1
+  # dq.numSteals += 1
+
+template multistealImpl[T](
+          dq: PrellDeque[T],
+          stolenHead: var T,
+          numStolen: var int32,
+          maxStmt: untyped,
+          tailAssignStmt: untyped
+        ): untyped =
+  ## Implementation of stealing multiple tasks.
+  ## All procs:
+  ##   - update the numStolen param with the number of tasks stolen
+  ##   - return the first task stolen (which is an intrusive linked list to the last)
+  ## 4 cases:
+  ##   - Steal up to N tasks
+  ##   - Steal up to N tasks, also update the "tail" param
+  ##   - Steal half tasks
+  ##   - Steal half tasks, also update the "tail" param
+
+  if dq.isEmpty():
+    return nil
+
+  # Make sure to steal at least one task
+  numStolen = dq.pendingTasks shr 1 # half tasks
+  if numStolen == 0: numStolen = 1
+  maxStmt # <-- 1st statement "if numStolen > max: numStolen = max" injected here
+
+  stolenHead = dq.tail # dummy node
+  assert stolenHead.fn == cast[proc (param: pointer){.nimcall.}](0xCAFE)
+  tailAssignStmt   # <-- 2nd statement "tail = dummy.prev" injected here
+
+  # Walk backwards from the dummy node
+  for i in 0 ..< n:
+    stolenHead = stolenHead.prev
+
+  dq.tail.prev.next = nil       # Detach the true tail from the dummy
+  dq.tail.prev = stolenHead.prev    # Update the node the dummy points to
+  stolenHead.prev = nil             # Detach the stolenHead head from the deque
+  if dq.tail.prev.isNil:
+    # Stealing the last task of the deque
+    assert dq.head == stolenHead
+    dq.head = dq.tail           # isEmpty() condition
+  else:
+    dq.tail.prev.next = dq.tail # last task points to dummy
+
+  dq.pendingTasks -= numStolen
+  # dq.numSteals += 1
+
+func stealMany*[T](dq: PrellDeque[T],
+                  maxSteals: range[1'i32 .. high(int32)],
+                  head, tail: var T,
+                  numStolen: var int32) =
+  ## Steal up to half of the deque's tasks, but at most maxSteals tasks
+  ## head will point to the first task in the returned list
+  ## tail will point to the last task in the returned list
+  ## numStolen will contain the number of transferred tasks
+
+  multistealImpl(dq, head, numStolen):
+    if numStolen > maxSteals:
+      numStolen = maxSteals
+  do:
+    tail = dq.tail.prev
+
+func stealMany*[T](dq: PrellDeque[T],
+                  maxSteals: range[1'i32 .. high(int32)],
+                  head: var T,
+                  numStolen: var int32) =
+  ## Steal up to half of the deque's tasks, but at most maxSteals tasks
+  ## head will point to the first task in the returned list
+  ## numStolen will contain the number of transferred tasks
+
+  multistealImpl(dq, head, numStolen):
+    if numStolen > maxSteals:
+      numStolen = maxSteals
+  do:
+    discard
+
+func stealHalf*[T](dq: PrellDeque[T],
+                  maxSteals: range[1'i32 .. high(int32)],
+                  head, tail: var T,
+                  numStolen: var int32) =
+  ## Steal half of the deque's tasks (minimum one)
+  ## head will point to the first task in the returned list
+  ## tail will point to the last task in the returned list
+  ## numStolen will contain the number of transferred tasks
+
+  multistealImpl(dq, head, numStolen):
+    discard
+  do:
+    tail = dq.tail.prev
+
+func stealHalf*[T](dq: PrellDeque[T],
+                  maxSteals: range[1'i32 .. high(int32)],
+                  head: var T,
+                  numStolen: var int32) =
+  ## Steal half of the deque's tasks (minimum one)
+  ## head will point to the first task in the returned list
+  ## numStolen will contain the number of transferred tasks
+
+  multistealImpl(dq, head, numStolen):
+    discard
+  do:
+    discard

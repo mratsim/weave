@@ -6,9 +6,9 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 type
-  IntrusiveStackable* = concept x
+  IntrusiveStackable* = concept x, type T
     x is ptr
-    x.next is ptr
+    x.next is T
 
   IntrusiveStack*[T: IntrusiveStackable] = object
     ## Generic intrusive stack for pointer objects
