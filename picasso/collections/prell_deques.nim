@@ -5,13 +5,13 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import ./intrusive_stacks
-
 type
   StealableTask* = concept x, var v
-    # x is a ptr object and has a next field
-    x is IntrusiveStackable
+    # x is a ptr object and has a next/prev field
+    # for intrusive doubly-linked list based deque
+    x is ptr
     x.prev is ptr
+    x.next is ptr
     # x has a "fn" field with the proc to run
     x.fn is proc (param: pointer) {.nimcall.}
     # var x has allocate proc
@@ -67,7 +67,6 @@ type
     head, tail: T
     pending_tasks*: int32
     # num_steals: int
-    freelist: IntrusiveStack[T]
 
 # Basic routines
 # ---------------------------------------------------------------
@@ -108,7 +107,6 @@ func newPrellDeque*(T: typedesc[StealableTask]): PrellDeque[T] {.noinit.} =
   result.tail = result.head
   result.pending_tasks = 0
   # result.num_steals = 0
-  result.freelist = default(IntrusiveStack[T])
 
 func `=destroy`[T](dq: var PrellDeque[T]) =
   # Free all remaining tasks
@@ -118,5 +116,38 @@ func `=destroy`[T](dq: var PrellDeque[T]) =
   assert dq.isEmpty
   # Free dummy node
   delete(dq.head)
-  # Free cache
-  `=destroy`(dq.freelist)
+
+# Batch routines
+# ---------------------------------------------------------------
+
+func addListFirst[T](dq: var PrellDeque[T], head, tail: T, len: int32) =
+  # Add a list of tasks [head ... tail] of length len to the front of the deque
+  assert not head.isNil and not tail.isNil
+  assert len > 0
+
+  # Link tail with deque head
+  assert tail.next.isNil
+  tail.next = dq.head
+  dq.head.prev = tail
+
+  # Update state of the deque
+  dq.head = head
+  dq.pending_tasks += len
+
+func addListFirst*[T](dq: var PrellDeque[T], head, len: int32) =
+  assert not head.isNil
+  assert len > 0
+
+  var tail = head
+  when defined(debug):
+    var index = 0'i32
+  while not tail.next.isNil:
+    tail = tail.next
+    when defined(debug):
+      index += 1
+
+  assert index == len
+  dq.addListFirst(head, tail, len)
+
+# Task routines
+# ---------------------------------------------------------------
