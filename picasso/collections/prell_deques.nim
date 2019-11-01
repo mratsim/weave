@@ -11,6 +11,7 @@ type
   StealableTask* = concept x, var v
     # x is a ptr object and has a next field
     x is IntrusiveStackable
+    x.prev is ptr
     # x has a "fn" field with the proc to run
     x.fn is proc (param: pointer) {.nimcall.}
     # var x has allocate proc
@@ -40,11 +41,14 @@ type
     ## for inter-thread communication.
     ##
     ## PrellDeque implements the traditional work-stealing deque:
-    ## - addLast (push)
-    ## - popLast (pop)
-    ## - popFirst (steal)
+    ## - (push)
+    ## - (pop)
+    ## - (steal)
+    ## Note that instead of pushing/pop-ing from the end
+    ## and stealing from the start,
+    ## PrellDeques push/pop from the start and steal from the end
     ##
-    ## But as there is no thread contention, it also provides several extras:
+    ## However as there is no thread contention, it also provides several extras:
     ## - adding multiple tasks at once
     ## - stealing one, half or an arbitrary number in-between
     ## - No need for complex formal verification of the deque
@@ -65,31 +69,31 @@ type
     # num_steals: int
     freelist: IntrusiveStack[T]
 
-# Basic deque routines
+# Basic routines
 # ---------------------------------------------------------------
 
 func isEmpty*(dq: PrellDeque): bool {.inline.} =
   # when empty dq.head == dq.tail == dummy node
   (dq.head == dq.tail) and (dq.pending_tasks == 0)
 
-func addLast*[T](dq: PrellDeque[T], task: sink T) =
-  ## Append a task to the end of the deque
+func addFirst*[T](dq: var PrellDeque[T], task: sink T) =
+  ## Prepend a task to the beginning of the deque
   assert not task.isNil
 
-  task.next = dq.tail
-  dq.tail.prev = task
-  dq.tail = task
+  task.next = dq.head
+  dq.head.prev = task
+  dq.head = task
 
   dq.pending_tasks += 1
 
-func popLast*[T](dq: PrellDeque): T =
+func popFirst*[T](dq: var PrellDeque): T =
   ## Pop the last task from the deque
   if dq.isEmpty():
     return nil
 
-  result = dq.tail
-  dq.tail = dq.tail.next
-  dq.tail.prev = nil
+  result = dq.head
+  dq.head = dq.head.next
+  dq.head.prev = nil
   result.next = nil
 
   dq.pending_tasks -= 1
