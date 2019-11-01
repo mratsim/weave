@@ -24,6 +24,7 @@ type
     ##   - Padded to avoid false sharing
     ##   - only 1 synchronization variable.
     ##   - No extra indirection to access the item
+    ##   - Linearizable
     ##
     ## Requires T to fit in a CacheLine
     pad0: array[CacheLineSize, byte] # If used in a sequence of channels
