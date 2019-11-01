@@ -87,7 +87,7 @@ func addFirst*[T](dq: var PrellDeque[T], task: sink T) =
 
   dq.pendingTasks += 1
 
-func popFirst*[T](dq: var PrellDeque): T =
+func popFirst*[T](dq: var PrellDeque[T]): T =
   ## Pop the last task from the deque
   if dq.isEmpty():
     return nil
@@ -102,17 +102,23 @@ func popFirst*[T](dq: var PrellDeque): T =
 # Creation / Destruction
 # ---------------------------------------------------------------
 
-func newPrellDeque*(T: typedesc[StealableTask]): PrellDeque[T] {.noinit.} =
-  result.head.allocate()
-  # Dummy to easily assert things going wrong
-  result.head.fn = cast[proc (param: pointer){.nimcall.}](ByteAddress 0xCAFE)
-  result.tail = result.head
+proc newPrellDeque*[T: StealableTask](typ: typedesc[T]): PrellDeque[T] {.noinit.} =
+  mixin allocate
+
+  var dummy: T
+  allocate(dummy)
+  dummy.fn = cast[proc (param: pointer){.nimcall.}](ByteAddress 0xCAFE)
+
+  result.head = dummy
+  result.tail = dummy
   result.pendingTasks = 0
   # result.numSteals = 0
 
-func `=destroy`[T](dq: var PrellDeque[T]) =
+proc `=destroy`[T: StealableTask](dq: var PrellDeque[T]) =
+  mixin delete
+
   # Free all remaining tasks
-  while (let task = dq.popLast(); not task.isNil):
+  while (let task = dq.popFirst(); not task.isNil):
     delete(task)
   assert dq.pendingTasks == 0
   assert dq.isEmpty
@@ -302,3 +308,41 @@ func stealHalf*[T](dq: PrellDeque[T],
     discard
   do:
     discard
+
+# Unit tests
+# ---------------------------------------------------------------
+
+when isMainModule:
+  import unittest, ./intrusive_stacks
+
+  const
+    N = 1000000 # Number of tasks to push/pop/steal
+    M = 100     # Max number of tasks to steal in one swoop
+
+  type
+    Task = ptr Taskobj
+    TaskObj = object
+      prev, next: Task
+      parent: Task
+      fn: proc (param: pointer) {.nimcall.}
+
+    Data = object
+      a, b: int32
+
+  proc allocate(task: var Task) =
+    assert task.isNil
+    task = createShared(TaskObj)
+
+  proc delete(task: sink Task) =
+    if not task.isNil:
+      deallocShared(task)
+
+  suite "Testing PrellDeques":
+    var deq: PrellDeque[Task]
+
+    test "Instantiation":
+      deq = newPrellDeque(Task)
+
+      check:
+        deq.isEmpty()
+        deq.pendingTasks == 0
