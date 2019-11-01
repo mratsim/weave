@@ -38,3 +38,20 @@ This requires multithreaded alloc/free scheme. As we probably would want to impl
 Another issue is that assuming we pool StealRequests, they will trigger access to the same cacheline from random threads so it's probably better if StealRequests were thread-local.
 
 Lastly, in the channel-based work-stealing, the thread that has work to do must also handle the steal requests (contrary to shared-memory design where the threads that have nothing to do handle the stealing). This means that that busy thread will also need to handle heap/pool deallocation.
+
+## More notes
+
+Arguably there might be cache thrashing between the producers when writing the tail index and the data. However they don't have any useful work to do. What should be prevented is that they interfere with the consumer.
+
+As the producers have nothing to do anyway, a lock-based solution only on the producer side should be suitable.
+
+Furthermore each producer is only allowed a limited number of steal requests
+
+## References
+
+There is a definite lack of papers on ring-buffer based MPSC queues
+
+- https://github.com/rmind/ringbuf
+- https://github.com/cloudfoundry/go-diodes (can overwrite data)
+- Disruptor: https://github.com/LMAX-Exchange/disruptor/wiki/Blogs-And-Articles
+  Note that this is a ringbuffer of pointers, it doesn't hold data

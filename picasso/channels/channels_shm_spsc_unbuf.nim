@@ -58,12 +58,11 @@ func initialize*[T](chan: var Channel[T]) {.inline.} =
 
 func clear*(chan: var Channel) {.inline.} =
   ## Reinitialize the data in the channel
-  ## We assume the buffer was already used
   ##
   ## This is not thread-safe.
-  assert chan.full.load(moRelaxed) == true
-  `=destroy`(chan.buffer)
-  chan.full.store(moRelaxed) = false
+  if chan.full.load(moRelaxed) == true:
+    `=destroy`(chan.buffer)
+    chan.full.store(moRelaxed) = false
 
 func tryRecv*[T](chan: var Channel[T], dst: var T): bool =
   ## Try receiving the item buffered in the channel

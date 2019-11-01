@@ -27,6 +27,9 @@ type
     ##
     ## At the moment, only trivial objects can be received or sent
     ## (no GC, can be copied and no custom destructor)
+    ##
+    ## The content of the channel is not destroyed upon channel destruction
+    ## Destroying a channel containing pointers will not deallocate them
 
     # TODO: Nim alignment pragma - https://github.com/nim-lang/Nim/pull/11077
     # TODO: do we create a Sender/Receiver API
@@ -35,7 +38,7 @@ type
     pad0: array[CacheLineSize, byte] # If used in a sequence of channels
     capacity: int
     buffer: ptr UncheckedArray[T]
-    readIndex: array[CacheLineSize - sizeof(int), byte]
+    pad1: array[CacheLineSize - sizeof(int), byte]
     front: Atomic[int] # Range [0 -> 2*Capacity)
     # back_cache: int # TODO: cache back to avoid cache line contention
     pad2: array[CacheLineSize - sizeof(int), byte]
@@ -57,6 +60,20 @@ proc `=`[T](
     source: Channel[T]
   ) {.error: "A channel cannot be copied".}
 
+proc `=destroy`[T](chan: var Channel[T]) {.inline.} =
+  static: assert T.supportsCopyMem # no custom destructors or ref objects
+  if not chan.buffer.isNil:
+    dealloc(chan.buffer)
+
+func clear*(chan: var Channel) {.inline.} =
+  ## Reinitialize the data in the channel
+  ## We assume the buffer was already initialized.
+  ##
+  ## This is not threadsafe
+  assert not chan.buffer.isNil
+  chan.front.store(0, moRelaxed)
+  chan.back.store(0, moRelaxed)
+
 func initialize*[T](chan: var Channel[T], capacity: Positive) =
   ## Creates a new Shared Memory Single Producer Single Consumer Bounded channel
 
@@ -68,23 +85,8 @@ func initialize*[T](chan: var Channel[T], capacity: Positive) =
   assert cast[ByteAddress](chan.back.addr) -
     cast[ByteAddress](chan.front.addr) >= CacheLineSize
 
-  chan.front.store(0, moRelaxed)
-  chan.back.store(0, moRelaxed)
   chan.buffer = cast[ptr UncheckedArray[T]](createU(T, capacity))
-
-proc `=destroy`[T](chan: var Channel[T]) {.inline.} =
-  static: assert T.supportsCopyMem # no custom destructors or ref objects
-  if not chan.buffer.isNil:
-    dealloc(chan.buffer)
-
-func clear*(chan: var Channel) {.inline.} =
-  ## Reinitialize the data in the channel
-  ## We assume the buffer was already used
-  ##
-  ## This is not threadsafe
-  assert not chan.buffer.isNil
-  chan.front.store(0, moRelaxed)
-  chan.back.store(0, moRelaxed)
+  chan.clear()
 
 func isEmpty(chan: Channel): bool {.inline.} =
   ## Check if channel is empty
