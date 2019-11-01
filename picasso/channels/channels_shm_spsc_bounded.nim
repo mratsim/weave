@@ -85,6 +85,7 @@ func initialize*[T](chan: var Channel[T], capacity: Positive) =
   assert cast[ByteAddress](chan.back.addr) -
     cast[ByteAddress](chan.front.addr) >= CacheLineSize
 
+  chan.capacity = capacity
   chan.buffer = cast[ptr UncheckedArray[T]](createU(T, capacity))
   chan.clear()
 
