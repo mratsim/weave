@@ -130,7 +130,7 @@ Choosing the victim to send a steal request to uses a random number generator.
 While each thread could have a thread-local RNG, it should not lead to all threads requesting from the same victim in a small window of time.
 
 2 solutions are possible:
-- Thread-local RNG seeded independently from each thread (via a Crypto-Secure PRNG for example)
+- Thread-local RNG seeded independently for each thread (via the thread ID or via a Crypto-Secure PRNG for example)
 - Multithreaded RNG: note that this might be a contention bottleneck due to multiple threads competing for a shared RNG state. However those threads are idle threads that try to steal work from a victim so it might only impact latency.
 
 ### Thread-local synchronization containers
