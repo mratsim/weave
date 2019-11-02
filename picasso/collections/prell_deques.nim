@@ -114,7 +114,7 @@ proc newPrellDeque*[T: StealableTask](typ: typedesc[T]): PrellDeque[T] {.noinit.
   result.pendingTasks = 0
   # result.numSteals = 0
 
-proc `=destroy`[T: StealableTask](dq: var PrellDeque[T]) =
+proc `=destroy`*[T: StealableTask](dq: var PrellDeque[T]) =
   mixin delete
 
   # Free all remaining tasks
@@ -142,7 +142,7 @@ func addListFirst[T](dq: var PrellDeque[T], head, tail: T, len: int32) =
   dq.head = head
   dq.pendingTasks += len
 
-func addListFirst*[T](dq: var PrellDeque[T], head, len: int32) =
+func addListFirst*[T](dq: var PrellDeque[T], head: T, len: int32) =
   assert not head.isNil
   assert len > 0
 
@@ -180,7 +180,7 @@ func popFirstIfChild*[T](dq: var PrellDeque[T], parentTask: T): T =
 # Work-stealing routines
 # ---------------------------------------------------------------
 
-func steal*[T](dq: PrellDeque[T]): T =
+func steal*[T](dq: var PrellDeque[T]): T =
   # Steal a task from the end of the deque
   if dq.isEmpty():
     return nil
@@ -208,7 +208,7 @@ func steal*[T](dq: PrellDeque[T]): T =
   # dq.numSteals += 1
 
 template multistealImpl[T](
-          dq: PrellDeque[T],
+          dq: var PrellDeque[T],
           stolenHead: var T,
           numStolen: var int32,
           maxStmt: untyped,
@@ -225,7 +225,7 @@ template multistealImpl[T](
   ##   - Steal half tasks, also update the "tail" param
 
   if dq.isEmpty():
-    return nil
+    return
 
   # Make sure to steal at least one task
   numStolen = dq.pendingTasks shr 1 # half tasks
@@ -237,7 +237,7 @@ template multistealImpl[T](
   tailAssignStmt   # <-- 2nd statement "tail = dummy.prev" injected here
 
   # Walk backwards from the dummy node
-  for i in 0 ..< n:
+  for i in 0 ..< numStolen:
     stolenHead = stolenHead.prev
 
   dq.tail.prev.next = nil       # Detach the true tail from the dummy
@@ -253,14 +253,15 @@ template multistealImpl[T](
   dq.pendingTasks -= numStolen
   # dq.numSteals += 1
 
-func stealMany*[T](dq: PrellDeque[T],
-                  maxSteals: range[1'i32 .. high(int32)],
+func stealMany*[T](dq: var PrellDeque[T],
+                  maxSteals: int32, # should be range[1'i32 .. high(int32)]
                   head, tail: var T,
                   numStolen: var int32) =
   ## Steal up to half of the deque's tasks, but at most maxSteals tasks
   ## head will point to the first task in the returned list
   ## tail will point to the last task in the returned list
   ## numStolen will contain the number of transferred tasks
+  assert maxSteals >= 1
 
   multistealImpl(dq, head, numStolen):
     if numStolen > maxSteals:
@@ -268,13 +269,14 @@ func stealMany*[T](dq: PrellDeque[T],
   do:
     tail = dq.tail.prev
 
-func stealMany*[T](dq: PrellDeque[T],
-                  maxSteals: range[1'i32 .. high(int32)],
+func stealMany*[T](dq: var PrellDeque[T],
+                  maxSteals: int32, # should be range[1'i32 .. high(int32)]
                   head: var T,
                   numStolen: var int32) =
   ## Steal up to half of the deque's tasks, but at most maxSteals tasks
   ## head will point to the first task in the returned list
   ## numStolen will contain the number of transferred tasks
+  assert maxSteals >= 1
 
   multistealImpl(dq, head, numStolen):
     if numStolen > maxSteals:
@@ -282,8 +284,7 @@ func stealMany*[T](dq: PrellDeque[T],
   do:
     discard
 
-func stealHalf*[T](dq: PrellDeque[T],
-                  maxSteals: range[1'i32 .. high(int32)],
+func stealHalf*[T](dq: var PrellDeque[T],
                   head, tail: var T,
                   numStolen: var int32) =
   ## Steal half of the deque's tasks (minimum one)
@@ -296,8 +297,7 @@ func stealHalf*[T](dq: PrellDeque[T],
   do:
     tail = dq.tail.prev
 
-func stealHalf*[T](dq: PrellDeque[T],
-                  maxSteals: range[1'i32 .. high(int32)],
+func stealHalf*[T](dq: var PrellDeque[T],
                   head: var T,
                   numStolen: var int32) =
   ## Steal half of the deque's tasks (minimum one)
@@ -383,3 +383,67 @@ when isMainModule:
         deq.popFirst().isNil
         deq.isEmpty()
         deq.pendingTasks == 0
+
+    test "Stealing tasks":
+      for i in 0 ..< N:
+        let task = cache.newTask()
+        check: not task.isNil
+        let data = cast[ptr Data](task.data.unsafeAddr)
+        data[] = Data(a: int32 i+24, b: int32 i+42)
+        deq.addFirst(task)
+
+      check:
+        cache.isEmpty()
+        not deq.isEmpty()
+        deq.pendingTasks == N
+
+      var i, numStolen = 0'i32
+      while i < N:
+        var head, tail: Task
+        deq.stealMany(maxSteals = M, head, tail, numStolen)
+        check:
+          not head.isNil
+          1 <= numStolen and numStolen <= M
+
+        # "Other thread"
+        var deq2 = newPrellDeque(Task)
+        var cache2: IntrusiveStack[Task]
+        deq2.addListFirst(head, tail, numStolen)
+        check:
+          not deq2.isEmpty
+          deq2.pendingTasks == numStolen
+
+        var task = deq2.popFirst()
+        let
+          data = cast[ptr Data](task.data.unsafeAddr)
+          a = data.a
+          b = data.b
+        cache2.add task
+
+        for j in 1 ..< numStolen:
+          task = deq2.popFirst()
+          let data = cast[ptr Data](task.data.unsafeAddr) # shadowing data
+          check:
+            data.a == a - j
+            data.b == b - j
+          cache2.add(task)
+
+        check:
+          deq2.popFirst().isNil
+          deq2.steal().isNil
+          deq2.isEmpty()
+          deq2.pendingTasks == 0
+
+        `=destroy`(deq2)
+        `=destroy`(cache2)
+
+        # while loop increment
+        i += numStolen
+
+      check:
+        deq.steal().isNil
+        deq.isEmpty()
+        deq.pendingTasks == 0
+
+      `=destroy`(deq)
+      `=destroy`(cache)

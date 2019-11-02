@@ -36,12 +36,14 @@ func pop*[T](stack: var IntrusiveStack[T]): T {.inline.} =
   stack.top = stack.top.next
   result.next = nil
 
-proc `=destroy`[T](stack: var IntrusiveStack[T]) =
+proc `=destroy`*[T](stack: var IntrusiveStack[T]) =
   while (let elem = stack.pop(); not elem.isNil):
     deallocShared(elem)
 
 # Sanity checks
 # ------------------------------------------------------------------------------
+# IntrusiveStacks are also tested in prell_deques.nim
+
 when isMainModule:
   type
     Node = ptr NodeObj
