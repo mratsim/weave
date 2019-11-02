@@ -22,7 +22,6 @@ type
     ##   - no modulo operations
     ##   - memory-efficient: buffer the size of the capacity
     ##   - Padded to avoid false sharing
-    ##   - No extra indirection to access the item
     ##   - Linearizable
     ##
     ## Usage:
@@ -127,7 +126,9 @@ func trySend*[T](chan: var Channel[T], src: sink T): bool =
     release(chan.backLock)
     return false
 
-  `=sink`(chan.buffer[back], src)
+  let writeIdx = if back < chan.capacity: back
+                 else: back - chan.capacity
+  `=sink`(chan.buffer[writeIdx], src)
 
   var nextWrite = back + 1
   if nextWrite == 2 * chan.capacity:
@@ -147,7 +148,9 @@ func tryRecv*[T](chan: var Channel[T], dst: var T): bool =
     # Empty
     return false
 
-  dst = move chan.buffer[front]
+  let readIdx = if front < Capacity: front
+                else: front - Capacity
+  dst = move chan.buffer[readIdx]
 
   var nextRead = front + 1
   if nextRead == 2 * chan.capacity:
@@ -160,6 +163,14 @@ func tryRecv*[T](chan: var Channel[T], dst: var T): bool =
 when isMainModule:
   import strutils
 
+  # Data structure test
+  # --------------------------------------------------------
+
+  # TODO: ensure that we don't write past the allocated buffer
+  #       due to mismanagement of the front and back indices
+
+  # Multithreading tests
+  # --------------------------------------------------------
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}
 
