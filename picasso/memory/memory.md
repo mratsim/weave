@@ -250,6 +250,9 @@ and pop-ing from those stacks doesn't translate to a linear memory pop
 See:
   - A Practical Solution to the Cactus Stack Problem
     http://chaoran.me/assets/pdf/ws-spaa16.pdf
+  - Using Memory Mapping to Support Cactus Stacks
+    in Work-Stealing Runtime Systems
+    https://pdos.csail.mit.edu/~sbw/papers/pact183a-lee.pdf
   - Fibril work-stealing scheduler
     https://github.com/chaoran/fibril
   - Staccato work-stealing scheduler
