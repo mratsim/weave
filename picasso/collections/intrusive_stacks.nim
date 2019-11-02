@@ -19,7 +19,7 @@ type
     ## It expects elements to be allocated via createShared (i.e. shared-memory, not thread-local)
 
     # TODO: This data-structure is used for caching tasks and reuse them without
-    #       stressing the Nim/system allocator too much.
+    #       stressing the Nim/system allocator.
     #       However for improved performance, an allocator
     #       that is designed for cactus stacks is probably needed.
     #       A cactus stack happens when a task (for example fibonacci)
@@ -30,13 +30,10 @@ type
     #         - Root 1 -> 12 -> 121
     #         - Root 1 -> 12 -> 122
     #       and pop-ing from those stacks doesn't translate to a linear memory pop.
-    #       See:
-    #         - A Practical Solution to the Cactus Stack Problem
-    #           http://chaoran.me/assets/pdf/ws-spaa16.pdf
-    #         - Fibril work-stealing scheduler
-    #           https://github.com/chaoran/fibril
-    #         - Staccato work-stealing scheduler
-    #           https://github.com/rkuchumov/staccato
+    #       See memory.md in memory folder
+    #
+    # Also note that this never releases allocated memory, which might be an issue for
+    # long running threads.
     top: T
 
 func isEmpty*(stack: IntrusiveStack): bool {.inline.} =

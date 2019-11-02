@@ -74,9 +74,7 @@ Usage:
   - Can be created within any thread
   - Unbounded (user dependent)
 
-Contrary to traditional shared memory work-stealing runtime, there is no hard
-requirement for tasks to be heap-allocated. Indeed, in shared memory runtime
-the workstealing deque needs to atomically transfer ownership of the task.
+There is no hard requirement for tasks to be heap-allocated.
 In our case we can transfer ownership via pointer or deepcopy + destroy.
 
 Here are the tradeoffs:
@@ -87,12 +85,18 @@ Here are the tradeoffs:
   - tasks can be destroyed in a thread that did not create them
     requiring threadsafe memory management
     memory fragmentation
+  - deque can deal with an unbounded number of tasks without
+    reallocating
+  - allocated tasks need to be returned to the OS for long-running threads
 - Thread-local tasks:
   - no memory management needed
     in particular tasks are destroyed in the thread that created them
   - lots of 192 bytes memcpy (3 cache lines):
     - to and from the task channels
     - to and from the task deque
+  - unbounded number of tasks might require reallocation in the deque.
+    Furthermore the deque might never be shrunk again which might be an issue
+    for long-running threads.
 
 #### Steal requests
 
@@ -112,6 +116,7 @@ Tradeoffs:
   - very low-overhead in the inter-thread channel
   - can use a lock-free MPSC channel
   - steal requests can be destroyed in a thread that did not create them
+  - there is a low bound to the number of steal requests in flight.
 - thread-local steal requests:
   - requires locks for the MPSC channel (unless a research paper was missed)
   - no memory management needed
