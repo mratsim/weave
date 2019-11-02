@@ -7,6 +7,11 @@ import
 # ----------------------------------------------------------------------------------
 
 # TODO: use runtime cpu frequency detection
+# This is hard, depends on OS and architecture and varies with processor turbo/freq scaling:
+#   - https://stackoverflow.com/questions/8351944/finding-out-the-cpu-clock-frequency-per-core-per-processor
+#   - Old paper: http://www.bitmover.com/lmbench/mhz-usenix.pdf
+#   - 7z/LZMA technique: https://github.com/jljusten/LZMA-SDK/blob/781863cdf592da3e97420f50de5dac056ad352a5/CPP/7zip/UI/Common/Bench.cpp#L1487-L1506
+#   - Loop with carried depency: https://stackoverflow.com/questions/11706563/how-can-i-programmatically-find-the-cpu-frequency-with-c/25400230#25400230
 const
   CpuFreqMhz {.intdefine.} = 4100
   CpuFreqGhz = CpuFreqMhz.float64 / 100
