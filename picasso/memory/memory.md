@@ -62,21 +62,88 @@ One of the difficulties is thread-safety, some structures might be allocated in 
 
 #### Tasks
 
-TODO
+Tasks package the work shared between threads.
+They are 192 bytes data structure with 96 bytes of metadata and 96 bytes for the
+user environment necessary to carry the task.
+
+They contain intrusive next and prev pointers for use with the work stealing deque. Those intrusive pointers can be re-used for a caching mechanism.
+
+Usage:
+  - Used between thread via a SPSC channel
+  - Used within a thread in a deque (load-balancing)
+  - Can be created within any thread
+  - Unbounded (user dependent)
+
+Contrary to traditional shared memory work-stealing runtime, there is no hard
+requirement for tasks to be heap-allocated. Indeed, in shared memory runtime
+the workstealing deque needs to atomically transfer ownership of the task.
+In our case we can transfer ownership via pointer or deepcopy + destroy.
+
+Here are the tradeoffs:
+- Ownership via pointer tasks:
+  - very low-overhead of push/pop/steal in the workstealing deque
+  - very low-overhead in the inter-thread channel
+  - cactus stack
+  - tasks can be destroyed in a thread that did not create them
+    requiring threadsafe memory management
+    memory fragmentation
+- Thread-local tasks:
+  - no memory management needed
+    in particular tasks are destroyed in the thread that created them
+  - lots of 192 bytes memcpy (3 cache lines):
+    - to and from the task channels
+    - to and from the task deque
 
 #### Steal requests
 
-TODO
+Steal requests are used for load balancing via work stealing, work sharing and termination detection.
+
+Unlike tasks the number of steal requests is bounded at MaxSteal (usually one) per thread.
+Unlike tasks there is no data structure that heavily uses steal requests, they are plain messages between threads.
+Unlike tasks they fit in a single cache-line.
+Like tasks they also offer a tradeoff between communicating by transfering
+the ownership of a pointer or deepcopy + destroy.
+
+Note that steal requests are communicated via a MPSC channel.
+Using pointers would allow using a lock-free MPSC channel implementation
+
+Tradeoffs:
+- ownership via pointer to steal requests:
+  - very low-overhead in the inter-thread channel
+  - can use a lock-free MPSC channel
+  - steal requests can be destroyed in a thread that did not create them
+- thread-local steal requests:
+  - requires locks for the MPSC channel (unless a research paper was missed)
+  - no memory management needed
+    in particular steal requests are destroyed in the thread that create them
+  - 32 bytes memcpy (1 cache line):
+    - to and from the steal requests channel
 
 #### RNG for victim selection
 
-TODO
+Choosing the victim to send a steal request to uses a random number generator.
+While each thread could have a thread-local RNG, it should not lead to all threads requesting from the same victim in a small window of time.
+
+2 solutions are possible:
+- Thread-local RNG seeded independently from each thread (via a Crypto-Secure PRNG for example)
+- Multithreaded RNG: note that this might be a contention bottleneck due to multiple threads competing for a shared RNG state. However those threads are idle threads that try to steal work from a victim so it might only impact latency.
 
 ### Thread-local synchronization containers
 
-#### Worker tree for termination detection
+Workers are organized in a informal binary tree: their parent and children
+depends on their thread ID.
 
-#### Queue for work-sharing requests
+The workers keeps track of:
+  - the state of its children:
+    - Working
+    - Idle and stealing work
+    - Idle and waiting for parent to share work
+  - the last steal request of each child if they fail
+    to steal work and wait for the parent to share some.
+
+Usage
+  - Completely allocated at thread creation start
+  - Completely deallocated at thread deletion
 
 ### Channels usage
 
@@ -94,8 +161,8 @@ Note: this assumes that channels are a ptr object, but we might want a ptr to an
 Each worker can have up to MaxSteal steal requests in-flight at any point in time. Steal requests have a pointer to the worker "mailbox".
 
 Usage:
-  - Completely allocated at runtime start
-  - Completely deallocated at runtime stop
+  - Completely allocated at thread creation start
+  - Completely deallocated at thread deletion
   - Owned by the master thread
   - Don't move between threads
   - Overhead proportional to number of threads
@@ -117,8 +184,8 @@ They serve as a mailbox for steal requests and are stored in a global array `arr
 Note: this assumes that channels are a ptr object, but we might want a ptr to an unchecked array of channels instead to save on binary size and ensure contiguity.
 
 Usage:
-  - Completely allocated at runtime start
-  - Completely deallocated at runtime stop
+  - Completely allocated at thread creation start
+  - Completely deallocated at thread deletion
   - Owned by the master thread
   - Don't move between threads
   - Overhead proportional to number of threads
