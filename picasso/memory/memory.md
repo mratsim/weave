@@ -202,16 +202,17 @@ Similarly the channel buffers can be allocated in one big contiguous chunk of me
 #### Channels for results (Flowvar / Futures)
 
 Single-Producer Single-Consumer channels with a capacity of 1.
-Those are public API and the fact that they cannot be copied, only moved should be enforced.
+Those are public API.
 
 Usage:
   - Created on-demand, potentially from multiple threads
   - Don't move between threads (but a pointer to them may)
   - Can be nested
-  - Lifetime equal to the scope of the flowvar creating routines but:
+  - Lifetime may exceed the scope of the flowvar creating routines:
     - The routine that creates the channel should return immediately
       without the need to wait for future completion
     - pointers to futures is sent in tasks if needed for computation
+    - a unique handle (move-only) may be passed to other proc or returned.
   - Overhead dependent on workload and allocation strategy:
     - very very high on naive recursive workloads like tree algorithm and fibonacci
       with short computations.
@@ -225,6 +226,11 @@ An ideal allocator strategy would be alloca as:
   - it uses the fact that the lifetime is equal to the creating scope
   - the OS already deals with cactus stacks by design
   - no heap allocation and memory management overhead
+
+See:
+  - Proactive Work-Stealing for Futures
+    Singer et al
+    https://www.cse.wustl.edu/~angelee/home_page/papers/ws-future.pdf
 
 ## The cactus stack
 
@@ -243,3 +249,6 @@ See:
     https://github.com/chaoran/fibril
   - Staccato work-stealing scheduler
     https://github.com/rkuchumov/staccato
+  - Proactive Work-Stealing for Futures
+    Singer et al
+    https://www.cse.wustl.edu/~angelee/home_page/papers/ws-future.pdf
