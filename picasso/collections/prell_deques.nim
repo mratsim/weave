@@ -317,7 +317,8 @@ when isMainModule:
 
   const
     N = 1000000 # Number of tasks to push/pop/steal
-    M = 100     # Max number of tasks to steal in one swoop
+    M = 100     # Max number of tasks to steal in one swoo
+    TaskDataSize = 192 - 96
 
   type
     Task = ptr Taskobj
@@ -325,6 +326,8 @@ when isMainModule:
       prev, next: Task
       parent: Task
       fn: proc (param: pointer) {.nimcall.}
+      # User data
+      data: array[TaskDataSize, byte]
 
     Data = object
       a, b: int32
@@ -337,12 +340,46 @@ when isMainModule:
     if not task.isNil:
       deallocShared(task)
 
+  proc newTask(stack: var IntrusiveStack[Task]): Task =
+    if stack.isEmpty():
+      allocate(result)
+    else:
+      result = stack.pop()
+
   suite "Testing PrellDeques":
     var deq: PrellDeque[Task]
+    var cache: IntrusiveStack[Task]
 
     test "Instantiation":
       deq = newPrellDeque(Task)
 
       check:
+        deq.isEmpty()
+        deq.pendingTasks == 0
+
+    test "Pushing tasks":
+      for i in 0'i32 ..< N:
+        let task = cache.newTask()
+        check: not task.isNil
+
+        let data = cast[ptr Data](task.data.unsafeAddr)
+        data[] = Data(a: i, b: i+1)
+        deq.addFirst(task)
+
+      check:
+        not deq.isEmpty()
+        deq.pendingTasks == N
+
+    test "Pop-ing tasks":
+      for i in countdown(N, 1):
+        let task = deq.popFirst()
+        let data = cast[ptr Data](task.data.unsafeAddr)
+        check:
+          data.a == i-1
+          data.b == i
+        cache.add task
+
+      check:
+        deq.popFirst().isNil
         deq.isEmpty()
         deq.pendingTasks == 0
