@@ -31,7 +31,7 @@ type
     # with "myArray" implicitly captured.
 
   PrellDeque*[T: StealableTask] = object
-    ## Private Work-Stealing Deque
+    ## Private Intrusive Work-Stealing Deque
     ## from PhD Thesis
     ##
     ## Embracing Explicit Communication in Work-Stealing Runtime Systems
@@ -313,7 +313,7 @@ func stealHalf*[T](dq: var PrellDeque[T],
 # ---------------------------------------------------------------
 
 when isMainModule:
-  import unittest, ./intrusive_stacks
+  import unittest, ../memory/intrusive_stacks
 
   const
     N = 1000000 # Number of tasks to push/pop/steal
