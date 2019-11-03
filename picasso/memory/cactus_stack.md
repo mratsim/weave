@@ -181,10 +181,14 @@ We can use Nim or the system allocator or develop a tailored object pool.
 - Any thread can request or return memory.
 - We want to return blocks of unused memory to the OS.
 
-The object pool should provide padding as an option to ensure threads access different cacheline.
+Ideally it also asks the compiler to align the object on 128-byte boundary
+but Nim still lack a per-field alignment pragma.
+
+As a workaround, the object pool should provide padding as an option to ensure threads access different cacheline.
 Some objects are already padded internally for use in collections hence the optionality.
-Cacheline are 64 bits on most arch, 128 bits on Samsung phone.
-However CPU will probably load 2 cachelines at once so we might need to padd by 2 cachelines anyway.
+
+Cachelines are 64 bits on most current archs (x86-64 and ARM), 128 bits on Samsung phones, Itanium, some MIPS.
+However CPU will probably load 2 cachelines at once so we might need to pad by 2 cachelines anyway (see reference at the end)
 
 ### Inspiration from threaded allocators
 
@@ -193,9 +197,12 @@ However CPU will probably load 2 cachelines at once so we might need to padd by 
 Since we want just a multithreaded object pool and not a full-blown allocator
 a simple design would suffice.
 
-The recent Mimalloc exhibits excellent performance, excellent memory usage.
-Furthermore instead of using a free list per object size, their free list is sharded
-by page. Since we only have one object size in our allocator, sharding by page is more relevant
+The recent Mimalloc exhibits excellent performance and excellent memory usage.
+The code size is also quite simple compared to other allocators.
+
+Furthermore we can reuse their technique of sharding the free memory list
+by page while most other allocators have a free list per object size
+and optimize for the mixed object size case.
 
 - Paper: https://www.microsoft.com/en-us/research/uploads/prod/2019/06/mimalloc-tr-v1.pdf
 - Repo: https://github.com/microsoft/mimalloc

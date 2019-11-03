@@ -239,3 +239,55 @@ See:
   - Proactive Work-Stealing for Futures
     Singer et al
     https://www.cse.wustl.edu/~angelee/home_page/papers/ws-future.pdf
+
+## False sharing
+
+keywords: cache ping-pong, false sharing, cache threashing, cache lines
+
+Overview:
+- https://mechanical-sympathy.blogspot.com/2011/07/false-sharing.html
+- http://psy-lob-saw.blogspot.com/2014/06/notes-on-false-sharing.html
+
+Tools:
+- perf: Redhat added the `c2c` option (cache-to-cache)
+  `perf c2c` will provide:
+  - cacheline contention
+  - incriminited source code line
+  Links:
+  - http://people.redhat.com/jmario/scratch/NYC_RHUG_Oct2016_c2c.pdf
+  - https://joemario.github.io/blog/2016/09/01/c2c-blog/
+  - https://github.com/joemario/perf-c2c-usage-files
+  Additionally the "hitm" series of counter also provided related info
+  for example false sharing miss from L3: mem_load_uops_l3_miss_retired.remote_hitm
+- Intel VTune
+  - https://software.intel.com/en-us/articles/avoiding-and-identifying-false-sharing-among-threads
+  - PDF: https://software.intel.com/sites/default/files/m/d/4/1/d/8/3-4-MemMgt_-_Avoiding_and_Identifying_False_Sharing_Among_Threads.pdf
+  - Counter: OTHER_CORE_L2_HITM
+
+Hardware
+- On 2009 arch, some core i7 and Xeon were fetching 2 cache lines at a time
+  https://groups.google.com/forum/#!topic/mechanical-sympathy/KapWex55J1o
+- Facebook Folly uses 128 bytes as they detected cache thrashing with only 64-bit on
+  Sandy bridge hardware
+  https://stackoverflow.com/questions/29199779/false-sharing-and-128-byte-alignment-padding
+
+False sharing due to multithreaded GC
+- https://blogs.oracle.com/dave/false-sharing-induced-by-card-table-marking
+
+False sharing papers:
+- Analysis of False Cache Line Sharing Effects on Multicore CPUs
+  Suntorn Sae-eung
+  http://scholarworks.sjsu.edu/cgi/viewcontent.cgi?article=1001&context=etd_projects
+- Cheetah: Detecting False Sharing Efficiently and Effectively
+  Tongping Liu et al
+  https://scholarworks.wm.edu/cgi/viewcontent.cgi?article=1822&context=aspubs
+- Predator: Predictive False Sharing Detection
+  Tongping Liu et al
+  https://people.cs.umass.edu/~emery/pubs/Predator-ppopp14.pdf
+- Sheriff: Detecting and Eliminating False Sharing
+  Tongping Liu et al
+- Whose Cache Line Is It Anyway?
+  Operating System Support for Live
+  Detection and Repair of False Sharing
+  Mihir Nanavati et al
+  https://www.cs.ubc.ca/~mihirn/papers/plastic-eurosys.pdf
