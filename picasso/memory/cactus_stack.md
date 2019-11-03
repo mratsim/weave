@@ -181,6 +181,11 @@ We can use Nim or the system allocator or develop a tailored object pool.
 - Any thread can request or return memory.
 - We want to return blocks of unused memory to the OS.
 
+The object pool should provide padding as an option to ensure threads access different cacheline.
+Some objects are already padded internally for use in collections hence the optionality.
+Cacheline are 64 bits on most arch, 128 bits on Samsung phone.
+However CPU will probably load 2 cachelines at once so we might need to padd by 2 cachelines anyway.
+
 ### Inspiration from threaded allocators
 
 #### Mimalloc
