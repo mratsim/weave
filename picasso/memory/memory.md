@@ -66,7 +66,8 @@ Tasks package the work shared between threads.
 They are 192 bytes data structure with 96 bytes of metadata and 96 bytes for the
 user environment necessary to carry the task.
 
-They contain intrusive next and prev pointers for use with the work stealing deque. Those intrusive pointers can be re-used for a caching mechanism.
+They contain intrusive next and prev pointers for use with the work stealing deque.
+Those intrusive pointers can be re-used for a caching mechanism.
 
 Usage:
   - Used between thread via a SPSC channel
@@ -88,7 +89,7 @@ Here are the tradeoffs:
   - deque can deal with an unbounded number of tasks without
     reallocating
   - allocated tasks need to be returned to the OS for long-running threads
-- Thread-local tasks:
+- Tasks as value objects:
   - no memory management needed
     in particular tasks are destroyed in the thread that created them
   - lots of 192 bytes memcpy (3 cache lines):
@@ -97,6 +98,8 @@ Here are the tradeoffs:
   - unbounded number of tasks might require reallocation in the deque.
     Furthermore the deque might never be shrunk again which might be an issue
     for long-running threads.
+  - stack overflow (?)
+
 
 #### Steal requests
 
@@ -233,30 +236,6 @@ An ideal allocator strategy would be alloca as:
   - no heap allocation and memory management overhead
 
 See:
-  - Proactive Work-Stealing for Futures
-    Singer et al
-    https://www.cse.wustl.edu/~angelee/home_page/papers/ws-future.pdf
-
-## The cactus stack
-
-A cactus stack happens when a task (for example fibonacci)
-spawns N stacks, which then spawns M tasks.
-Then the stacks of grandchildren are:
-  - Root 1 -> 11 -> 111
-  - Root 1 -> 11 -> 112
-  - Root 1 -> 12 -> 121
-  - Root 1 -> 12 -> 122
-and pop-ing from those stacks doesn't translate to a linear memory pop
-See:
-  - A Practical Solution to the Cactus Stack Problem
-    http://chaoran.me/assets/pdf/ws-spaa16.pdf
-  - Using Memory Mapping to Support Cactus Stacks
-    in Work-Stealing Runtime Systems
-    https://pdos.csail.mit.edu/~sbw/papers/pact183a-lee.pdf
-  - Fibril work-stealing scheduler
-    https://github.com/chaoran/fibril
-  - Staccato work-stealing scheduler
-    https://github.com/rkuchumov/staccato
   - Proactive Work-Stealing for Futures
     Singer et al
     https://www.cse.wustl.edu/~angelee/home_page/papers/ws-future.pdf
