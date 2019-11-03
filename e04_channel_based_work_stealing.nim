@@ -41,3 +41,5 @@ proc main() =
 main()
 
 # Compile with
+# `nim c --out:build/fib -d:danger --threads:on e04_channel_based_work_stealing.nim`
+# run `./build/fib 40`
