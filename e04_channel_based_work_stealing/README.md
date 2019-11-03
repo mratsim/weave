@@ -3,7 +3,8 @@
 This is a port of the revised C implementation
 from Andreas Prell for the paper:
 
-- Embracing Explicit Communication inWork-Stealing Runtime Systems
+- Embracing Explicit Communication in
+  Work-Stealing Runtime Systems
 
   Andreas Prell, PhD Thesis, 2016
 

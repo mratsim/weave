@@ -213,81 +213,50 @@ Single-Producer Single-Consumer channels with a capacity of 1.
 Those are public API.
 
 Usage:
-  - Created on-demand, potentially from multiple threads
-  - Don't move between threads (but a pointer to them may)
-  - Can be nested
-  - Lifetime may exceed the scope of the flowvar creating routines:
-    - The routine that creates the channel should return immediately
-      without the need to wait for future completion
-    - pointers to futures is sent in tasks if needed for computation
-    - a unique handle (move-only) may be passed to other proc or returned.
-  - Overhead dependent on workload and allocation strategy:
-    - very very high on naive recursive workloads like tree algorithm and fibonacci
-      with short computations.
+
+- Created on-demand, potentially from multiple threads
+- Don't move between threads (but a pointer to them may)
+- Can be nested
+- Overhead dependent on workload and allocation strategy:
+  - very very high on naive recursive workloads like tree algorithm and fibonacci
+    with short computations.
+- The routine that creates the channel should return immediately
+  without the need to wait for future completion
+- pointers to futures is sent in tasks if needed for computation
 
 Futures allocation is critical for efficient multithreading of recursive algorithms based on divide-and-conquer or tree search.
 If the main computation is short, the memory allocator overhead and potential will be significant if no mechanism is in-place to avoid requesting the OS allocators too much.
 
-This is also impacted by the cactus stack issue (see last chapter).
-
-An ideal allocator strategy would be alloca as:
+Assuming futures are used in the scope that spawned the task or one of its child, an ideal allocator strategy would be alloca as:
   - it uses the fact that the lifetime is equal to the creating scope
   - the OS already deals with cactus stacks by design
   - no heap allocation and memory management overhead
 
+This is the assumption made in the original Prell thesis (p95 Futures for Nested Parallelism) based on Herlihy study on futures cache misses.
+
+An extra property that violates that assumption would be:
+
+- Lifetime may exceed the scope of the flowvar creating routines:
+  - a unique handle (move-only) may be passed to other proc or returned.
+
+More analysis is presented in [](multithreaded_memory_management.md)
+
 See:
-  - Proactive Work-Stealing for Futures
-    Singer et al
-    https://www.cse.wustl.edu/~angelee/home_page/papers/ws-future.pdf
+- Embracing Explicit Communication in
+  Work-Stealing Runtime Systems
 
-## False sharing
+  Andreas Prell, PhD Thesis, 2016
 
-keywords: cache ping-pong, false sharing, cache threashing, cache lines
+  https://epub.uni-bayreuth.de/2990/1/main_final.pdf
 
-Overview:
-- https://mechanical-sympathy.blogspot.com/2011/07/false-sharing.html
-- http://psy-lob-saw.blogspot.com/2014/06/notes-on-false-sharing.html
+- Well structured futures and cache locality
 
-Tools:
-- perf: Redhat added the `c2c` option (cache-to-cache)
-  `perf c2c` will provide:
-  - cacheline contention
-  - incriminited source code line
-  Links:
-  - http://people.redhat.com/jmario/scratch/NYC_RHUG_Oct2016_c2c.pdf
-  - https://joemario.github.io/blog/2016/09/01/c2c-blog/
-  - https://github.com/joemario/perf-c2c-usage-files
-  Additionally the "hitm" series of counter also provided related info
-  for example false sharing miss from L3: mem_load_uops_l3_miss_retired.remote_hitm
-- Intel VTune
-  - https://software.intel.com/en-us/articles/avoiding-and-identifying-false-sharing-among-threads
-  - PDF: https://software.intel.com/sites/default/files/m/d/4/1/d/8/3-4-MemMgt_-_Avoiding_and_Identifying_False_Sharing_Among_Threads.pdf
-  - Counter: OTHER_CORE_L2_HITM
+  Maurice Herlihy, Zhiyu Liu
 
-Hardware
-- On 2009 arch, some core i7 and Xeon were fetching 2 cache lines at a time
-  https://groups.google.com/forum/#!topic/mechanical-sympathy/KapWex55J1o
-- Facebook Folly uses 128 bytes as they detected cache thrashing with only 64-bit on
-  Sandy bridge hardware
-  https://stackoverflow.com/questions/29199779/false-sharing-and-128-byte-alignment-padding
+  https://arxiv.org/abs/1309.5301
 
-False sharing due to multithreaded GC
-- https://blogs.oracle.com/dave/false-sharing-induced-by-card-table-marking
+- Proactive Work-Stealing for Futures
 
-False sharing papers:
-- Analysis of False Cache Line Sharing Effects on Multicore CPUs
-  Suntorn Sae-eung
-  http://scholarworks.sjsu.edu/cgi/viewcontent.cgi?article=1001&context=etd_projects
-- Cheetah: Detecting False Sharing Efficiently and Effectively
-  Tongping Liu et al
-  https://scholarworks.wm.edu/cgi/viewcontent.cgi?article=1822&context=aspubs
-- Predator: Predictive False Sharing Detection
-  Tongping Liu et al
-  https://people.cs.umass.edu/~emery/pubs/Predator-ppopp14.pdf
-- Sheriff: Detecting and Eliminating False Sharing
-  Tongping Liu et al
-- Whose Cache Line Is It Anyway?
-  Operating System Support for Live
-  Detection and Repair of False Sharing
-  Mihir Nanavati et al
-  https://www.cs.ubc.ca/~mihirn/papers/plastic-eurosys.pdf
+  Singer et al
+
+  https://www.cse.wustl.edu/~angelee/home_page/papers/ws-future.pdf

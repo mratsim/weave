@@ -1,4 +1,6 @@
-# The cactus stack
+# Multithreaded memory management
+
+## The cactus stack
 
 A cactus stack happens when a task (for example fibonacci)
 spawns N stacks, which then spawns M tasks.
@@ -11,35 +13,63 @@ and pop-ing from those stacks doesn't translate to a linear memory pop
 
 This is also called a [parent-pointer-tree](https://en.wikipedia.org/wiki/Parent_pointer_tree)
 
+![](images/cactus_stack.png)
+
+_Credits: Angelina Lee_
 
 ## Litterature
 
 - A Practical Solution to the Cactus Stack Problem
+
   Chaoran Yang, John Mellor-Crummey
+
   http://chaoran.me/assets/pdf/ws-spaa16.pdf
 - Using Memory Mapping to Support Cactus Stacks
   in Work-Stealing Runtime Systems
+
   I-Ting Angelina Lee, Silas Boyd-Wickizer, Zhiyi Huang, Charles E. Leiserson
+
   https://pdos.csail.mit.edu/~sbw/papers/pact183a-lee.pdf
 - Proactive Work-Stealing for Futures
+
   Kyle Singer, Yifan Xu, I-Ting Angelina Lee
+
   https://www.cse.wustl.edu/~angelee/home_page/papers/ws-future.pdf
 
 ## Talk
 
 - Memory abstractions for parallel programming
+
   I-Ting Angelina Lee
+
+  https://www.microsoft.com/en-us/research/video/memory-abstractions-for-parallel-programming/
+
   https://www.youtube.com/watch?v=WQzftnojaDc
 
 ## C-compatible Implementation
 
 - Fibril work-stealing scheduler
+
   Chaoran Yang
+
   https://github.com/chaoran/fibril
 
 ## The main issues
 
-Assuming an unbounded number of objects like tasks:
+3 criteria to measure a solution to the cactus stack problem (Angelina Lee)
+- Serial Parallel Reciprocity
+  - No need to recompile legacy code to call it from a parallel program
+- Space bound
+  - No unbounded space growth due to parallelism
+- Fast
+  - Should allow scalabilty on problems that expose enough parallelism
+    compared to the number of hardware threads.
+
+![](images/cactus_stack_criteria.png)
+
+_Credits: Angelina Lee_
+
+Assuming an unbounded number of tasks:
 - They are created in one thread and moved to another
 - They might be allocated rapidly
 - On each thread, we have last-in first-out
@@ -50,6 +80,60 @@ Assuming an unbounded number of objects like tasks:
 Hardware constraints:
 - We want a portable solution compatible with C calling convention. Cilk solution for example is not suitable.
 - We want a cross hardware solution. Fibril solution requires assembly to save registers and so is last resort.
+
+![](images/cactus_stack_approaches.png)
+
+![](images/cactus_stack_approaches_problems.png)
+
+_Credits: Angelina Lee_
+
+### Cactus stack in Picasso
+
+No specific technique is used in Picasso: no leapfrogging or depth-restricted parallelism.
+Worker stacks are allocated on thread creation with Nim stack size default.
+
+## Multithreaded memory management techniques
+
+See [](memory_access_patterns) on the tradeoff descriptions of each type
+
+#### Tasks
+
+Tasks are the main challenge to tackle regarding memory management.
+The number of tasks created is unbounded and depends on the task "forking factor"
+and number of processors.
+The naive fibonacci computation will for example create 2^n tasks.
+
+Tasks are created in a cactus-stack like manner and if work is unbalanced
+tasks object will not be released by the thread that created them.
+
+#### Steal requests
+
+While steal requests also present inter-thread memory management challenges,
+they cannot spawn an unknown amount of steal requests
+and are completely bounded by `MaxSteal * num_threads`
+
+#### Futures / Flowvars
+
+Futures (Flowvars) are the unidirectional channels open for the task executor
+to send the result back to the task spawner.
+
+User routines can create an unbounded amount of nested futures.
+
+More investigation is needed on their memory usage pattern.
+Herlihy recommends disciplined use of futures to provide a bounded
+number of cache misses.
+The original thesis of Prell operates under the assumption that
+futures will be used in the same scope or in a child scope.
+
+In that case we could use stack allocation via alloca like the proof-of-concept `LazyFuture` type.
+
+However it might be desirable to allow users t return a future and such futures would:
+  - have to be heap allocated
+  - exhibit cache miss issues mentionned in Herlihy paper.
+
+So `LazyFuture` with alloca show the optimal performance.
+However to improve on composability, we design a memory management
+schemes that is heap allocated and has good cache locality.
 
 ## Using value objects instead
 
@@ -208,8 +292,74 @@ and optimize for the mixed object size case.
 - Repo: https://github.com/microsoft/mimalloc
 - Benchmarks: https://github.com/daanx/mimalloc-bench
 
+#### Snmalloc
+
+Snmalloc is another research allocator by Microsoft.
+Interestingly like Picasso it also uses message passing when memory is freed a thread that did not create it.
+
+- Paper: https://github.com/microsoft/snmalloc/blob/master/snmalloc.pdf
+- Repo: https://github.com/Microsoft/snmalloc
+
+#### TCMalloc
+
+- Reducing Active False-Sharing in TCMalloc
+  T.D. Crundal
+  http://courses.cecs.anu.edu.au/courses/CSPROJECTS/16S1/Reports/Timothy_Crundal_Report.pdf
+
 #### QT Multithreaded Pool Allocator
 
 This article goes over the skeleton of a threadsafe growable pool allocator (but does not return memory):
 
 https://www.qt.io/blog/a-fast-and-thread-safe-pool-allocator-for-qt-part-1
+
+## False sharing
+
+keywords: cache ping-pong, false sharing, cache threashing, cache lines
+
+Overview:
+- https://mechanical-sympathy.blogspot.com/2011/07/false-sharing.html
+- http://psy-lob-saw.blogspot.com/2014/06/notes-on-false-sharing.html
+
+Tools:
+- perf: Redhat added the `c2c` option (cache-to-cache)
+  `perf c2c` will provide:
+  - cacheline contention
+  - incriminited source code line
+  Links:
+  - http://people.redhat.com/jmario/scratch/NYC_RHUG_Oct2016_c2c.pdf
+  - https://joemario.github.io/blog/2016/09/01/c2c-blog/
+  - https://github.com/joemario/perf-c2c-usage-files
+  Additionally the "hitm" series of counter also provided related info
+  for example false sharing miss from L3: mem_load_uops_l3_miss_retired.remote_hitm
+- Intel VTune
+  - https://software.intel.com/en-us/articles/avoiding-and-identifying-false-sharing-among-threads
+  - PDF: https://software.intel.com/sites/default/files/m/d/4/1/d/8/3-4-MemMgt_-_Avoiding_and_Identifying_False_Sharing_Among_Threads.pdf
+  - Counter: OTHER_CORE_L2_HITM
+
+Hardware
+- On 2009 arch, some core i7 and Xeon were fetching 2 cache lines at a time
+  https://groups.google.com/forum/#!topic/mechanical-sympathy/KapWex55J1o
+- Facebook Folly uses 128 bytes as they detected cache thrashing with only 64-bit on
+  Sandy bridge hardware
+  https://stackoverflow.com/questions/29199779/false-sharing-and-128-byte-alignment-padding
+
+False sharing due to multithreaded GC
+- https://blogs.oracle.com/dave/false-sharing-induced-by-card-table-marking
+
+False sharing papers:
+- Analysis of False Cache Line Sharing Effects on Multicore CPUs
+  Suntorn Sae-eung
+  http://scholarworks.sjsu.edu/cgi/viewcontent.cgi?article=1001&context=etd_projects
+- Cheetah: Detecting False Sharing Efficiently and Effectively
+  Tongping Liu et al
+  https://scholarworks.wm.edu/cgi/viewcontent.cgi?article=1822&context=aspubs
+- Predator: Predictive False Sharing Detection
+  Tongping Liu et al
+  https://people.cs.umass.edu/~emery/pubs/Predator-ppopp14.pdf
+- Sheriff: Detecting and Eliminating False Sharing
+  Tongping Liu et al
+- Whose Cache Line Is It Anyway?
+  Operating System Support for Live
+  Detection and Repair of False Sharing
+  Mihir Nanavati et al
+  https://www.cs.ubc.ca/~mihirn/papers/plastic-eurosys.pdf
