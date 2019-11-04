@@ -239,24 +239,4 @@ An extra property that violates that assumption would be:
 - Lifetime may exceed the scope of the flowvar creating routines:
   - a unique handle (move-only) may be passed to other proc or returned.
 
-More analysis is presented in [](multithreaded_memory_management.md)
-
-See:
-- Embracing Explicit Communication in
-  Work-Stealing Runtime Systems
-
-  Andreas Prell, PhD Thesis, 2016
-
-  https://epub.uni-bayreuth.de/2990/1/main_final.pdf
-
-- Well structured futures and cache locality
-
-  Maurice Herlihy, Zhiyu Liu
-
-  https://arxiv.org/abs/1309.5301
-
-- Proactive Work-Stealing for Futures
-
-  Singer et al
-
-  https://www.cse.wustl.edu/~angelee/home_page/papers/ws-future.pdf
+More analysis and referenced papers in [](multithreaded_memory_management.md)

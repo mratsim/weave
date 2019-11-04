@@ -135,6 +135,26 @@ So `LazyFuture` with alloca show the optimal performance.
 However to improve on composability, we design a memory management
 schemes that is heap allocated and has good cache locality.
 
+Papers
+- Embracing Explicit Communication in
+  Work-Stealing Runtime Systems
+
+  Andreas Prell, PhD Thesis, 2016
+
+  https://epub.uni-bayreuth.de/2990/1/main_final.pdf
+
+- Well structured futures and cache locality
+
+  Maurice Herlihy, Zhiyu Liu
+
+  https://arxiv.org/abs/1309.5301
+
+- Proactive Work-Stealing for Futures
+
+  Singer et al
+
+  https://www.cse.wustl.edu/~angelee/home_page/papers/ws-future.pdf
+
 ## Using value objects instead
 
 We can completely avoid the cactus stack issue by not heap-allocate.
