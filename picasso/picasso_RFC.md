@@ -8,7 +8,7 @@ Originally posted at: https://github.com/nim-lang/RFCs/issues/160
 
 The Nim destructors and new runtime were introduced
 to provide a GC-less path forward for Nim libraries and applications
-where it made sense. One of their explicit use case is making threading easier.
+where it made sense. One of their explicit use cases is making threading easier.
 
 ## RFC goals
 

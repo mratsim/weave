@@ -50,7 +50,7 @@ int main()
 
 First compile with Clang and run it
 ```
-clang -O3 -fopenmp path/to/omp_fib.c
+clang -O3 -fopenmp benchmarks/fibonacci/omp_fib.c
 time a.out
 ```
 It should be fairly quick
@@ -58,7 +58,7 @@ It should be fairly quick
 
 Then compile with GCC and run it
 ```
-gcc -O3 -fopenmp path/to/omp_fib.c
+gcc -O3 -fopenmp benchmarks/fibonacci/omp_fib.c
 time a.out
 ```
 
@@ -68,11 +68,11 @@ Don't forget to kill the benchmark, you'll be there all day.
 What's happening?
 
 GCC's OpenMP implementation uses a single queue for all tasks.
-That queue gets constantly hammered by all threads and become a contention point.
+That queue gets constantly hammered by all threads and becomes a contention point.
 Furthermore, it seems like there is no load balancing or that due to the contention/lock
 threads are descheduled.
 
-However Clang implementation uses a work-stealing scheduler with private deques.
+However Clang implementation uses a work-stealing scheduler with one deque per thread.
 The only contention happens when a thread run out of work and has to look for more work,
-in the private deque of other threads. And which thread to check is chosen at random so
-the potential contention is distributed among all thread instead of a single structure.
+in the deque of other threads. And which thread to check is chosen at random so
+the potential contention is distributed among all threads instead of a single structure.
