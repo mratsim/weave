@@ -5,15 +5,36 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import ./helpers
+import
+  ./helpers, ./victims_bitsets,
+  ../static_config,
+  ../channels/channels_spsc_single
 
-# Task
+# Inter-thread synchronization types
 # ----------------------------------------------------------------------------------
 
 const
   TaskDataSize* = 192 - 96
 
 type
+  # Worker
+  # ----------------------------------------------------------------------------------
+  WorkerID* = int32
+  WorkerState = enum
+    ## Steal requests carry one of the following states:
+    ## - Working means the requesting worker is (likely) still busy
+    ##   but anticipating running out of tasks
+    ## - Stealing means the requesting worker has run out of tasks
+    ##   and is trying to steal some
+    ## - Waiting means the requesting worker backs off and waits for tasks
+    ##   from its parent worker
+    Working
+    Stealing
+    Waiting
+
+  # Task
+  # ----------------------------------------------------------------------------------
+
   Task = ptr object
     ## Task
     ## Represents a deferred computation that can be passed around threads.
@@ -38,6 +59,21 @@ type
     # User data - including the FlowVar channel to send back result.
     data*: array[TaskDataSize, byte]
     # Ideally we can replace fn + data by a Nim closure.
+
+
+  # Steal requests
+  # ----------------------------------------------------------------------------------
+
+  # Padding shouldn't be needed as steal requests are used as value types
+  # and deep-copied between threads
+  StealRequest* = object
+    taskChannel*: ptr ChannelSpscSingle[Task] # Channel for sending tasks back to the requester
+    thiefID*: WorkerID
+    retry*: int32                             # 0 <= retry <= num_workers
+    victims: VictimsBitset                    # bitfield of potential victims
+    when StealStrategy.StealKind == adaptative:
+      stealHalf: bool                         # Thief wants half the tasks
+
 
 static: assert sizeof(deref(Task)) == 192,
           "Task is of size " & $sizeof(deref(Task)) &

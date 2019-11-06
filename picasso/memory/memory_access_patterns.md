@@ -75,17 +75,21 @@ Usage:
   - Can be created within any thread
   - Unbounded (user dependent)
 
-There is no hard requirement for tasks to be heap-allocated.
-In our case we can transfer ownership via pointer or deepcopy + destroy.
+There is no hard requirement for tasks to be heap-allocated,
+heap allocation causes challenge in memory management
+while stack allocation causes challenges in data-structure design
+especially the steal-half scenario with a concurrently accessed channel
+and an unbounded number of tasks.
 
 Here are the tradeoffs:
 - Ownership via pointer tasks:
   - very low-overhead of push/pop/steal in the workstealing deque
+    especially for steal-half scenarios
   - very low-overhead in the inter-thread channel
   - cactus stack
   - tasks can be destroyed in a thread that did not create them
     requiring threadsafe memory management
-    memory fragmentation
+  - memory fragmentation
   - deque can deal with an unbounded number of tasks without
     reallocating
   - allocated tasks need to be returned to the OS for long-running threads
@@ -98,6 +102,7 @@ Here are the tradeoffs:
   - unbounded number of tasks might require reallocation in the deque.
     Furthermore the deque might never be shrunk again which might be an issue
     for long-running threads.
+  - a steal-half requests might require resizing the channel
   - stack overflow (?)
 
 

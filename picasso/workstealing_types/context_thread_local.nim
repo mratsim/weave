@@ -6,15 +6,13 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./bounded_queues, ./steal_requests, ./tasks,
+  ./bounded_queues, ./sync_types,
   ../memory/object_pools
 
 # Thread-local context
 # ----------------------------------------------------------------------------------
 
 type
-  WorkerID* = int32
-
   Worker = object
     ## Distributed binary tree
     ##
@@ -38,8 +36,11 @@ type
     # Right child       ix*2 + 2     ix*2 + 1
     # Parent            (ix-1)/2     ix/2
     ID*: WorkerID
+    leftChild*: WorkerID
+    rightChild*: WorkerID
     isLeftChildIdle*: bool
     isRightChildIdle*: bool
+    parent* WorkerID
     workSharingRequests*: BoundedQueue[2, StealRequest]
     deque*: PrellDeque[Task]
     currentTask*: Task
@@ -47,10 +48,10 @@ type
   Thefts = object
     ## Thief state
     # Outstanding steal requests [0, MaxSteal]
-    requested: int32
+    requested: int
     # Before a worker can become quiescent it has to drop MaxSteal - 1
     # steal request and send the remaining one to its parent
-    dropped: int32
+    dropped: int
     victims: seq[WorkerID]
     when defined(StealLastVictim):
       lastVictim: WorkerID
@@ -58,24 +59,55 @@ type
       lastThief: WorkerID
 
   TLContext* = object
-    rng: uint32 # TODO: use Nim random
-    worker: Worker
-    thefts: Thefts
-    taskCache: IntrusiveStack[Task]
-    taskChannelPool: ObjectPool[PicassoMaxSteal, ChannelSpscSingle[Task]]
+    ## Thread-Local context
+    rng*: uint32 # TODO: use Nim random
+    worker*: Worker
+    thefts*: Thefts
+    taskCache*: IntrusiveStack[Task]
+    taskChannelPool*: ObjectPool[PicassoMaxSteal, ChannelSpscSingle[Task]]
+    counters*: Counters
 
   Counters* = object
-    tasksExec: int
-    tasksExecRecently: int
-    tasksSent: int
-    tastsSplit: int
-    stealRequestsSent: int
-    stealRequestsHandled: int
-    stealRequestsDeclined: int
+    tasksExec*: int
+    tasksExecRecently*: int
+    tasksSent*: int
+    tastsSplit*: int
+    stealRequestsSent*: int
+    stealRequestsHandled*: int
+    stealRequestsDeclined*: int
     when defined(PicassoStealBackoff):
-      stealRequestsResent: int
+      stealRequestsResent*: int
     when StealStrategy == StealKind.adaptative:
-      stealRequestsOne: int
-      stealRequestsHalf: int
+      stealRequestsOne*: int
+      stealRequestsHalf*: int
     when defined(PicassoLazyFutures):
-      futuresConverted: int
+      futuresConverted*: int
+
+func leftChild(ID, maxID: WorkerID): WorkerID {.inline.} =
+  assert ID >= 0 and maxID >= 0
+  assert w.ID <= maxID
+
+  result = 2*w.ID + 1
+  if result > maxID:
+    result = -1
+
+func rightChild(ID, maxID: WorkerID): WorkerID {.inline.} =
+  assert ID >= 0 and maxID >= 0
+  assert ID <= maxID
+
+  result = *ID + 2
+  if result > maxID:
+    result = -1
+
+func parent(ID: Worker): int32 {.inline.} =
+  (w.ID - 1) shr 1
+
+func initialize*(w: var Worker, ID, maxID: WorkerID) =
+  tree.leftChild = leftChild(ID, maxID)
+  tree.rightChild = rightChild(ID, maxID)
+  tree.parent = parent(ID)
+
+  if tree.leftChild == -1:
+    tree.isLeftChildIdle = true
+  if tree.rightChild == -1
+    tree.isRightChildIdle = true

@@ -31,5 +31,5 @@ type
     #   would work but then it requires a pointer indirection
     #   per channel
     #   and a known max number of workers
-    stealRequestsChannel: ptr UncheckedArray[ChannelMpscBounded[StealRequest]]
-    tasksChannel: ptr UncheckedArray[ChannelSpscSingle[Task]]
+    stealRequestsChannel*: ptr UncheckedArray[ChannelMpscBounded[StealRequest]]
+    tasksChannel*: ptr UncheckedArray[ChannelSpscSingle[Task]]
