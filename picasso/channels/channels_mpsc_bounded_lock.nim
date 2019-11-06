@@ -5,15 +5,12 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import locks, atomics, typetraits
-
-const CacheLineSize {.intdefine.} = 64
-  ## True on most machines
-  ## Notably false on Samsung phones
-  ## We might need to use 2x CacheLine to avoid prefetching cache conflict
+import
+  locks, atomics, typetraits,
+  ../static_config
 
 type
-  ChannelShmMpscBoundedLock*[T] = object
+  ChannelMpscBounded*[T] = object
     ## Lock-based multi-producer single-consumer channel
     ##
     ## Properties:
@@ -36,13 +33,13 @@ type
     backLock: Lock # Padding? - pthread_lock is 40 bytes on Linux, unknown on windows.
     capacity: int
     buffer: ptr UncheckedArray[T]
-    pad1: array[CacheLineSize - sizeof(int), byte]
+    pad1: array[PicassoCacheLineSize - sizeof(int), byte]
     front: Atomic[int]
-    pad2: array[CacheLineSize - sizeof(int), byte]
+    pad2: array[PicassoCacheLineSize - sizeof(int), byte]
     back: Atomic[int]
 
   # Private aliases
-  Channel[T] = ChannelShmMpscBoundedLock[T]
+  Channel[T] = ChannelMpscBounded[T]
 
 proc `=`[T](
     dest: var Channel[T],
@@ -72,7 +69,7 @@ proc initialize*[T](chan: var Channel[T], capacity: Positive) =
 
   static: assert T.supportsCopyMem
   assert cast[ByteAddress](chan.back.addr) -
-    cast[ByteAddress](chan.front.addr) >= CacheLineSize
+    cast[ByteAddress](chan.front.addr) >= PicassoCacheLineSize
 
   chan.capacity = capacity
   chan.buffer = cast[ptr UncheckedArray[T]](createU(T, capacity))
@@ -148,8 +145,8 @@ func tryRecv*[T](chan: var Channel[T], dst: var T): bool =
     # Empty
     return false
 
-  let readIdx = if front < Capacity: front
-                else: front - Capacity
+  let readIdx = if front < chan.capacity: front
+                else: front - chan.capacity
   dst = move chan.buffer[readIdx]
 
   var nextRead = front + 1

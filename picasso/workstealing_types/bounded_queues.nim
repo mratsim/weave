@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 type
-  BoundedQueue[Capacity: static int, T] = object
+  BoundedQueue*[Capacity: static int, T] = object
     ## Queue with bounded capacity.
     ## The buffer is inline, no heap allocation is required.
     ##

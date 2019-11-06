@@ -5,15 +5,13 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import std/atomics
+import
+  std/atomics,
+  ../static_config
 
-const CacheLineSize {.intdefine.} = 64
-  ## True on most machines
-  ## Notably false on Samsung phones
-  ## We might need to use 2x CacheLine to avoid prefetching cache conflict
 
 type
-  ChannelShmSpscSingle*[T] = object
+  ChannelSpscSingle*[T] = object
     ## Wait-free bounded single-producer single-consumer channel
     ## that can only buffer a single item (a Picasso task)
     ## Properties:
@@ -31,13 +29,13 @@ type
     ## Usage:
     ##   - Must be heap-allocated
     ##   - There is no need to zero-out the padding fields
-    pad0: array[CacheLineSize, byte] # If used in a sequence of channels
+    pad0: array[PicassoCacheLineSize, byte] # If used in a sequence of channels
     buffer: T
-    pad1: array[CacheLineSize  - sizeof(T), byte]
+    pad1: array[PicassoCacheLineSize  - sizeof(T), byte]
     full: Atomic[bool]
 
   # Private aliases
-  Channel[T] = ChannelShmSpscSingle[T]
+  Channel[T] = ChannelSpscSingle[T]
 
 proc `=`[T](
     dest: var Channel[T],
@@ -51,7 +49,7 @@ func initialize*[T](chan: var Channel[T]) {.inline.} =
   # `createU` is thread-local allocation.
   # No risk of false-sharing
   assert cast[ByteAddress](chan.full.addr) -
-    cast[ByteAddress](chan.buffer.addr) >= CacheLineSize
+    cast[ByteAddress](chan.buffer.addr) >= PicassoCacheLineSize
 
   chan.buffer = default(T)
   chan.full.store(false, moRelaxed)

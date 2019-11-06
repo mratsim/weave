@@ -42,8 +42,8 @@ static: assert sizeof(TaskObj) == 192,
           "TaskObj is of size " & $sizeof(TaskObj) &
           " instead of the expected 192 bytes."
 
-func newTask*(): Task {.inline.} =
+proc newTask*(): Task {.inline.} =
   createShared(TaskObj)
 
-func delete(task: Task) {.inline.} =
+proc delete(task: Task) {.inline.} =
   freeShared(task)
