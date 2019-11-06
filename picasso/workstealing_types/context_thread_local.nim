@@ -7,7 +7,10 @@
 
 import
   ./bounded_queues, ./sync_types,
-  ../memory/object_pools
+  ./prell_deques,
+  ../static_config,
+  ../memory/[object_pools, intrusive_stacks],
+  ../channels/channels_spsc_single
 
 # Thread-local context
 # ----------------------------------------------------------------------------------
@@ -40,7 +43,7 @@ type
     rightChild*: WorkerID
     isLeftChildIdle*: bool
     isRightChildIdle*: bool
-    parent* WorkerID
+    parent*: WorkerID
     workSharingRequests*: BoundedQueue[2, StealRequest]
     deque*: PrellDeque[Task]
     currentTask*: Task
@@ -85,9 +88,9 @@ type
 
 func leftChild(ID, maxID: WorkerID): WorkerID {.inline.} =
   assert ID >= 0 and maxID >= 0
-  assert w.ID <= maxID
+  assert ID <= maxID
 
-  result = 2*w.ID + 1
+  result = 2*ID + 1
   if result > maxID:
     result = -1
 
@@ -95,19 +98,19 @@ func rightChild(ID, maxID: WorkerID): WorkerID {.inline.} =
   assert ID >= 0 and maxID >= 0
   assert ID <= maxID
 
-  result = *ID + 2
+  result = 2*ID + 2
   if result > maxID:
     result = -1
 
-func parent(ID: Worker): int32 {.inline.} =
-  (w.ID - 1) shr 1
+func parent(ID: WorkerID): int32 {.inline.} =
+  (ID - 1) shr 1
 
 func initialize*(w: var Worker, ID, maxID: WorkerID) =
-  tree.leftChild = leftChild(ID, maxID)
-  tree.rightChild = rightChild(ID, maxID)
-  tree.parent = parent(ID)
+  w.leftChild = leftChild(ID, maxID)
+  w.rightChild = rightChild(ID, maxID)
+  w.parent = parent(ID)
 
-  if tree.leftChild == -1:
-    tree.isLeftChildIdle = true
-  if tree.rightChild == -1
-    tree.isRightChildIdle = true
+  if w.leftChild == -1:
+    w.isLeftChildIdle = true
+  if w.rightChild == -1:
+    w.isRightChildIdle = true

@@ -10,7 +10,7 @@ import
   ../channels/channels_spsc_single,
   ../memory/object_pools,
   ../static_config,
-  ./steal_requests
+  ./sync_types
 
 # Global / inter-thread communication channels
 # ----------------------------------------------------------------------------------

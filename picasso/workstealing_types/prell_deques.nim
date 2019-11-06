@@ -6,15 +6,14 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 type
-  StealableTask* = concept task, var mutTask, type Task
+  StealableTask* = concept task, var mutTask, type T
     ## task is a ptr object and has a next/prev field
     ## for intrusive doubly-linked list based deque
-    
-    # task is ptr # we want to all object with ptr semantics and destructors
-    task.prev is Task
-    task.next is Task
+    task is ptr
+    task.prev is T
+    task.next is T
     # A task has a parent field
-    task.parent is Task
+    task.parent is T
     # task has a "fn" field with the proc to run
     task.fn is proc (param: pointer) {.nimcall.}
     # var x has allocate proc

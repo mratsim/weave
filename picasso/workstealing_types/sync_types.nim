@@ -20,7 +20,7 @@ type
   # Worker
   # ----------------------------------------------------------------------------------
   WorkerID* = int32
-  WorkerState = enum
+  WorkerState* = enum
     ## Steal requests carry one of the following states:
     ## - Working means the requesting worker is (likely) still busy
     ##   but anticipating running out of tasks
@@ -35,7 +35,7 @@ type
   # Task
   # ----------------------------------------------------------------------------------
 
-  Task = ptr object
+  Task* = ptr object
     ## Task
     ## Represents a deferred computation that can be passed around threads.
     ## The fields "prev" and "next" can be used
@@ -51,9 +51,9 @@ type
     cur*: int
     stop*: int
     chunks*: int
-    sst*: int        # splittable task granularity
-    is_loop*: bool
-    has_future*: bool
+    sst*: int        # stop-splitting-threshold
+    isLoop*: bool
+    hasFuture*: bool
     # List of futures required by the current task
     futures: pointer
     # User data - including the FlowVar channel to send back result.
@@ -71,10 +71,16 @@ type
     thiefID*: WorkerID
     retry*: int32                             # 0 <= retry <= num_workers
     victims: VictimsBitset                    # bitfield of potential victims
-    when StealStrategy.StealKind == adaptative:
+    when StealStrategy == StealKind.adaptative:
       stealHalf: bool                         # Thief wants half the tasks
-
 
 static: assert sizeof(deref(Task)) == 192,
           "Task is of size " & $sizeof(deref(Task)) &
           " instead of the expected 192 bytes."
+
+# StealableTask API
+proc allocate*(task: var Task) {.inline.} =
+  task = createShared(deref(Task))
+
+proc delete*(task: Task) {.inline.} =
+  freeShared(task)

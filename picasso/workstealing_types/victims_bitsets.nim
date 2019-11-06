@@ -1,7 +1,7 @@
 import std/bitops
 
 type
-  VictimsBitset = object
+  VictimsBitset* = object
     ## Packed representation of potential victims
     ## as a bitset
     # TODO: consider bloom filters / cuckoo filters?
@@ -14,5 +14,4 @@ type
     data: uint32
 
 # We really want to enforce inlining so we use templates everywhere
-# Proc indirection is costly, and {.inine.} is not always guaranteed
-
+# Proc indirection is costly, and {.inline.} is not always guaranteed
