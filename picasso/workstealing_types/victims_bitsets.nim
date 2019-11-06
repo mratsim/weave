@@ -15,3 +15,37 @@ type
 
 # We really want to enforce inlining so we use templates everywhere
 # Proc indirection is costly, and {.inline.} is not always guaranteed
+
+# We don't use WorkerID to avoid recursive imports
+
+template isEmpty*(v: VictimsBitset): bool =
+  v.data == 0
+
+template bit*(n: int32): uint32 =
+  1'u32 shl n
+
+func clear*(v: var VictimsBitset, workerID: int32) {.inline.} =
+  v.data = v.data and not bit(workerID)
+
+template popcount*(v: VictimsBitset): int32 =
+  int32 v.data.countSetBits()
+
+func zeroRightmostOneBit*(v: VictimsBitset): VictimsBitset {.inline.} =
+  result.data = bitand(v.data, (v.data - 1))
+
+template isolateRightmostOneBit(v: VictimsBitset): int32 =
+  ## Returns a bitset with only the rightmost bit from
+  ## the input set.
+  int32 bitand(v.data, bitnot(v.data-1))
+
+func rightmostOneBitPos*(v: VictimsBitset): int32 =
+  # TODO: use fastLog2
+
+  result = -1
+  var i = isolateRightmostOneBit(v)
+  while i != 0:
+    inc result
+    i = i shr 1
+
+template isPotentialVictim*(v: VictimsBitset, workerID: int32): bool =
+  ((v.data and bit(workerID)) != 0) and workerID != 0

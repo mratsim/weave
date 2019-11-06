@@ -45,21 +45,22 @@ type
     isRightChildIdle*: bool
     parent*: WorkerID
     workSharingRequests*: BoundedQueue[2, StealRequest]
-    deque*: PrellDeque[Task]
+    # deque*: PrellDeque[Task] # Cannot instantiate `=destroy`
     currentTask*: Task
 
   Thefts = object
     ## Thief state
     # Outstanding steal requests [0, MaxSteal]
-    requested: int
+    requested*: int
     # Before a worker can become quiescent it has to drop MaxSteal - 1
     # steal request and send the remaining one to its parent
-    dropped: int
-    victims: seq[WorkerID]
+    dropped*: int
+    # Random seed to choose victims
+    seed*: uint32
     when defined(StealLastVictim):
-      lastVictim: WorkerID
+      lastVictim*: WorkerID
     when defined(StealLastThief):
-      lastThief: WorkerID
+      lastThief*: WorkerID
 
   TLContext* = object
     ## Thread-Local context
@@ -74,7 +75,7 @@ type
     tasksExec*: int
     tasksExecRecently*: int
     tasksSent*: int
-    tastsSplit*: int
+    tasksSplit*: int
     stealRequestsSent*: int
     stealRequestsHandled*: int
     stealRequestsDeclined*: int
@@ -85,8 +86,13 @@ type
       stealRequestsHalf*: int
     when defined(PicassoLazyFutures):
       futuresConverted*: int
+    randomReceiverCalls: int
+    randomReceiverEarlyExits: int
 
-func leftChild(ID, maxID: WorkerID): WorkerID {.inline.} =
+# Worker proc
+# ----------------------------------------------------------------------------------
+
+func leftChild*(ID, maxID: WorkerID): WorkerID {.inline.} =
   assert ID >= 0 and maxID >= 0
   assert ID <= maxID
 
@@ -94,7 +100,7 @@ func leftChild(ID, maxID: WorkerID): WorkerID {.inline.} =
   if result > maxID:
     result = -1
 
-func rightChild(ID, maxID: WorkerID): WorkerID {.inline.} =
+func rightChild*(ID, maxID: WorkerID): WorkerID {.inline.} =
   assert ID >= 0 and maxID >= 0
   assert ID <= maxID
 
@@ -114,3 +120,14 @@ func initialize*(w: var Worker, ID, maxID: WorkerID) =
     w.isLeftChildIdle = true
   if w.rightChild == -1:
     w.isRightChildIdle = true
+
+# Counters
+# ----------------------------------------------------------------------------------
+
+template inc*(counters: var Counters, name: untyped{ident}) =
+  when defined(PicassoMetrics):
+    counters.name += 1
+
+template dec*(counters: var Counters, name: untyped{ident}) =
+  when defined(PicassoMetrics):
+    counters.name -= 1

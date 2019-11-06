@@ -33,3 +33,8 @@ type
     #   and a known max number of workers
     stealRequestsChannel*: ptr UncheckedArray[ChannelMpscBounded[StealRequest]]
     tasksChannel*: ptr UncheckedArray[ChannelSpscSingle[Task]]
+
+  GlobalContext* = object
+    com*: ComChannels
+    numWorkers*: int32
+      # TODO track workers per socket

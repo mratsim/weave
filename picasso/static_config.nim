@@ -49,3 +49,6 @@ const
 
   StealStrategy* = parseEnum[StealKind](PicassoSteal)
   SplitStrategy* = parseEnum[SplitKind](PicassoSplit)
+
+# Extra defines:
+# - PicassoMetrics

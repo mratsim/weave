@@ -31,3 +31,11 @@ template alloca*(T: typedesc): ptr T =
 
 template alloca*(T: typedesc, len: Natural): ptr UncheckedArray[T] =
   cast[ptr UncheckedArray[T]](alloca(sizeof(T) * len))
+
+# Random
+# -------------------------------------------------------
+
+proc rand_r*(seed: var uint32): int32 {.header: "<stdlib.h>".}
+  ## Random number generator from C stdlib
+  ## small amount of state
+  ## TODO: replace by Nim's
