@@ -6,7 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./bounded_queues, ./steal_requests
+  ./bounded_queues, ./steal_requests, ./tasks,
+  ../memory/object_pools
 
 # Thread-local context
 # ----------------------------------------------------------------------------------
@@ -40,6 +41,8 @@ type
     isLeftChildIdle*: bool
     isRightChildIdle*: bool
     workSharingRequests*: BoundedQueue[2, StealRequest]
+    deque*: PrellDeque[Task]
+    currentTask*: Task
 
   Thefts = object
     ## Thief state
@@ -58,3 +61,21 @@ type
     rng: uint32 # TODO: use Nim random
     worker: Worker
     thefts: Thefts
+    taskCache: IntrusiveStack[Task]
+    taskChannelPool: ObjectPool[PicassoMaxSteal, ChannelSpscSingle[Task]]
+
+  Counters* = object
+    tasksExec: int
+    tasksExecRecently: int
+    tasksSent: int
+    tastsSplit: int
+    stealRequestsSent: int
+    stealRequestsHandled: int
+    stealRequestsDeclined: int
+    when defined(PicassoStealBackoff):
+      stealRequestsResent: int
+    when StealStrategy == StealKind.adaptative:
+      stealRequestsOne: int
+      stealRequestsHalf: int
+    when defined(PicassoLazyFutures):
+      futuresConverted: int

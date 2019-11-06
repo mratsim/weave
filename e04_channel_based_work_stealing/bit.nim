@@ -1,9 +1,13 @@
 import std/bitops
 
-# TODO: consider bloom filters?
+# TODO: consider bloom filters / cuckoo filters?
 #       or Nim builtin sets?
-#       The slow part would be
-#       victim selection when only a few remain.
+#       The slow part would be victim selection when only a few remain.
+#
+#       alternatively have a way to deal with Hyperthreading and NUMA
+#       as so far the max number of physical CPUs cores per socket is 32 / 64 threads
+#       with Ryzen 3960X and Epyc 7551P
+
 
 template bit*(n: SomeInteger): uint32 =
   1'u32 shl n

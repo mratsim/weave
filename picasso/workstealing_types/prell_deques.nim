@@ -7,9 +7,10 @@
 
 type
   StealableTask* = concept task, var mutTask, type Task
-    # task is a ptr object and has a next/prev field
-    # for intrusive doubly-linked list based deque
-    task is ptr
+    ## task is a ptr object and has a next/prev field
+    ## for intrusive doubly-linked list based deque
+    
+    # task is ptr # we want to all object with ptr semantics and destructors
     task.prev is Task
     task.next is Task
     # A task has a parent field

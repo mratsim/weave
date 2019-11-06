@@ -22,11 +22,14 @@ type
     ## at a global place.
     # - Nim seq uses thread-local heaps
     #   and are not recommended.
-    # - ptr UncheckedArray would work
-    #   however there is pointer indirection so cache misses
-    #   and they may be scattered on the heap so locality issue.
-    # - the best is to have them as global unitialized array
-    #   so they are stored on the BSS segmend
+    # - ptr UncheckedArray would work and would
+    #   be useful if Channels are packed in the same
+    #   heap (with padding to avoid cache conflicts)
+    # - A global unitialized array
+    #   so they are stored on the BSS segment
     #   (no storage used just size + fixed memory offset)
-    #   however this requires a known max number of workers
-    stealRequests: array[PicassoMaxWorkers, ptr ChannelMpscBounded[StealRequest]]
+    #   would work but then it requires a pointer indirection
+    #   per channel
+    #   and a known max number of workers
+    stealRequestsChannel: ptr UncheckedArray[ChannelMpscBounded[StealRequest]]
+    tasksChannel: ptr UncheckedArray[ChannelSpscSingle[Task]]

@@ -30,6 +30,7 @@ type
     ##
     ## The content of the channel is not destroyed upon channel destruction
     ## Destroying a channel containing ptr object will not deallocate them
+    pad0: array[PicassoCacheLineSize - 3*sizeof(int), byte]
     backLock: Lock # Padding? - pthread_lock is 40 bytes on Linux, unknown on windows.
     capacity: int
     buffer: ptr UncheckedArray[T]

@@ -8,9 +8,9 @@
 # Static configuration & compile-time options
 # ----------------------------------------------------------------------------------
 
-const PicassoMaxWorkers* {.intDefine.} = 256
-  ## Influences the size of the global context
-  # https://github.com/nim-lang/Nim/blob/v1.0.2/lib/pure/concurrency/threadpool.nim#L319-L322
+# const PicassoMaxWorkers* {.intDefine.} = 256
+#   ## Influences the size of the global context
+#   # https://github.com/nim-lang/Nim/blob/v1.0.2/lib/pure/concurrency/threadpool.nim#L319-L322
 
 const PicassoCacheLineSize* {.intDefine.} = 128
   ## Datastructure that are accessed from multiple threads
@@ -22,3 +22,28 @@ const PicassoCacheLineSize* {.intDefine.} = 128
   ## Samsung Exynos CPU, Itanium, modern PowerPC and some MIPS uses 128 bytes.
   # Nim threadpool uses 32 bytes :/
   # https://github.com/nim-lang/Nim/blob/v1.0.2/lib/pure/concurrency/threadpool.nim
+
+const PicassoMaxSteal* {.intdefine.} = 1
+  ## Maximum number of steal requests outstanding per worker
+  ## If that maximum is reached a worker will not issue new steal requests
+  ## until it receives work.
+  ## If the last steal request allowed also fails, the worker will back off
+  ## from active stealing and wait for its parent to send work.
+
+type
+  StealKind* {.pure.}= enum
+    one
+    half
+    adaptative
+
+  SplitKind* {.pure.}= enum
+    half
+    guided
+    adaptative
+
+const
+  PicassoSteal{.strdefine.} = "adaptative"
+  PicassoSplit{.strdefine.} = "adaptative"
+
+  StealStrategy* = parseEnum[StealKind](Steal)
+  SplitStrategy* = parseEnum[SplitKind](Split)

@@ -5,6 +5,8 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+import ./helpers
+
 # Task
 # ----------------------------------------------------------------------------------
 
@@ -12,12 +14,11 @@ const
   TaskDataSize* = 192 - 96
 
 type
-  Task* = ptr TaskObj
+  Task = ptr object
     ## Task
     ## Represents a deferred computation that can be passed around threads.
     ## The fields "prev" and "next" can be used
     ## for intrusive containers
-  TaskObj = object
     # We save memory by using int32 instead of int on select properties
     parent*: Task
     prev*: Task
@@ -38,12 +39,6 @@ type
     data*: array[TaskDataSize, byte]
     # Ideally we can replace fn + data by a Nim closure.
 
-static: assert sizeof(TaskObj) == 192,
-          "TaskObj is of size " & $sizeof(TaskObj) &
+static: assert sizeof(deref(Task)) == 192,
+          "Task is of size " & $sizeof(deref(Task)) &
           " instead of the expected 192 bytes."
-
-proc newTask*(): Task {.inline.} =
-  createShared(TaskObj)
-
-proc delete(task: Task) {.inline.} =
-  freeShared(task)
