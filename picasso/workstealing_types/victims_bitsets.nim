@@ -27,7 +27,7 @@ template bit*(n: int32): uint32 =
 func clear*(v: var VictimsBitset, workerID: int32) {.inline.} =
   v.data = v.data and not bit(workerID)
 
-template popcount*(v: VictimsBitset): int32 =
+template len*(v: VictimsBitset): int32 =
   int32 v.data.countSetBits()
 
 func zeroRightmostOneBit*(v: VictimsBitset): VictimsBitset {.inline.} =
