@@ -14,3 +14,11 @@ import
 var globalCtx*: GlobalContext
 var localCtx* {.threadvar.}: TLContext
   # TODO: tlsEmulation off by default on OSX and on by default on iOS?
+
+# Dynamic defines
+# ----------------------------------------------------------------------------------
+
+when not defined(MaxStealAttempts):
+  template MaxStealAttempts*: int32 = globalCtx.numWorkers - 1
+    ## Number of steal attempts before a steal request is sent back to the thief
+    ## Default value is the number of workers minus one

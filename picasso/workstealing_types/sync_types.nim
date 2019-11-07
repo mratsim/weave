@@ -70,7 +70,7 @@ type
     taskChannel*: ptr ChannelSpscSingle[Task] # Channel for sending tasks back to the requester
     thiefID*: WorkerID
     retry*: int32                             # 0 <= retry <= num_workers
-    victims: VictimsBitset                    # bitfield of potential victims
+    victims*: VictimsBitset                    # bitfield of potential victims
     when StealStrategy == StealKind.adaptative:
       stealHalf: bool                         # Thief wants half the tasks
 

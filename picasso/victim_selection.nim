@@ -22,8 +22,8 @@ proc markIdle(victims: var VictimsBitset, workerID: WorkerID) =
   let maxID = globalCtx.numWorkers - 1
   if workerID < globalCtx.numWorkers:
     # mark children
-    markIdle(victims, leftChild(workerID, maxID))
-    markIdle(victims, leftChild(workerID, maxID))
+    markIdle(victims, left(workerID, maxID))
+    markIdle(victims, right(workerID, maxID))
     # mark worker
     victims.clear(workerID)
 
@@ -54,7 +54,7 @@ func mapVictims(victims: VictimsBitset, mapping: ptr UncheckedArray[WorkerID], l
       mapping[j] = i
       inc j
     inc i
-    victims = victims shr 1
+    victims.shift1()
     # next bit in the bit set
 
   assert j == len
@@ -70,7 +70,7 @@ proc randomVictim(victims: VictimsBitset, workerID: WorkerID): WorkerID =
 
   # Try to choose a victim at random
   for i in 0..< 3:
-    let candidate = rand_r(localCtx.thefts.seed) mod globalCtx.numWorkers
+    let candidate = rand_r(localCtx.thefts.rng) mod globalCtx.numWorkers
     if victims.isPotentialVictim(candidate) and (candidate != localCtx.worker.ID):
       return candidate
 
@@ -94,10 +94,52 @@ proc randomVictim(victims: VictimsBitset, workerID: WorkerID): WorkerID =
   let potential_victims = alloca(int32, numVictims)
   victims.mapVictims(potentialVictims, numVictims)
 
-  let idx = rand_r(seed) mod numVictims
+  let idx = rand_r(localCtx.thefts.rng) mod numVictims
   result = potential_victims[idx]
-  # log("Worker %d: rng %d, vict: %d\n", localCtx.worker.ID, localCtx.rng, result)
+  # log("Worker %d: rng %d, vict: %d\n", localCtx.worker.ID, localCtx.thefts.seed, result)
 
   assert victims.isPotentialVictim(result)
   assert result in 0 ..< globalCtx.numWorkers
   assert result != localCtx.worker.ID
+
+proc nextVictim(req: var StealRequest): WorkerID =
+  result = -1
+
+  req.victims.clear(localCtx.worker.ID)
+
+  if req.thiefID == localCtx.worker.ID:
+    # Steal request initiated by the current worker.
+    # Send it to a random one
+    assert req.retry == 0
+    result = rand_r(localCtx.thefts.rng) mod globalCtx.numWorkers
+    while result == localCtx.worker.ID:
+      result = rand_r(localCtx.thefts.rng) mod globalCtx.numWorkers
+  elif req.retry == MaxStealAttempts:
+    # Return steal request to thief
+    # logVictims(req.victims, req.thiefID)
+    result = req.thiefID
+  else:
+    # Forward steal request to a different worker if possible
+    # Also pass along information on the workers we manage
+    if localCtx.worker.isLeftIdle and localCtx.worker.isRightIdle:
+      markIdle(req.victims, localCtx.worker.ID)
+    elif localCtx.worker.isLeftIdle:
+      markIdle(req.victims, localCtx.worker.left)
+    elif localCtx.worker.isRightIdle:
+      markIdle(req.victims, localCtx.worker.right)
+
+    assert not req.victims.isPotentialVictim(localCtx.worker.ID)
+    result = randomVictim(req.victims, req.thiefID)
+
+  if result == -1:
+    # Couldn't find a victim. Return the steal request to the thief
+    assert req.victims.isEmpty()
+    result = req.thiefID
+
+    # log("%d -{%d}-> %d after %d tries (%u ones)\n",
+    #   ID, req.ID, victim, req, retry, req.victims.len
+    # )
+
+  assert result in 0 ..< globalCtx.numWorkers
+  assert result != localCtx.worker.ID
+  assert req.retry in 0 .. MaxStealAttempts

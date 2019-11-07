@@ -39,10 +39,10 @@ type
     # Right child       ix*2 + 2     ix*2 + 1
     # Parent            (ix-1)/2     ix/2
     ID*: WorkerID
-    leftChild*: WorkerID
-    rightChild*: WorkerID
-    isLeftChildIdle*: bool
-    isRightChildIdle*: bool
+    left*: WorkerID
+    right*: WorkerID
+    isLeftIdle*: bool
+    isRightIdle*: bool
     parent*: WorkerID
     workSharingRequests*: BoundedQueue[2, StealRequest]
     # deque*: PrellDeque[Task] # Cannot instantiate `=destroy`
@@ -55,8 +55,8 @@ type
     # Before a worker can become quiescent it has to drop MaxSteal - 1
     # steal request and send the remaining one to its parent
     dropped*: int
-    # Random seed to choose victims
-    seed*: uint32
+    # RRNG state to choose victims
+    rng*: uint32
     when defined(StealLastVictim):
       lastVictim*: WorkerID
     when defined(StealLastThief):
@@ -64,7 +64,6 @@ type
 
   TLContext* = object
     ## Thread-Local context
-    rng*: uint32 # TODO: use Nim random
     worker*: Worker
     thefts*: Thefts
     taskCache*: IntrusiveStack[Task]
@@ -92,7 +91,7 @@ type
 # Worker proc
 # ----------------------------------------------------------------------------------
 
-func leftChild*(ID, maxID: WorkerID): WorkerID {.inline.} =
+func left*(ID, maxID: WorkerID): WorkerID {.inline.} =
   assert ID >= 0 and maxID >= 0
   assert ID <= maxID
 
@@ -100,7 +99,7 @@ func leftChild*(ID, maxID: WorkerID): WorkerID {.inline.} =
   if result > maxID:
     result = -1
 
-func rightChild*(ID, maxID: WorkerID): WorkerID {.inline.} =
+func right*(ID, maxID: WorkerID): WorkerID {.inline.} =
   assert ID >= 0 and maxID >= 0
   assert ID <= maxID
 
@@ -112,14 +111,14 @@ func parent(ID: WorkerID): int32 {.inline.} =
   (ID - 1) shr 1
 
 func initialize*(w: var Worker, ID, maxID: WorkerID) =
-  w.leftChild = leftChild(ID, maxID)
-  w.rightChild = rightChild(ID, maxID)
+  w.left = left(ID, maxID)
+  w.right = right(ID, maxID)
   w.parent = parent(ID)
 
-  if w.leftChild == -1:
-    w.isLeftChildIdle = true
-  if w.rightChild == -1:
-    w.isRightChildIdle = true
+  if w.left == -1:
+    w.isLeftIdle = true
+  if w.right == -1:
+    w.isRightIdle = true
 
 # Counters
 # ----------------------------------------------------------------------------------

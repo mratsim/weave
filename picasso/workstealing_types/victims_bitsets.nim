@@ -28,7 +28,10 @@ func clear*(v: var VictimsBitset, workerID: int32) {.inline.} =
   v.data = v.data and not bit(workerID)
 
 template len*(v: VictimsBitset): int32 =
-  int32 v.data.countSetBits()
+  int32 countSetBits(v.data)
+
+func shift1*(v: var VictimsBitset) {.inline.} =
+  v.data = v.data shr 1
 
 func zeroRightmostOneBit*(v: VictimsBitset): VictimsBitset {.inline.} =
   result.data = bitand(v.data, (v.data - 1))
