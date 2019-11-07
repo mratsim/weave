@@ -21,8 +21,8 @@ type
     # x has delete proc
     delete(task)
 
-    # TODO: closures instead of nimcall would be much nicer and would
-    # allow syntax like:
+    # TODO: checkout the liftLocal macro
+    #       to reimplement closures and allow
     #
     # var myArray: ptr UncheckedArray[int]
     # parallel_loop(i, 0, 100000):
@@ -114,7 +114,9 @@ proc newPrellDeque*[T: StealableTask](typ: typedesc[T]): PrellDeque[T] {.noinit.
   result.pendingTasks = 0
   # result.numSteals = 0
 
-proc `=destroy`*[T: StealableTask](dq: var PrellDeque[T]) =
+proc delete*[T: StealableTask](dq: var PrellDeque[T]) =
+  # TODO: should be a destructor, blocked by https://github.com/nim-lang/Nim/issues/12620
+  #       assuming destructors work fine with {.threadvar.} (apparently C++ has trouble)
   mixin delete
 
   # Free all remaining tasks
