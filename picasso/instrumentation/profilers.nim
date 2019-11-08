@@ -1,7 +1,11 @@
-import
-  # Internal
-  ../primitives/c,
-  ./timers
+# Project Picasso
+# Copyright (c) 2019 Mamy André-Ratsimbazafy
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at http://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+import system/ansi_c, ./timers
 
 # Profiling
 # ----------------------------------------------------------------------------------
@@ -28,7 +32,7 @@ template checkName(name: untyped) =
 # With untyped dirty templates we need to bind the symbol early
 # otherwise they are resolved too late in a scope where they don't exist/
 # Alternatively we export ./timer.nim.
-when defined(profile):
+when defined(PicassoProfile):
   template profile_decl*(name: untyped): untyped {.dirty.} =
     bind checkName, Timer
     checkName(name)
@@ -59,15 +63,15 @@ when defined(profile):
     body
     profile_stop(name)
 
-  template profile_results*(): untyped {.dirty.} =
+  template profile_results*(ID: typed{sym}): untyped {.dirty.} =
     bind timer_elapsed, tkMicroseconds, timers_elapsed
     # Parsable format
     # The first value should make it easy to grep for these lines, e.g. with
     # ./a.out | grep Timer | cut -d, -f2-
     # Worker ID, Task, Send/Recv Req, Send/Recv Task, Enq/Deq Task, Idle, Total
-    printf(
+    c_printf(
       "Timer,%d,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf,%.3lf\n",
-      ID, # Captured from environment
+      ID,
       timer_elapsed(timer_run_task, tkMicroseconds),
       timer_elapsed(timer_send_recv_req, tkMicroseconds),
       timer_elapsed(timer_send_recv_task, tkMicroseconds),
@@ -110,7 +114,7 @@ when isMainModule:
   profile_init(enq_deq_task)
   profile_init(idle)
 
-  profile_results()
+  profile_results(ID)
 
   profile(run_task):
     discard

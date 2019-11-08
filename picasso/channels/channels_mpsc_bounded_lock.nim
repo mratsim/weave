@@ -186,7 +186,7 @@ func peek*(chan: Channel): int =
   ## - If called by the consumer the true number might be more
   ##   due to producers adding items concurrently.
   ## - If called by a producer the true number is undefined
-  ##   as other producers also add item concurrently and
+  ##   as other producers also add items concurrently and
   ##   the consumer removes them concurrently.
   ##
   ## This is a non-locking operation.

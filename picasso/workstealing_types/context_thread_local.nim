@@ -61,6 +61,8 @@ type
       lastVictim*: WorkerID
     when defined(StealLastThief):
       lastThief*: WorkerID
+    # Adaptative theft
+    tasksExecRecently*: int
 
   TLContext* = object
     ## Thread-Local context
@@ -72,7 +74,6 @@ type
 
   Counters* = object
     tasksExec*: int
-    tasksExecRecently*: int
     tasksSent*: int
     tasksSplit*: int
     stealRequestsSent*: int
