@@ -29,6 +29,21 @@ type
     ## Usage:
     ##   - Must be heap-allocated
     ##   - There is no need to zero-out the padding fields
+    ##   - Only trivial objects can transit (no GC, can be copied and no custom destructor)
+    ##   - The content of the channel is not destroyed upon channel destruction
+    ##
+    ## Semantics:
+    ##
+    ## The channel is a synchronization point,
+    ## the sender should be ensured that data is read only once and ownership is transferred
+    ## and the receiver should be ensured that a duplicate isn't left on the sender side.
+    ## As such, sending is "sinked" and receiving will always remove data from the channel.
+    ##
+    ## So this channel provides message passing
+    ## with the following strong guarantees:
+    ## - Messages are guaranteed to be delivered
+    ## - Messages will be delivered exactly once
+    ## - Linearizability
     pad0: array[PicassoCacheLineSize, byte] # If used in a sequence of channels
     buffer: T
     pad1: array[PicassoCacheLineSize  - sizeof(T), byte]
@@ -44,10 +59,21 @@ proc `=`[T](
 
 func initialize*[T](chan: var Channel[T]) {.inline.} =
   ## Creates a new Shared Memory Single Producer Single Consumer Bounded channel
+  ## Channels should be allocated on the shared memory heap
+  ##
+  ## When using multiple channels it is recommended that
+  ## you use a pointer to an array of channels
+  ## instead of an array of pointer to channels.
+  ##
+  ## This will limit memory fragmentation and also reduce the number
+  ## of potential cache and TLB misses
+  ##
+  ## Channels are padded to avoid false-sharing when packed
+  ## in arrays.
 
-  # No init, we don't need to zero-mem the padding
-  # `createU` is thread-local allocation.
-  # No risk of false-sharing
+  # We don't need to zero-mem the padding
+
+  static: assert T.supportsCopyMem
   assert cast[ByteAddress](chan.full.addr) -
     cast[ByteAddress](chan.buffer.addr) >= PicassoCacheLineSize
 

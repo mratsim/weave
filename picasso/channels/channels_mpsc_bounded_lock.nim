@@ -22,14 +22,29 @@ type
     ##   - Linearizable
     ##
     ## Usage:
-    ##   When producer wait/sleep is not an issue as they don't have
-    ##   useful work to do.
+    ##   - When producer wait/sleep is not an issue as they don't have
+    ##     useful work to do.
+    ##   - Must be heap allocated
+    ##   - Only trivial objects can transit (no GC, can be copied and no custom destructor)
+    ##   - The content of the channel is not destroyed upon channel destruction
+    ##     Deleting a channel containing ptr object will not deallocate them
     ##
-    ## At the moment, only trivial objects can be received or sent
-    ## (no GC, can be copied and no custom destructor)
+    ## Peeking into a MPSC channel gives an approximation of the number of items
+    ## buffered, it is at best an estimate. An exact result would require locking
+    ## and may be invalid the nanosecond after you release the lock.
     ##
-    ## The content of the channel is not destroyed upon channel destruction
-    ## Destroying a channel containing ptr object will not deallocate them
+    ## Semantics:
+    ##
+    ## The channel is a synchronization point,
+    ## the sender should be ensured that data is read only once and ownership is transferred
+    ## and the receiver should be ensured that a duplicate isn't left on the sender side.
+    ## As such, sending is "sinked" and receiving will always remove data from the channel.
+    ##
+    ## So this channel provides message passing
+    ## with the following strong guarantees:
+    ## - Messages are guaranteed to be delivered
+    ## - Messages will be delivered exactly once
+    ## - Linearizability
     pad0: array[PicassoCacheLineSize - 3*sizeof(int), byte]
     backLock: Lock # Padding? - pthread_lock is 40 bytes on Linux, unknown on windows.
     capacity: int
@@ -47,10 +62,11 @@ proc `=`[T](
     source: Channel[T]
   ) {.error: "A channel cannot be copied".}
 
-proc `=destroy`[T](chan: var Channel[T]) {.inline.} =
+proc delete[T](chan: var Channel[T]) {.inline.} =
   static: assert T.supportsCopyMem # no custom destructors or ref objects
+
   if not chan.buffer.isNil:
-    dealloc(chan.buffer)
+    freeShared(chan.buffer)
 
 func clear*(chan: var Channel) {.inline.} =
   ## Reinitialize the data in the channel
@@ -63,17 +79,26 @@ func clear*(chan: var Channel) {.inline.} =
 
 proc initialize*[T](chan: var Channel[T], capacity: Positive) =
   ## Creates a new Shared Memory Multi-Producer Producer Single Consumer Bounded channel
+  ## Channels should be allocated on the shared memory heap
+  ##
+  ## When using multiple channels it is recommended that
+  ## you use a pointer to an array of channels
+  ## instead of an array of pointer to channels.
+  ##
+  ## This will limit memory fragmentation and also reduce the number
+  ## of potential cache and TLB misses
+  ##
+  ## Channels are padded to avoid false-sharing when packed
+  ## in arrays.
 
-  # No init, we don't need to zero-mem the padding
-  # `createU` is thread-local allocation.
-  # No risk of false-sharing
+  # We don't need to zero-mem the padding
 
   static: assert T.supportsCopyMem
   assert cast[ByteAddress](chan.back.addr) -
     cast[ByteAddress](chan.front.addr) >= PicassoCacheLineSize
 
   chan.capacity = capacity
-  chan.buffer = cast[ptr UncheckedArray[T]](createU(T, capacity))
+  chan.buffer = cast[ptr UncheckedArray[T]](createSharedU(T, capacity))
   chan.clear()
 
 # To differentiate between full and empty case
@@ -155,6 +180,19 @@ func tryRecv*[T](chan: var Channel[T], dst: var T): bool =
     nextRead = 0
   chan.front.store(nextRead, moRelease)
   return true
+
+func peek*(chan: Channel): int =
+  ## Estimates the number of items pending in the channel
+  ## - If called by the consumer the true number might be more
+  ##   due to producers adding items concurrently.
+  ## - If called by a producer the true number is undefined
+  ##   as other producers also add item concurrently and
+  ##   the consumer removes them concurrently.
+  ##
+  ## This is a non-locking operation.
+  result = chan.front.load(moAcquire) - chan.back.load(moAcquire)
+  if result < 0:
+    result += 2 * chan.capacity
 
 # Sanity checks
 # ------------------------------------------------------------------------------
