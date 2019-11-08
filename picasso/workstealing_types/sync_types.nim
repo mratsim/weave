@@ -60,6 +60,8 @@ type
     data*: array[TaskDataSize, byte]
     # Ideally we can replace fn + data by a Nim closure.
 
+    # TODO: support loops with steps
+
 
   # Steal requests
   # ----------------------------------------------------------------------------------

@@ -31,8 +31,8 @@ type
     #   would work but then it requires a pointer indirection
     #   per channel
     #   and a known max number of workers
-    stealRequestsChannel*: ptr UncheckedArray[ChannelMpscBounded[StealRequest]]
-    tasksChannel*: ptr UncheckedArray[ChannelSpscSingle[Task]]
+    thievingChannels*: ptr UncheckedArray[ChannelMpscBounded[StealRequest]]
+    tasksChannels*: ptr UncheckedArray[ChannelSpscSingle[Task]]
 
   GlobalContext* = object
     com*: ComChannels

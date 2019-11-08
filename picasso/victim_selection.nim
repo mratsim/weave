@@ -102,7 +102,7 @@ proc randomVictim(victims: VictimsBitset, workerID: WorkerID): WorkerID =
   assert result in 0 ..< globalCtx.numWorkers
   assert result != localCtx.worker.ID
 
-proc nextVictim(req: var StealRequest): WorkerID =
+proc nextVictim*(req: var StealRequest): WorkerID =
   result = -1
 
   req.victims.clear(localCtx.worker.ID)
