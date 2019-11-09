@@ -63,7 +63,9 @@ type
     when defined(StealLastThief):
       lastThief*: WorkerID
     # Adaptative theft
-    tasksExecRecently*: int
+    stealHalf*: bool
+    recentTasks*: int
+    recentSteals*: int
 
   TLContext* = object
     ## Thread-Local context
@@ -73,20 +75,20 @@ type
     taskChannelPool*: ObjectPool[PicassoMaxSteal, ChannelSpscSingle[Task]]
     counters*: Counters
 
-  Counters* = object
-    tasksExec*: int
-    tasksSent*: int
-    tasksSplit*: int
-    stealRequestsSent*: int
-    stealRequestsHandled*: int
-    stealRequestsDeclined*: int
+  Counters = object
+    tasksExec: int
+    tasksSent: int
+    tasksSplit: int
+    stealsSent: int
+    stealsHandled: int
+    stealsDeclined: int
     when defined(PicassoStealBackoff):
-      stealRequestsResent*: int
+      stealsResent: int
     when StealStrategy == StealKind.adaptative:
-      stealRequestsOne*: int
-      stealRequestsHalf*: int
+      stealsOne: int
+      stealsHalf: int
     when defined(PicassoLazyFutures):
-      futuresConverted*: int
+      futuresConverted: int
     randomReceiverCalls: int
     randomReceiverEarlyExits: int
 
@@ -112,7 +114,7 @@ func right*(ID, maxID: WorkerID): WorkerID {.inline.} =
 func parent(ID: WorkerID): int32 {.inline.} =
   (ID - 1) shr 1
 
-func initialize*(w: var Worker, ID, maxID: WorkerID) =
+func initialize*(w: var Worker, ID, maxID: WorkerID) {.inline.} =
   w.left = left(ID, maxID)
   w.right = right(ID, maxID)
   w.parent = parent(ID)
@@ -126,9 +128,11 @@ func initialize*(w: var Worker, ID, maxID: WorkerID) =
 # ----------------------------------------------------------------------------------
 
 template inc*(counters: var Counters, name: untyped{ident}) =
+  bind name
   metrics:
     counters.name += 1
 
 template dec*(counters: var Counters, name: untyped{ident}) =
+  bind name
   metrics:
     counters.name -= 1

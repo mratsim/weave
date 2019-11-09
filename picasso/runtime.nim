@@ -20,5 +20,9 @@ var localCtx* {.threadvar.}: TLContext
 
 when not defined(MaxStealAttempts):
   template MaxStealAttempts*: int32 = globalCtx.numWorkers - 1
-    ## Number of steal attempts before a steal request is sent back to the thief
+    ## Number of steal attempts per steal requests
+    ## before a steal request is sent back to the thief
     ## Default value is the number of workers minus one
+    ##
+    ## The global number of steal requests outstanding
+    ## is PicassoMaxSteal * globalCtx.numWorkers

@@ -8,7 +8,8 @@
 import
   ./helpers, ./victims_bitsets,
   ../static_config,
-  ../channels/channels_spsc_single
+  ../channels/channels_spsc_single,
+  ../instrumentation/contracts
 
 # Inter-thread synchronization types
 # ----------------------------------------------------------------------------------
@@ -75,7 +76,7 @@ type
     victims*: VictimsBitset                   # bitfield of potential victims
     state*: WorkerState                       # State of the thief
     when StealStrategy == StealKind.adaptative:
-      stealHalf: bool                         # Thief wants half the tasks
+      stealHalf*: bool                        # Thief wants half the tasks
 
 static: assert sizeof(deref(Task)) == 192,
           "Task is of size " & $sizeof(deref(Task)) &
@@ -83,7 +84,9 @@ static: assert sizeof(deref(Task)) == 192,
 
 # StealableTask API
 proc allocate*(task: var Task) {.inline.} =
+  preCondition: task.isNil()
   task = createShared(deref(Task))
 
 proc delete*(task: Task) {.inline.} =
+  preCondition: not task.isNil()
   freeShared(task)

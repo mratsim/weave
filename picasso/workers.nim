@@ -10,15 +10,86 @@ import
   ./runtime,
   ./instrumentation/[contracts, profilers, loggers],
   ./channels/channels_mpsc_bounded_lock,
+  ./memory/intrusive_stacks,
   ./static_config
 
+# Thief
+# ----------------------------------------------------------------------------------
+
+proc init(req: var StealRequest, state: static bool) {.inline.} =
+  ## Initialize a steal request
+  ## This does not initialize the Thief state
+  req.taskChannel = localCtx.taskCache.pop()
+  req.thiefID = localCtx.worker.ID
+  req.retry = 0
+  req.victims.init(globalCtx.numWorkers)
+  req.victims.clear(localCtx.worker.ID)
+  req.state = state
+  StealAdaptative:
+    req.stealHalf: localCtx.thefts.stealHalf
+
 proc send(victimID: WorkerID, req: sink StealRequest) {.inline.}=
+  ## Send a steal or work sharing request
   # TODO: check for race condition on runtime exit
   let success = globalCtx.com.thievingChannels[victimID].trySend(req)
 
   # The channel has a theoretical upper bound of
   # N steal requests (from N-1 workers + own request sent back)
   postCondition: success
+
+proc sendSteal(victimID: WorkerID, req: sink StealRequest) =
+  ## Send a steal request and update context
+  victimID.send(req)
+
+  localCtx.thefts.requested += 1
+  localCtx.counters.inc(stealsSent)
+
+  metrics:
+    StealAdaptative:
+      if localCtx.thefts.stealHalf:
+        localCtx.counters.inc(stealsHalf)
+      else:
+        localCtx.counters.inc(stealsOne)
+
+proc updateStealStrategy() =
+  ## Estimate work-stealing efficiency during the last interval
+  ## If the value is below a threshold, switch strategies
+  if localCtx.thefts.recentSteals == PicassoStealAdaptativeInterval:
+    # Reevaluate the ratio of tasks processed within the theft interval
+    let ratio = localCtx.thefts.recentTasks.float32 / float32(PicassoStealAdaptativeInterval)
+    if localCtx.thefts.stealHalf and ratio < 2.0f:
+      # Tasks stolen are coarse-grained, steal only one to reduce re-steals
+      localCtx.thefts.stealHalf = false
+    elif not(localCtx.thefts.stealHalf) and ratio == 1.0f:
+      # All tasks processed were stolen tasks, we need to steal many at a time
+      localCtx.thefts.stealHalf = true
+
+    # Reset the interval
+    localCtx.thefts.recentTasks = 0
+    localCtx.thefts.recentSteals = 0
+
+proc trySteal(outOfTasks: static bool) =
+  ## Try to send a steal request
+  ## Every worker can have at most MaxSteal pending steal requests.
+  ## A steal request with outOfTasks == false indicates that the
+  ## requesting worker is still busy working on some tasks.
+  ## A steal request with outOfTasks == true indicates that
+  ## the requesting worker has run out of tasks.
+
+  # TODO: For code size and improved cache usage
+  #       don't use a static bool?
+  profile(send_recv_req):
+    if localCtx.thefts.requests < MaxStealAttempts:
+      StealAdaptative:
+        updateStealStrategy()
+      var req: StealRequest
+      req.init(when outOfTasks: Stealing else: Working)
+
+      # TODO LastVictim/LastThief
+      req.nextVictim().sendSteal(req)
+
+# Victim
+# ----------------------------------------------------------------------------------
 
 proc recv(req: var StealRequest): bool {.inline.} =
   profile(send_recv_req):

@@ -61,6 +61,9 @@ func mapVictims(victims: VictimsBitset, mapping: ptr UncheckedArray[WorkerID], l
 
 proc randomVictim(victims: VictimsBitset, workerID: WorkerID): WorkerID =
   ## Choose a random victim != ID from the list of potential VictimsBitset
+  preCondition:
+    localCtx.worker.ID notin victims
+
   localCtx.counters.inc(randomReceiverCalls)
   localCtx.counters.inc(randomReceiverEarlyExits)
 
@@ -71,7 +74,8 @@ proc randomVictim(victims: VictimsBitset, workerID: WorkerID): WorkerID =
   # Try to choose a victim at random
   for i in 0..< 3:
     let candidate = rand_r(localCtx.thefts.rng) mod globalCtx.numWorkers
-    if victims.isPotentialVictim(candidate) and (candidate != localCtx.worker.ID):
+    if candidate in victims:
+      postCondition candidate != localCtx.worker.ID
       return candidate
 
   # We didn't early exit, i.e. not enough potential victims
@@ -98,14 +102,15 @@ proc randomVictim(victims: VictimsBitset, workerID: WorkerID): WorkerID =
   result = potential_victims[idx]
   # log("Worker %d: rng %d, vict: %d\n", localCtx.worker.ID, localCtx.thefts.seed, result)
 
-  postCondition victims.isPotentialVictim(result)
+  postCondition result in victims
   postCondition result in 0 ..< globalCtx.numWorkers
   postCondition result != localCtx.worker.ID
 
 proc nextVictim*(req: var StealRequest): WorkerID =
-  result = -1
+  preCondition:
+    localCtx.worker.ID notin req.victims
 
-  req.victims.clear(localCtx.worker.ID)
+  result = -1
 
   if req.thiefID == localCtx.worker.ID:
     # Steal request initiated by the current worker.
@@ -128,7 +133,7 @@ proc nextVictim*(req: var StealRequest): WorkerID =
     elif localCtx.worker.isRightIdle:
       markIdle(req.victims, localCtx.worker.right)
 
-    ascertain: not req.victims.isPotentialVictim(localCtx.worker.ID)
+    ascertain: localCtx.worker.ID notin req.victims
     result = randomVictim(req.victims, req.thiefID)
 
   if result == -1:

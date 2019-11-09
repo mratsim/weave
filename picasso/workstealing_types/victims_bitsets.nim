@@ -4,6 +4,7 @@ type
   VictimsBitset* = object
     ## Packed representation of potential victims
     ## as a bitset
+    # TODO: support more than 32 cores
     # TODO: consider bloom filters / cuckoo filters?
     #       or Nim builtin sets?
     #       The slow part would be victim selection when only a few remain.
@@ -18,14 +19,24 @@ type
 
 # We don't use WorkerID to avoid recursive imports
 
+template bit(n: SomeInteger): SomeInteger =
+  1 shl n
+
+func init(v: var VictimsBitset, numVictims: SomeInteger) {.inline.} =
+  let mask = if numVictims >= 32: high(uint32)
+             else: bit(numVictims) - 1
+  v.data = high(uint32) and mask
+
 template isEmpty*(v: VictimsBitset): bool =
   v.data == 0
 
-template bit*(n: int32): uint32 =
-  1'u32 shl n
-
 func clear*(v: var VictimsBitset, workerID: int32) {.inline.} =
-  v.data = v.data and not bit(workerID)
+  v.data.setBit(workerID)
+
+func contains*(v: VictimsBitset, workerID: int32): bool {.inline.} =
+  # TODO: Nim testBit could use a comparison "!= 0"
+  #       instead of "== mask" to save on code size for bit-heavy libraries
+  v.data.testBit(workerID)
 
 template len*(v: VictimsBitset): int32 =
   int32 countSetBits(v.data)
@@ -49,6 +60,3 @@ func rightmostOneBitPos*(v: VictimsBitset): int32 =
   while i != 0:
     inc result
     i = i shr 1
-
-template isPotentialVictim*(v: VictimsBitset, workerID: int32): bool =
-  ((v.data and bit(workerID)) != 0) and workerID != 0

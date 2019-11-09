@@ -35,6 +35,10 @@ const PicassoMaxSteal* {.intdefine.} = 1
   ## If the last steal request allowed also fails, the worker will back off
   ## from active stealing and wait for its parent to send work.
 
+const PicassoStealAdaptativeInterval* {.intdefine.} = 25
+  ## Number of steal requests after which a worker reevaluate
+  ## the steal-half vs steal-one strategy
+
 type
   StealKind* {.pure.}= enum
     one
@@ -59,4 +63,8 @@ template metrics*(body: untyped) =
 
 template debugTermination*(body: untyped) =
   when defined(PicassoDebugTermination):
+    body
+
+template StealAdaptative*(body: untyped) =
+  when StealStrategy == StealKind.adaptative:
     body

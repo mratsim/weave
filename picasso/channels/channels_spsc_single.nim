@@ -85,7 +85,7 @@ func clear*(chan: var Channel) {.inline.} =
     `=destroy`(chan.buffer)
     chan.full.store(moRelaxed) = false
 
-func tryRecv*[T](chan: var Channel[T], dst: var T): bool =
+func tryRecv*[T](chan: var Channel[T], dst: var T): bool {.inline.} =
   ## Try receiving the item buffered in the channel
   ## Returns true if successful (channel was not empty)
   ##
@@ -97,7 +97,7 @@ func tryRecv*[T](chan: var Channel[T], dst: var T): bool =
   chan.full.store(false, moRelease)
   return true
 
-func trySend*[T](chan: var Channel[T], src: sink T): bool =
+func trySend*[T](chan: var Channel[T], src: sink T): bool {.inline.} =
   ## Try sending an item into the channel
   ## Reurns true if successful (channel was empty)
   ##

@@ -16,6 +16,8 @@ import strutils, macros, os
 # "--boundsChecks" or "--nilChecks" to decouple them from user code checks.
 # Furthermore, we want them to be very lightweight on performance
 
+# TODO auto-add documentation
+
 proc inspectInfix(node: NimNode): NimNode =
   ## Inspect an expression,
   ## Returns the AST as string with runtime values inlined

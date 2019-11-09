@@ -79,7 +79,7 @@ func clear*(chan: var Channel) {.inline.} =
   chan.front.store(0, moRelaxed)
   chan.back.store(0, moRelaxed)
 
-proc initialize*[T](chan: var Channel[T], capacity: Positive) =
+proc initialize*[T](chan: var Channel[T], capacity: Positive) {.inline.} =
   ## Creates a new Shared Memory Multi-Producer Producer Single Consumer Bounded channel
   ## Channels should be allocated on the shared memory heap
   ##
@@ -181,7 +181,7 @@ func tryRecv*[T](chan: var Channel[T], dst: var T): bool =
   chan.front.store(nextRead, moRelease)
   return true
 
-func peek*(chan: Channel): int =
+func peek*(chan: Channel): int {.inline.} =
   ## Estimates the number of items pending in the channel
   ## - If called by the consumer the true number might be more
   ##   due to producers adding items concurrently.
