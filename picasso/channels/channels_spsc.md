@@ -151,6 +151,8 @@ Or we can even use weird ASM tricks
 
 ### Advanced performance issues
 
+#### False sharing
+
 Even once the previous modulo/size issues, a naive design of the queue will be subject to cache thrashing due to false sharing.
 
 Padding by a single cache line might not be enough due to prefetching.
@@ -166,6 +168,21 @@ Designers of the queue then have tradeoffs:
     - Latency to fight the empty queue cache thrashing with thee temporal slipping technique
   - regarding a queue optimized for always near-full scenarios or always near empty (Liberty Queue paper)
   - regarding using data null/not-null values to check for fullness/emptiness
+
+### Queues of pointer objects
+
+#### Performance
+
+If a queue is only used for pointer objects or options testing if a queue is empty
+or full only requires testing the relevant read or write index and checking if the data is nil.
+This avoids accessing both indexes for each enqueue/deque leading to contention between the reader and the writer.
+
+#### Code size
+
+Operations on queues of pointer objects can be typed-erase to avoid duplicate code.
+This is important for channels of futures as they may be used
+in complex codebases with lots of
+different types with Futures/Flowvar encapsulating them.
 
 ## SPSC Queue formal verification:
 - Correct and Efficient Bounded FIFO Queues, Nhat Minh Le et al:
