@@ -5,7 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import std/typetraits
+import std/typetraits, ../instrumentation/contracts
 
 type
   Pooled*[T] = object
@@ -47,14 +47,18 @@ proc initialize*[N: static int, T](pool: var ObjectPool[N, T]) =
 
 func recycle[N: static int, T](pool: var ObjectPool[N, T], obj: var Pooled[T]) {.inline.} =
   ## Return a Pooled object to its pool.
-  assert pool.remaining < N, "An extra pooled object mysteriously slipped in."
+  preCondition:
+    pool.remaining < N
+
   pool.stack[pool.remaining] = move obj
   pool.remaining += 1
 
 func get*[N: static int, T](pool: var ObjectPool[N, T]): Pooled[T] {.inline.} =
   ## Get an object from the pool.
   ## The object must be properly initialized by the caller
-  assert pool.remaining > 0, "Object pool depleted."
+  preCondition:
+    pool.remaining > 0
+
   pool.remaining -= 1
   result = move pool.stack[pool.remaining]
 

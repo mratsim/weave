@@ -72,10 +72,7 @@ func initialize*[T](chan: var Channel[T]) {.inline.} =
   ## in arrays.
 
   # We don't need to zero-mem the padding
-
   static: assert T.supportsCopyMem
-  assert cast[ByteAddress](chan.full.addr) -
-    cast[ByteAddress](chan.buffer.addr) >= PicassoCacheLineSize
 
   chan.buffer = default(T)
   chan.full.store(false, moRelaxed)

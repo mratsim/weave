@@ -5,6 +5,8 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+import ../instrumentation/contracts
+
 type
   StealableTask* = concept task, var mutTask, type T
     ## task is a ptr object and has a next/prev field
@@ -79,7 +81,7 @@ func isEmpty*(dq: PrellDeque): bool {.inline.} =
 
 func addFirst*[T](dq: var PrellDeque[T], task: sink T) =
   ## Prepend a task to the beginning of the deque
-  assert not task.isNil
+  preCondition: not task.isNil
 
   task.next = dq.head
   dq.head.prev = task
@@ -122,8 +124,8 @@ proc delete*[T: StealableTask](dq: var PrellDeque[T]) =
   # Free all remaining tasks
   while (let task = dq.popFirst(); not task.isNil):
     delete(task)
-  assert dq.pendingTasks == 0
-  assert dq.isEmpty
+  postCondition: dq.pendingTasks == 0
+  postCondition: dq.isEmpty
   # Free dummy node
   delete(dq.head)
 
@@ -132,11 +134,11 @@ proc delete*[T: StealableTask](dq: var PrellDeque[T]) =
 
 func addListFirst[T](dq: var PrellDeque[T], head, tail: T, len: int32) =
   # Add a list of tasks [head ... tail] of length len to the front of the deque
-  assert not head.isNil and not tail.isNil
-  assert len > 0
+  preCondition: not head.isNil and not tail.isNil
+  preCondition: len > 0
+  preCondition: tail.next.isNil
 
   # Link tail with deque head
-  assert tail.next.isNil
   tail.next = dq.head
   dq.head.prev = tail
 
@@ -145,8 +147,8 @@ func addListFirst[T](dq: var PrellDeque[T], head, tail: T, len: int32) =
   dq.pendingTasks += len
 
 func addListFirst*[T](dq: var PrellDeque[T], head: T, len: int32) =
-  assert not head.isNil
-  assert len > 0
+  preCondition: not head.isNil
+  preCondition: len > 0
 
   var tail = head
   when defined(debug):
@@ -156,14 +158,14 @@ func addListFirst*[T](dq: var PrellDeque[T], head: T, len: int32) =
     when defined(debug):
       index += 1
 
-  assert index == len
+  postCondition: index == len
   dq.addListFirst(head, tail, len)
 
 # Task-specific routines
 # ---------------------------------------------------------------
 
 func popFirstIfChild*[T](dq: var PrellDeque[T], parentTask: T): T =
-  assert not parentTask.isNil
+  preCondition:p not parentTask.isNil
 
   if dq.isEmpty():
     return nil
@@ -189,7 +191,7 @@ func steal*[T](dq: var PrellDeque[T]): T =
 
   # Should be the dummy
   result = dq.tail
-  assert result.fn == cast[proc (param: pointer){.nimcall.}](0xCAFE)
+  preCondition: result.fn == cast[proc (param: pointer){.nimcall.}](0xCAFE)
 
   # Steal the true task
   result = result.prev
@@ -201,7 +203,7 @@ func steal*[T](dq: var PrellDeque[T]): T =
 
   if dq.tail.prev.isNil:
     # Stealing last task of the deque
-    assert dq.head == result
+    transientCondition: dq.head == result
     dq.head = dq.tail # isEmpty() condition
   else:
     dq.tail.prev.next = dq.tail # last task points to dummy
@@ -235,7 +237,8 @@ template multistealImpl[T](
   maxStmt # <-- 1st statement "if numStolen > max: numStolen = max" injected here
 
   stolenHead = dq.tail # dummy node
-  assert stolenHead.fn == cast[proc (param: pointer){.nimcall.}](0xCAFE)
+  preCondition: stolenHead.fn == cast[proc (param: pointer){.nimcall.}](0xCAFE)
+  
   tailAssignStmt   # <-- 2nd statement "tail = dummy.prev" injected here
 
   # Walk backwards from the dummy node
@@ -247,7 +250,7 @@ template multistealImpl[T](
   stolenHead.prev = nil             # Detach the stolenHead head from the deque
   if dq.tail.prev.isNil:
     # Stealing the last task of the deque
-    assert dq.head == stolenHead
+    checkCondition: dq.head == stolenHead
     dq.head = dq.tail           # isEmpty() condition
   else:
     dq.tail.prev.next = dq.tail # last task points to dummy
@@ -263,7 +266,7 @@ func stealMany*[T](dq: var PrellDeque[T],
   ## head will point to the first task in the returned list
   ## tail will point to the last task in the returned list
   ## numStolen will contain the number of transferred tasks
-  assert maxSteals >= 1
+  preCondition: maxSteals >= 1
 
   multistealImpl(dq, head, numStolen):
     if numStolen > maxSteals:
@@ -278,7 +281,7 @@ func stealMany*[T](dq: var PrellDeque[T],
   ## Steal up to half of the deque's tasks, but at most maxSteals tasks
   ## head will point to the first task in the returned list
   ## numStolen will contain the number of transferred tasks
-  assert maxSteals >= 1
+  preCondition: maxSteals >= 1
 
   multistealImpl(dq, head, numStolen):
     if numStolen > maxSteals:
@@ -335,7 +338,7 @@ when isMainModule:
       a, b: int32
 
   proc allocate(task: var Task) =
-    assert task.isNil
+    preCondition: task.isNil
     task = createShared(TaskObj)
 
   proc delete(task: sink Task) =

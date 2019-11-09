@@ -14,6 +14,9 @@ import strutils
 #   ## Influences the size of the global context
 #   # https://github.com/nim-lang/Nim/blob/v1.0.2/lib/pure/concurrency/threadpool.nim#L319-L322
 
+# PicassoAsserts: turn on specific assertions independently from
+# --assertions:off or -d:danger
+
 const PicassoCacheLineSize* {.intDefine.} = 128
   ## Datastructure that are accessed from multiple threads
   ## are padded by this value to avoid
@@ -50,5 +53,6 @@ const
   StealStrategy* = parseEnum[StealKind](PicassoSteal)
   SplitStrategy* = parseEnum[SplitKind](PicassoSplit)
 
-# Extra defines:
-# - PicassoMetrics
+template metrics*(body: untyped) =
+  when defined(PicassoMetrics):
+    body

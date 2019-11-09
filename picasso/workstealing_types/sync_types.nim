@@ -51,7 +51,7 @@ type
     cur*: int
     stop*: int
     chunks*: int
-    sst*: int        # stop-splitting-threshold
+    splitThreshold*: int # TODO: can probably be removed with the adaptative algorithm
     isLoop*: bool
     hasFuture*: bool
     # List of futures required by the current task

@@ -5,6 +5,8 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+import ../instrumentation/contracts
+
 type
   BoundedQueue*[Capacity: static int, T] = object
     ## Queue with bounded capacity.
@@ -62,7 +64,8 @@ func enqueue*[Capacity: static int, T](
   ## This will throw an exception if the queue is full
   ## in debug mode only.
   ## Otherwise it will overwrite the oldest data.
-  assert not q.isFull()
+  preCondition:
+    not q.isFull()
 
   let writeIdx = if q.back < Capacity: q.back
                  else: q.back - Capacity
@@ -81,7 +84,8 @@ func dequeue*[Capacity: static int, T](
   ## in debug mode only
   ## Otherwise it will read past the buffer and return
   ## default(T) (assuming Nim `=move` defaults the original)
-  assert not q.isEmpty()
+  preCondition:
+    not q.isEmpty()
 
   let readIdx = if q.front < Capacity: q.front
                 else: q.front - Capacity
@@ -100,7 +104,8 @@ func peek*[Capacity: static int, T](
   ## in debug mode only
   ## Otherwise it will read past the buffer and return
   ## default(T) (assuming Nim `=move` defaults the original)
-  assert not q.isEmpty()
+  preCondition:
+    not q.isEmpty()
 
   let readIdx = if q.front < Capacity: q.front
                 else: q.front - Capacity

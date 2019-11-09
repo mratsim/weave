@@ -8,7 +8,8 @@
 import
   ./runtime,
   ./static_config,
-  ./workstealing_types/sync_types
+  ./workstealing_types/sync_types,
+  ./instrumentation/contracts
 
 # Loop splitting
 # ----------------------------------------------------------------------------------
@@ -25,9 +26,10 @@ func splitHalf(task: Task): int {.inline.} =
 
 func splitGuided(task: Task): int {.inline.} =
   ## Split iteration range based on the number of workers
-  assert task.chunks > 0
   let itersLeft = abs(task.stop - task.cur)
-  assert itersLeft > task.sst
+
+  preCondition: task.chunks > 0
+  preCondition: itersLeft > task.splitThreshold
 
   if itersLeft <= task.chunks:
     return task.splitHalf()
@@ -38,7 +40,7 @@ func splitGuided(task: Task): int {.inline.} =
 func splitAdaptative(task: Task): int {.inline.} =
   ## Split iteration range based on the number of steal requests
   let itersLeft = abs(task.stop - task.cur)
-  assert itersLeft > task.sst
+  preCondition: itersLeft > task.splitThreshold
 
   # log("Worker %2d: %ld of %ld iterations left\n", ID, iters_left, iters_total)
 
@@ -53,7 +55,9 @@ func splitAdaptative(task: Task): int {.inline.} =
 
   # Send a chunk of work to all
   let chunk = max(itersLeft div (approxNumThieves + 1), 1)
-  assert itersLeft > chunk
+  
+  postCondition:
+    itersLeft > chunk
 
   # log("Worker %2d: sending %ld iterations\n", ID, chunk)
   return task.stop - chunk
@@ -67,4 +71,3 @@ template dispatchSplit(task: Task): int =
     splitAdaptative(task)
   else:
     {.error: "Unreachable".}
-

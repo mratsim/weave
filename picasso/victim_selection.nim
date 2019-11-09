@@ -8,13 +8,16 @@
 import
   ./workstealing_types/[victims_bitsets, sync_types, context_thread_local],
   ./runtime,
-  ./primitives/c
+  ./primitives/c,
+  ./instrumentation/contracts
 
 # Victim selection
 # ----------------------------------------------------------------------------------
 
 proc markIdle(victims: var VictimsBitset, workerID: WorkerID) =
-  assert -1 <= workerID and workerID < globalCtx.numWorkers
+  preCondition:
+    -1 <= workerID and workerID < globalCtx.numWorkers
+
   if workerID == -1:
     # Invalid worker ID (parent of root or out-of-bound child)
     return
@@ -32,14 +35,11 @@ func rightmostVictim(victims: var VictimsBitset, workerID: WorkerID): WorkerID =
   if result == workerID:
     result = rightmostOneBitPos(zeroRightmostOneBit(victims))
 
-    {.noSideEffect.}:
-      assert(
-        # Victim found
-        ((result in 0 ..< globalCtx.numWorkers) and
-          result != workerID) or
-          # No victim found
-          result == -1
-      )
+    postCondition: {.noSideEffect.}:
+      # Victim found
+      ((result in 0 ..< globalCtx.numWorkers) and
+        result != workerID) or
+        # No victim found
 
 func mapVictims(victims: VictimsBitset, mapping: ptr UncheckedArray[WorkerID], len: int32) =
   ## Update mapping with a mapping
@@ -50,14 +50,14 @@ func mapVictims(victims: VictimsBitset, mapping: ptr UncheckedArray[WorkerID], l
   while not victims.isEmpty():
     if victims.isPotentialVictim(0):
       # Test first bit
-      assert j < len
+      checkCondition: j < len
       mapping[j] = i
       inc j
     inc i
     victims.shift1()
     # next bit in the bit set
 
-  assert j == len
+  postCondition: j == len
 
 proc randomVictim(victims: VictimsBitset, workerID: WorkerID): WorkerID =
   ## Choose a random victim != ID from the list of potential VictimsBitset
@@ -98,9 +98,9 @@ proc randomVictim(victims: VictimsBitset, workerID: WorkerID): WorkerID =
   result = potential_victims[idx]
   # log("Worker %d: rng %d, vict: %d\n", localCtx.worker.ID, localCtx.thefts.seed, result)
 
-  assert victims.isPotentialVictim(result)
-  assert result in 0 ..< globalCtx.numWorkers
-  assert result != localCtx.worker.ID
+  postCondition victims.isPotentialVictim(result)
+  postCondition result in 0 ..< globalCtx.numWorkers
+  postCondition result != localCtx.worker.ID
 
 proc nextVictim*(req: var StealRequest): WorkerID =
   result = -1
@@ -110,7 +110,7 @@ proc nextVictim*(req: var StealRequest): WorkerID =
   if req.thiefID == localCtx.worker.ID:
     # Steal request initiated by the current worker.
     # Send it to a random one
-    assert req.retry == 0
+    checkCondition: req.retry == 0
     result = rand_r(localCtx.thefts.rng) mod globalCtx.numWorkers
     while result == localCtx.worker.ID:
       result = rand_r(localCtx.thefts.rng) mod globalCtx.numWorkers
@@ -128,18 +128,18 @@ proc nextVictim*(req: var StealRequest): WorkerID =
     elif localCtx.worker.isRightIdle:
       markIdle(req.victims, localCtx.worker.right)
 
-    assert not req.victims.isPotentialVictim(localCtx.worker.ID)
+    checkCondition: not req.victims.isPotentialVictim(localCtx.worker.ID)
     result = randomVictim(req.victims, req.thiefID)
 
   if result == -1:
     # Couldn't find a victim. Return the steal request to the thief
-    assert req.victims.isEmpty()
+    checkCondition: req.victims.isEmpty()
     result = req.thiefID
 
     # log("%d -{%d}-> %d after %d tries (%u ones)\n",
     #   ID, req.ID, victim, req, retry, req.victims.len
     # )
 
-  assert result in 0 ..< globalCtx.numWorkers
-  assert result != localCtx.worker.ID
-  assert req.retry in 0 .. MaxStealAttempts
+  postCondition: result in 0 ..< globalCtx.numWorkers
+  postCondition: result != localCtx.worker.ID
+  postCondition: req.retry in 0 .. MaxStealAttempts

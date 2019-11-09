@@ -93,16 +93,16 @@ type
 # ----------------------------------------------------------------------------------
 
 func left*(ID, maxID: WorkerID): WorkerID {.inline.} =
-  assert ID >= 0 and maxID >= 0
-  assert ID <= maxID
+  preCondition: ID >= 0 and maxID >= 0
+  preCondition: ID <= maxID
 
   result = 2*ID + 1
   if result > maxID:
     result = -1
 
 func right*(ID, maxID: WorkerID): WorkerID {.inline.} =
-  assert ID >= 0 and maxID >= 0
-  assert ID <= maxID
+  preCondition: ID >= 0 and maxID >= 0
+  preCondition: ID <= maxID
 
   result = 2*ID + 2
   if result > maxID:
@@ -125,9 +125,9 @@ func initialize*(w: var Worker, ID, maxID: WorkerID) =
 # ----------------------------------------------------------------------------------
 
 template inc*(counters: var Counters, name: untyped{ident}) =
-  when defined(PicassoMetrics):
+  metrics:
     counters.name += 1
 
 template dec*(counters: var Counters, name: untyped{ident}) =
-  when defined(PicassoMetrics):
+  metrics:
     counters.name -= 1

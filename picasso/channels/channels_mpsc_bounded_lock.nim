@@ -7,7 +7,8 @@
 
 import
   locks, atomics, typetraits,
-  ../static_config
+  ../static_config,
+  ../instrumentation/contracts
 
 type
   ChannelMpscBounded*[T] = object
@@ -73,7 +74,8 @@ func clear*(chan: var Channel) {.inline.} =
   ## We assume the buffer was already initialized.
   ##
   ## This is not threadsafe
-  assert not chan.buffer.isNil
+  preCondition(not chan.buffer.isNil)
+
   chan.front.store(0, moRelaxed)
   chan.back.store(0, moRelaxed)
 
@@ -94,8 +96,6 @@ proc initialize*[T](chan: var Channel[T], capacity: Positive) =
   # We don't need to zero-mem the padding
 
   static: assert T.supportsCopyMem
-  assert cast[ByteAddress](chan.back.addr) -
-    cast[ByteAddress](chan.front.addr) >= PicassoCacheLineSize
 
   chan.capacity = capacity
   chan.buffer = cast[ptr UncheckedArray[T]](createSharedU(T, capacity))
