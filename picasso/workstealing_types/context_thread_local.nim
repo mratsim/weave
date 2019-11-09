@@ -10,7 +10,8 @@ import
   ./prell_deques,
   ../static_config,
   ../memory/[object_pools, intrusive_stacks],
-  ../channels/channels_spsc_single
+  ../channels/channels_spsc_single,
+  ../instrumentation/contracts
 
 # Thread-local context
 # ----------------------------------------------------------------------------------

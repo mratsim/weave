@@ -50,7 +50,7 @@ func mapVictims(victims: VictimsBitset, mapping: ptr UncheckedArray[WorkerID], l
   while not victims.isEmpty():
     if victims.isPotentialVictim(0):
       # Test first bit
-      checkCondition: j < len
+      ascertain: j < len
       mapping[j] = i
       inc j
     inc i
@@ -110,7 +110,7 @@ proc nextVictim*(req: var StealRequest): WorkerID =
   if req.thiefID == localCtx.worker.ID:
     # Steal request initiated by the current worker.
     # Send it to a random one
-    checkCondition: req.retry == 0
+    ascertain: req.retry == 0
     result = rand_r(localCtx.thefts.rng) mod globalCtx.numWorkers
     while result == localCtx.worker.ID:
       result = rand_r(localCtx.thefts.rng) mod globalCtx.numWorkers
@@ -128,12 +128,12 @@ proc nextVictim*(req: var StealRequest): WorkerID =
     elif localCtx.worker.isRightIdle:
       markIdle(req.victims, localCtx.worker.right)
 
-    checkCondition: not req.victims.isPotentialVictim(localCtx.worker.ID)
+    ascertain: not req.victims.isPotentialVictim(localCtx.worker.ID)
     result = randomVictim(req.victims, req.thiefID)
 
   if result == -1:
     # Couldn't find a victim. Return the steal request to the thief
-    checkCondition: req.victims.isEmpty()
+    ascertain: req.victims.isEmpty()
     result = req.thiefID
 
     # log("%d -{%d}-> %d after %d tries (%u ones)\n",

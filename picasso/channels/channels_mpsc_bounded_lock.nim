@@ -125,7 +125,7 @@ template isFull(chan: var Channel): bool =
   ##   - a producer thread that writes to the "back" index
   ##     (send / enqueue / pushBack)
   var back: int
-  chan.isFull(back)
+  isFull(chan, back)
 
 func trySend*[T](chan: var Channel[T], src: sink T): bool =
   ## Try sending in the back slot of the channel

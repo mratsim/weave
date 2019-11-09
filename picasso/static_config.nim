@@ -56,3 +56,7 @@ const
 template metrics*(body: untyped) =
   when defined(PicassoMetrics):
     body
+
+template debugTermination*(body: untyped) =
+  when defined(PicassoDebugTermination):
+    body

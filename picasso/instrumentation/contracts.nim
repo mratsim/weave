@@ -41,20 +41,9 @@ proc inspectInfix(node: NimNode): NimNode =
 macro assertContract(
         checkName: static string,
         predicate: untyped) =
-  ## Available categories:
-  ## --objChecks:on|off	turn obj conversion checks on|off
-  ## --fieldChecks:on|off	turn case variant field checks on|off
-  ## --rangeChecks:on|off	turn range checks on|off
-  ## --boundChecks:on|off	turn bound checks on|off
-  ## --overflowChecks:on|off	turn int over-/underflow checks on|off
-  ## --floatChecks:on|off	turn all floating point (NaN/Inf) checks on|off
-  ## --nanChecks:on|off	turn NaN checks on|off
-  ## --infChecks:on|off	turn Inf checks on|off
-  ## --nilChecks:on|off	turn nil checks on|off
-  ## --refChecks:on|off	turn ref checks on|off (only for --newruntime)
   let lineinfo = lineinfoObj(predicate)
   let file = extractFilename(lineinfo.filename)
-  let debug = "\n    Contract violated for " & prepost & " at " & file & ":" & $lineinfo.line &
+  let debug = "\n    Contract violated for " & checkName & " at " & file & ":" & $lineinfo.line &
               "\n        " & $predicate.toStrLit &
               "\n    The following values are contrary to expectations:" &
               "\n        "
@@ -67,6 +56,8 @@ macro assertContract(
       if unlikely(not(`predicate`)):
         raise newException(AssertionError, `debug` & `values`)
 
+# A way way to get the caller function would be nice.
+
 template preCondition*(require: untyped) =
   ## Optional runtime check before returning from a function
   assertContract("pre-condition", require)
@@ -75,7 +66,7 @@ template postCondition*(ensure: untyped) =
   ## Optional runtime check at the start of a function
   assertContract("post-condition", ensure)
 
-template checkCondition*(check: untyped) =
+template ascertain*(check: untyped) =
   ## Optional runtime check in the middle of processing
   assertContract("transient condition", check)
 

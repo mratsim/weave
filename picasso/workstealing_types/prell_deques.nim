@@ -203,7 +203,7 @@ func steal*[T](dq: var PrellDeque[T]): T =
 
   if dq.tail.prev.isNil:
     # Stealing last task of the deque
-    transientCondition: dq.head == result
+    ascertain: dq.head == result
     dq.head = dq.tail # isEmpty() condition
   else:
     dq.tail.prev.next = dq.tail # last task points to dummy
@@ -238,7 +238,7 @@ template multistealImpl[T](
 
   stolenHead = dq.tail # dummy node
   preCondition: stolenHead.fn == cast[proc (param: pointer){.nimcall.}](0xCAFE)
-  
+
   tailAssignStmt   # <-- 2nd statement "tail = dummy.prev" injected here
 
   # Walk backwards from the dummy node
@@ -250,7 +250,7 @@ template multistealImpl[T](
   stolenHead.prev = nil             # Detach the stolenHead head from the deque
   if dq.tail.prev.isNil:
     # Stealing the last task of the deque
-    checkCondition: dq.head == stolenHead
+    ascertain: dq.head == stolenHead
     dq.head = dq.tail           # isEmpty() condition
   else:
     dq.tail.prev.next = dq.tail # last task points to dummy
