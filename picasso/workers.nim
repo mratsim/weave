@@ -16,7 +16,7 @@ import
 # Thief
 # ----------------------------------------------------------------------------------
 
-proc init(req: var StealRequest, state: static bool) {.inline.} =
+proc init(req: var StealRequest) {.inline.} =
   ## Initialize a steal request
   ## This does not initialize the Thief state
   req.taskChannel = localCtx.taskCache.pop()
@@ -24,7 +24,6 @@ proc init(req: var StealRequest, state: static bool) {.inline.} =
   req.retry = 0
   req.victims.init(globalCtx.numWorkers)
   req.victims.clear(localCtx.worker.ID)
-  req.state = state
   StealAdaptative:
     req.stealHalf: localCtx.thefts.stealHalf
 
@@ -68,7 +67,7 @@ proc updateStealStrategy() =
     localCtx.thefts.recentTasks = 0
     localCtx.thefts.recentSteals = 0
 
-proc trySteal(outOfTasks: static bool) =
+proc trySteal(outOfTasks: bool) =
   ## Try to send a steal request
   ## Every worker can have at most MaxSteal pending steal requests.
   ## A steal request with outOfTasks == false indicates that the
@@ -76,14 +75,18 @@ proc trySteal(outOfTasks: static bool) =
   ## A steal request with outOfTasks == true indicates that
   ## the requesting worker has run out of tasks.
 
-  # TODO: For code size and improved cache usage
-  #       don't use a static bool?
+  # For code size and improved cache usage
+  # we don't use a static bool even though we could.
   profile(send_recv_req):
     if localCtx.thefts.requests < MaxStealAttempts:
       StealAdaptative:
         updateStealStrategy()
       var req: StealRequest
-      req.init(when outOfTasks: Stealing else: Working)
+      req.init()
+      if outOfTasks:
+        req.state == Stealing
+      else:
+        req.state == Working
 
       # TODO LastVictim/LastThief
       req.nextVictim().sendSteal(req)
