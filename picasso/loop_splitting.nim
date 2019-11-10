@@ -34,7 +34,7 @@ func splitGuided(task: Task): int {.inline.} =
   if itersLeft <= task.chunks:
     return task.splitHalf()
 
-  # log("Worker %2d: sending %ld iterations\n", myID(), task.chunks)
+  debug: log("Worker %2d: sending %ld iterations\n", myID(), task.chunks)
   return task.stop - task.chunks
 
 func splitAdaptative(task: Task): int {.inline.} =
@@ -42,7 +42,7 @@ func splitAdaptative(task: Task): int {.inline.} =
   let itersLeft = abs(task.stop - task.cur)
   preCondition: itersLeft > task.splitThreshold
 
-  # log("Worker %2d: %ld of %ld iterations left\n", ID, iters_left, iters_total)
+  debug: log("Worker %2d: %ld of %ld iterations left\n", ID, iters_left, iters_total)
 
   # We estimate the number of idle workers by counting the number of theft attempts
   # Notes:
@@ -50,8 +50,8 @@ func splitAdaptative(task: Task): int {.inline.} =
   #     as more requests may pile up concurrently.
   #   - We already read 1 steal request before trying to split so need to add it back.
   #   - Workers may send steal requests before actually running out-of-work
-  let approxNumThieves = 1 + myIncomingThieves
-  # log("Worker %2d: has %ld steal requests\n", ID, approxNumThieves)
+  let approxNumThieves = 1 + myThieves
+  debug: log("Worker %2d: has %ld steal requests\n", ID, approxNumThieves)
 
   # Send a chunk of work to all
   let chunk = max(itersLeft div (approxNumThieves + 1), 1)
@@ -59,7 +59,7 @@ func splitAdaptative(task: Task): int {.inline.} =
   postCondition:
     itersLeft > chunk
 
-  # log("Worker %2d: sending %ld iterations\n", ID, chunk)
+  debug: log("Worker %2d: sending %ld iterations\n", ID, chunk)
   return task.stop - chunk
 
 template dispatchSplit(task: Task): int =

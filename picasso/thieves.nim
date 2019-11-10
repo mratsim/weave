@@ -98,5 +98,4 @@ proc forget(req: sink StealRequest) =
   preCondition: myThefts().requested > 1
 
   myThefts().requested -= 1
-  # TODO: Recycle the channel for a future steal request
-  # localCtx.taskChannelPool.recycle(req.taskChannel)
+  myTodoBoxes().recycle(req.thiefAddr)

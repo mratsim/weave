@@ -14,43 +14,8 @@ import
   ./static_config,
   ./thieves
 
-# Worker
+# Worker - Tasks handling
 # ----------------------------------------------------------------------------------
-
-proc recv(req: var StealRequest): bool {.inline.} =
-  ## Check the worker theft channel
-  ## for thieves.
-  ##
-  ## Updates req and returns true if a StealRequest was found
-
-  profile(send_recv_req):
-    result = myIncomingThieves().tryRecv(req)
-
-    # We treat specially the case where children fail to steal
-    # and defer to the current worker (their parent)
-    while result and req.state == Waiting:
-      debugTermination:
-        log("Worker %d receives STATE_FAILED from worker %d\n",
-            myID(), req.thiefID)
-
-      # Only children can forward a request where they sleep
-      ascertain: req.thiefID == localCtx.worker.left or
-                 req.thiefID == localCtx.worker.right
-      if req.thiefID == localCtx.worker.left:
-        ascertain: not localCtx.worker.isLeftWaiting
-        localCtx.worker.isLeftWaiting = true
-      else:
-        ascertain: not localCtx.worker.isRightWaiting
-        localCtx.worker.isRightWaiting = true
-      # The child is now passive (work-sharing/sender-initiated/push)
-      # instead of actively stealing (receiver-initiated/pull)
-      # We keep its steal request for when we have more work.
-      # while it backs off to save CPU
-      localCtx.worker.workSharingRequests.enqueue(req)
-      # Check the next steal request
-      result = myIncomingThieves().tryRecv(req)
-
-  postCondition: not result or (result and req.state != Waiting)
 
 proc restartWork() =
   preCondition: myThefts().requested == PicassoMaxStealsOutstanding
@@ -61,7 +26,7 @@ proc restartWork() =
   # requested = requested - (MaxSteal-1) =
   #           = MaxSteal - MaxSteal + 1 = 1
 
-  myThefts().requested = 1 # The current steal request is nut fully fulfilled yet
+  myThefts().requested = 1 # The current steal request is not fully fulfilled yet
   localCtx.worker.isWaiting = false
   myThefts().dropped = 0
 
@@ -74,13 +39,11 @@ proc recv(task: var Task, isOutOfTasks: bool): bool =
   # increase the code size.
   profile(send_recv_task):
     for i in 0 ..< PicassoMaxStealsOutstanding:
-      result = myTodoBoxes.access(i)
-                          .tryRecv(task)
+      result = myTodoBoxes().access(i)
+                            .tryRecv(task)
       if result:
-        # TODO: Recycle the channel for a future steal request
-        # localCtx.taskChannelPool.recycle(task)
-        debug:
-          log("Worker %d received a task with function address %d\n", myID(), task.fn)
+        myTodoBoxes().nowAvailable(i)
+        debug: log("Worker %d received a task with function address %d\n", myID(), task.fn)
         break
 
   if not result:

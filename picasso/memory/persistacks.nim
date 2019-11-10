@@ -93,6 +93,14 @@ func recycle*[N: static int8, T](ps: var Persistack[N, T], reference: sink(ptr T
   `=sink`(ps.stack[ps.len], reference)
   ps.len += 1
 
+func nowAvailable*[N: static int8, T](ps: var Persistack[N, T], index: SomeInteger) {.inline.} =
+  ## Object at `index` is available again (but was not returned directly)
+  preCondition:
+    ps.len < N
+
+  ps.stack[ps.len] = ps.rawMem[index].addr
+  ps.len += 1
+
 func access*[N: static int8, T](ps: Persistack[N, T], index: SomeInteger): var T {.inline.} =
   ## Access the object at `index`.
   preCondition:

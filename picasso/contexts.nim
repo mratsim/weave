@@ -24,7 +24,7 @@ var localCtx* {.threadvar.}: TLContext
 template myTodoBoxes*: Persistack[PicassoMaxStealsOutstanding, ChannelSpscSingle[Task]] =
   globalCtx.com.tasks[localCtx.worker.ID]
 
-template myIncomingThieves*: ChannelMpscBounded[StealRequest] =
+template myThieves*: ChannelMpscBounded[StealRequest] =
   globalCtx.com.thefts[localCtx.worker.ID]
 
 template workforce*: int32 =

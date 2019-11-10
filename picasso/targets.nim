@@ -9,7 +9,8 @@ import
   ./datatypes/[victims_bitsets, sync_types, context_thread_local],
   ./contexts,
   ./primitives/c,
-  ./instrumentation/contracts
+  ./instrumentation/contracts,
+  ./static_config
 
 # Victim selection
 # ----------------------------------------------------------------------------------
@@ -101,7 +102,7 @@ proc randomVictim(victims: VictimsBitset, workerID: WorkerID): WorkerID =
 
   let idx = rand_r(myThefts().rng) mod numVictims
   result = potential_victims[idx]
-  # log("Worker %d: rng %d, vict: %d\n", myID(), myThefts().seed, result)
+  debug: log("Worker %d: rng %d, vict: %d\n", myID(), myThefts().seed, result)
 
   postCondition result in victims
   postCondition result in 0 ..< workforce()
@@ -142,9 +143,10 @@ proc nextVictim*(req: var StealRequest): WorkerID =
     ascertain: req.victims.isEmpty()
     result = req.thiefID
 
-    # log("%d -{%d}-> %d after %d tries (%u ones)\n",
-    #   ID, req.ID, victim, req, retry, req.victims.len
-    # )
+    debug:
+      log("%d -{%d}-> %d after %d tries (%u ones)\n",
+        ID, req.ID, victim, req, retry, req.victims.len
+      )
 
   postCondition: result in 0 ..< workforce()
   postCondition: result != myID()
