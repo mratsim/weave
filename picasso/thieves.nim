@@ -7,10 +7,10 @@
 
 import
   ./datatypes/[victims_bitsets, sync_types, context_thread_local, bounded_queues],
-  ./runtime,
+  ./runtime, ./victim_selection,
   ./instrumentation/[contracts, profilers, loggers],
   ./channels/channels_mpsc_bounded_lock,
-  ./memory/intrusive_stacks,
+  ./memory/[intrusive_stacks, object_pools],
   ./static_config
 
 # Thief
@@ -19,13 +19,13 @@ import
 proc init(req: var StealRequest) {.inline.} =
   ## Initialize a steal request
   ## This does not initialize the Thief state
-  req.taskChannel = localCtx.taskCache.pop()
+  req.taskChannel = localCtx.taskChannelPool.get()
   req.thiefID = localCtx.worker.ID
   req.retry = 0
   req.victims.init(globalCtx.numWorkers)
   req.victims.clear(localCtx.worker.ID)
   StealAdaptative:
-    req.stealHalf: localCtx.thefts.stealHalf
+    req.stealHalf = localCtx.thefts.stealHalf
 
 proc send(victimID: WorkerID, req: sink StealRequest) {.inline.}=
   ## Send a steal or work sharing request
@@ -69,26 +69,34 @@ proc updateStealStrategy() =
     localCtx.thefts.recentTasks = 0
     localCtx.thefts.recentSteals = 0
 
-proc trySteal(outOfTasks: bool) =
+proc trySteal*(isOutOfTasks: bool) =
   ## Try to send a steal request
   ## Every worker can have at most MaxSteal pending steal requests.
-  ## A steal request with outOfTasks == false indicates that the
+  ## A steal request with isOutOfTasks == false indicates that the
   ## requesting worker is still busy working on some tasks.
-  ## A steal request with outOfTasks == true indicates that
+  ## A steal request with isOutOfTasks == true indicates that
   ## the requesting worker has run out of tasks.
 
   # For code size and improved cache usage
   # we don't use a static bool even though we could.
   profile(send_recv_req):
-    if localCtx.thefts.requests < MaxStealAttempts:
+    if localCtx.thefts.requested < MaxStealAttempts:
       StealAdaptative:
         updateStealStrategy()
       var req: StealRequest
       req.init()
-      if outOfTasks:
-        req.state == Stealing
+      if isOutOfTasks:
+        req.state = Stealing
       else:
-        req.state == Working
+        req.state = Working
 
       # TODO LastVictim/LastThief
       req.nextVictim().sendSteal(req)
+
+proc forget(req: sink StealRequest) =
+  preCondition: req.thiefID == localCtx.worker.ID
+  preCondition: localCtx.thefts.requested > 1
+
+  localCtx.thefts.requested -= 1
+  # TODO: Recycle the channel for a future steal request
+  # localCtx.taskChannelPool.recycle(req.taskChannel)

@@ -40,6 +40,7 @@ func rightmostVictim(victims: var VictimsBitset, workerID: WorkerID): WorkerID =
       ((result in 0 ..< globalCtx.numWorkers) and
         result != workerID) or
         # No victim found
+        result == -1
 
 func mapVictims(victims: VictimsBitset, mapping: ptr UncheckedArray[WorkerID], len: int32) =
   ## Update mapping with a mapping
@@ -48,7 +49,7 @@ func mapVictims(victims: VictimsBitset, mapping: ptr UncheckedArray[WorkerID], l
   var victims = victims
   var i, j = 0'i32
   while not victims.isEmpty():
-    if victims.isPotentialVictim(0):
+    if 0 in victims:
       # Test first bit
       ascertain: j < len
       mapping[j] = i
@@ -126,11 +127,11 @@ proc nextVictim*(req: var StealRequest): WorkerID =
   else:
     # Forward steal request to a different worker if possible
     # Also pass along information on the workers we manage
-    if localCtx.worker.isLeftIdle and localCtx.worker.isRightIdle:
+    if localCtx.worker.isLeftWaiting and localCtx.worker.isRightWaiting:
       markIdle(req.victims, localCtx.worker.ID)
-    elif localCtx.worker.isLeftIdle:
+    elif localCtx.worker.isLeftWaiting:
       markIdle(req.victims, localCtx.worker.left)
-    elif localCtx.worker.isRightIdle:
+    elif localCtx.worker.isRightWaiting:
       markIdle(req.victims, localCtx.worker.right)
 
     ascertain: localCtx.worker.ID notin req.victims

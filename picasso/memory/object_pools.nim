@@ -19,7 +19,7 @@ type
     ## An object pool of object T and size N
     ## The object pool is thread-local and bounded
     stack: array[N, Pooled[T]]
-    remaining: int # stack pointer
+    remaining*: int # stack pointer
     rawMem: ptr array[N, T]
 
 # Object Pool
@@ -62,24 +62,27 @@ func get*[N: static int, T](pool: var ObjectPool[N, T]): Pooled[T] {.inline.} =
   pool.remaining -= 1
   result = move pool.stack[pool.remaining]
 
-template associate*[N: static int, T](pool: var ObjectPool[N, T]): untyped =
-  ## Bind the object type T to the input pool in the current scope
-  proc getPool(ObjT: type T): var ObjectPool[N, T] {.inline.} =
-    ## Get the thread-local pool that manages ObjectType (size: T)
-    ##
-    ## It is intended that there can only be one object pool per type per scope
-    pool
+# template associate*[N: static int, T](pool: var ObjectPool[N, T]): untyped =
+#   ## Bind the object type T to the input pool in the current scope
+#   proc getPool(ObjT: type T): var ObjectPool[N, T] {.inline.} =
+#     ## Get the thread-local pool that manages ObjectType (size: T)
+#     ##
+#     ## It is intended that there can only be one object pool per type per scope
+#     pool
 
 # Pooled object
 # ------------------------------------------------------------------------------
+# We don't provide an automatic destructor for pooled object
+# or maybe we nseparate automatic and manua)
 
 proc `=`[T](dest: var Pooled[T], source: Pooled[T]) {.error: "A pooled object cannot be copied".}
-proc `=destroy`[T](x: var Pooled[T]) =
-  mixin getPool
-  when not compiles(T.getPool()):
-    {.fatal: "The object pool for type \"" & $T & "\" was not associated.".}
 
-  T.getPool().recycle(x)
+# proc `=destroy`[T](x: var Pooled[T]) =
+#   mixin getPool
+#   when not compiles(T.getPool()):
+#     {.fatal: "The object pool for type \"" & $T & "\" was not associated.".}
+#
+#   T.getPool().recycle(x)
 
 # Sanity checks
 # ------------------------------------------------------------------------------
@@ -89,12 +92,13 @@ when isMainModule:
     x: int
 
   var pool{.threadvar.}: ObjectPool[10, Foo]
-  pool.associate()
+  # pool.associate()
 
   pool.initialize()
 
   proc foo() =
     let p = pool.get()
+    pool.recycle(p)
 
   proc main() =
     for x in 0 ..< 20:

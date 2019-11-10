@@ -87,7 +87,7 @@ func trySendImpl(chan: var ChannelRaw, src: sink pointer): bool {.inline, nodest
 # Public well-typed implementation
 # ------------------------------------------------------------------------------
 
-func initialize*[T](chan: var Channel[T]) {.inline.} =
+func initialize*[T](chan: var ChannelSpscSingle[T]) {.inline.} =
   ## Creates a new Shared Memory Single Producer Single Consumer Bounded channel
   ## Channels should be allocated on the shared memory heap
   ##
@@ -104,13 +104,13 @@ func initialize*[T](chan: var Channel[T]) {.inline.} =
   # We don't need to zero-mem the padding
   clearImpl(chan)
 
-func clear*[T](chan: var Channel[T]) {.inline.} =
+func clear*[T](chan: var ChannelSpscSingle[T]) {.inline.} =
   ## Reinitialize the data in the channel
   ##
   ## This is not thread-safe.
   clearImpl(chan)
 
-func tryRecv*[T](chan: var Channel[T], dst: var T): bool {.inline.} =
+func tryRecv*[T](chan: var ChannelSpscSingle[T], dst: var T): bool {.inline.} =
   ## Try receiving the item buffered in the channel
   ## Returns true if successful (channel was not empty)
   ##
@@ -118,7 +118,7 @@ func tryRecv*[T](chan: var Channel[T], dst: var T): bool {.inline.} =
   # Nim implicit conversion to pointer is not mutable
   chan.tryRecvImpl(cast[var pointer](dst.addr))
 
-func trySend*[T](chan: var Channel[T], src: sink T): bool {.inline.} =
+func trySend*[T](chan: var ChannelSpscSingle[T], src: sink T): bool {.inline.} =
   ## Try sending an item into the channel
   ## Reurns true if successful (channel was empty)
   ##

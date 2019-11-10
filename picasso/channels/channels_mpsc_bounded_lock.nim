@@ -69,7 +69,7 @@ proc delete[T](chan: var Channel[T]) {.inline.} =
   if not chan.buffer.isNil:
     freeShared(chan.buffer)
 
-func clear*(chan: var Channel) {.inline.} =
+func clear*(chan: var ChannelMpscBounded) {.inline.} =
   ## Reinitialize the data in the channel
   ## We assume the buffer was already initialized.
   ##
@@ -79,7 +79,7 @@ func clear*(chan: var Channel) {.inline.} =
   chan.front.store(0, moRelaxed)
   chan.back.store(0, moRelaxed)
 
-proc initialize*[T](chan: var Channel[T], capacity: Positive) {.inline.} =
+proc initialize*[T](chan: var ChannelMpscBounded[T], capacity: Positive) {.inline.} =
   ## Creates a new Shared Memory Multi-Producer Producer Single Consumer Bounded channel
   ## Channels should be allocated on the shared memory heap
   ##
@@ -127,7 +127,7 @@ template isFull(chan: var Channel): bool =
   var back: int
   isFull(chan, back)
 
-func trySend*[T](chan: var Channel[T], src: sink T): bool =
+func trySend*[T](chan: var ChannelMpscBounded[T], src: sink T): bool =
   ## Try sending in the back slot of the channel
   ## Returns true if successful
   ## Returns false if the channel was full
@@ -161,7 +161,7 @@ func trySend*[T](chan: var Channel[T], src: sink T): bool =
   release(chan.backLock)
   return true
 
-func tryRecv*[T](chan: var Channel[T], dst: var T): bool =
+func tryRecv*[T](chan: var ChannelMpscBounded[T], dst: var T): bool =
   ## Try receiving the next item buffered in the channel
   ## Returns true if successful (channel was not empty)
   ##
@@ -181,7 +181,7 @@ func tryRecv*[T](chan: var Channel[T], dst: var T): bool =
   chan.front.store(nextRead, moRelease)
   return true
 
-func peek*(chan: Channel): int {.inline.} =
+func peek*(chan: ChannelMpscBounded): int {.inline.} =
   ## Estimates the number of items pending in the channel
   ## - If called by the consumer the true number might be more
   ##   due to producers adding items concurrently.

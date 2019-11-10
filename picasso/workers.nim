@@ -9,8 +9,8 @@ import
   ./datatypes/[victims_bitsets, sync_types, context_thread_local, bounded_queues],
   ./runtime,
   ./instrumentation/[contracts, profilers, loggers],
-  ./channels/channels_mpsc_bounded_lock,
-  ./memory/[intrusive_stacks, object_pool],
+  ./channels/[channels_mpsc_bounded_lock, channels_spsc_single],
+  ./memory/[intrusive_stacks, object_pools],
   ./static_config,
   ./thieves
 
@@ -37,11 +37,11 @@ proc recv(req: var StealRequest): bool {.inline.} =
       ascertain: req.thiefID == localCtx.worker.left or
                  req.thiefID == localCtx.worker.right
       if req.thiefID == localCtx.worker.left:
-        ascertain: not localCtx.worker.isLeftIdle
-        localCtx.worker.isLeftIdle = true
+        ascertain: not localCtx.worker.isLeftWaiting
+        localCtx.worker.isLeftWaiting = true
       else:
-        ascertain: not localCtx.worker.isRightIdle
-        localCtx.worker.isRightIdle = true
+        ascertain: not localCtx.worker.isRightWaiting
+        localCtx.worker.isRightWaiting = true
       # The child is now passive (work-sharing/sender-initiated/push)
       # instead of actively stealing (receiver-initiated/pull)
       # We keep its steal request for when we have more work.
@@ -51,3 +51,59 @@ proc recv(req: var StealRequest): bool {.inline.} =
       result = globalCtx.com.thievingChannels[localCtx.worker.ID].tryRecv(req)
 
   postCondition: not result or (result and req.state != Waiting)
+
+proc restartWork() =
+  preCondition: localCtx.thefts.requested == PicassoMaxSteal
+  preCondition: localCtx.taskChannelPool.remaining == PicassoMaxSteal
+
+  # Adjust value of requested by MaxSteal-1, the number of steal
+  # requests that have been dropped:
+  # requested = requested - (MaxSteal-1) =
+  #           = MaxSteal - MaxSteal + 1 = 1
+
+  localCtx.thefts.requested = 1 # The current steal request is nut fully fulfilled yet
+  localCtx.worker.isWaiting = false
+  localCtx.thefts.dropped = 0
+
+proc recv(task: var Task, isOutOfTasks: bool): bool =
+  ## Check the worker task channel for a task successfully stolen
+  ##
+  ## Updates task and returns true if a task was found
+
+  # Note we could use a static bool for isOutOfTasks but this
+  # increase the code size.
+  profile(send_recv_task):
+    for i in 0 ..< PicassoMaxSteal:
+      result = globalCtx.com
+                        .tasksChannels[localCtx.worker.ID][i]
+                        .tryRecv(task)
+      if result:
+        # TODO: Recycle the channel for a future steal request
+        # localCtx.taskChannelPool.recycle(task)
+        debug:
+          log("Worker %d received a task with function address %d\n", localCtx.worker.ID, task.fn)
+        break
+
+  if not result:
+    trySteal(isOutOfTasks)
+  else:
+    when PicassoMaxSteal == 1:
+      if localCtx.worker.isWaiting:
+        restartWork()
+    else: # PicassoMaxSteal > 1
+      if localCtx.worker.isWaiting:
+        restartWork()
+      else:
+        # If we have dropped one or more steal requests before receiving
+        # tasks, adjust requested to make sure that we can send MaxSteal
+        # steal requests again
+        if localCtx.thefts.dropped > 0:
+          ascertain: localCtx.thefts.requested > localCtx.thefts.dropped
+          localCtx.thefts.requested -= localCtx.thefts.dropped
+          localCtx.thefts.dropped = 0
+
+    # Steal request fulfilled
+    localCtx.thefts.requested -= 1
+
+    postCondition: localCtx.thefts.requested in 0 ..< PicassoMaxSteal
+    postCondition: localCtx.thefts.dropped == 0

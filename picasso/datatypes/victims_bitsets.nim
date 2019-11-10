@@ -19,10 +19,10 @@ type
 
 # We don't use WorkerID to avoid recursive imports
 
-template bit(n: SomeInteger): SomeInteger =
-  1 shl n
+template bit(n: SomeInteger): uint32 =
+  1'u32 shl n
 
-func init(v: var VictimsBitset, numVictims: SomeInteger) {.inline.} =
+func init*(v: var VictimsBitset, numVictims: SomeInteger) {.inline.} =
   let mask = if numVictims >= 32: high(uint32)
              else: bit(numVictims) - 1
   v.data = high(uint32) and mask

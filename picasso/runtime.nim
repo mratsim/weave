@@ -6,7 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./datatypes/[context_global, context_thread_local]
+  ./datatypes/[context_global, context_thread_local],
+  ./memory/object_pools
 
 # Contexts
 # ----------------------------------------------------------------------------------

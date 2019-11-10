@@ -42,8 +42,9 @@ type
     ID*: WorkerID
     left*: WorkerID
     right*: WorkerID
-    isLeftIdle*: bool
-    isRightIdle*: bool
+    isLeftWaiting*: bool
+    isRightWaiting*: bool
+    isWaiting*: bool
     parent*: WorkerID
     workSharingRequests*: BoundedQueue[2, StealRequest]
     # deque*: PrellDeque[Task] # Cannot instantiate `=destroy`
@@ -120,9 +121,9 @@ func initialize*(w: var Worker, ID, maxID: WorkerID) {.inline.} =
   w.parent = parent(ID)
 
   if w.left == -1:
-    w.isLeftIdle = true
+    w.isLeftWaiting = true
   if w.right == -1:
-    w.isRightIdle = true
+    w.isRightWaiting = true
 
 # Counters
 # ----------------------------------------------------------------------------------

@@ -9,7 +9,8 @@ import
   ./helpers, ./victims_bitsets,
   ../static_config,
   ../channels/channels_spsc_single,
-  ../instrumentation/contracts
+  ../instrumentation/contracts,
+  ../memory/object_pools
 
 # Inter-thread synchronization types
 # ----------------------------------------------------------------------------------
@@ -70,13 +71,13 @@ type
   # Padding shouldn't be needed as steal requests are used as value types
   # and deep-copied between threads
   StealRequest* = object
-    taskChannel*: ptr ChannelSpscSingle[Task] # Channel for sending tasks back to the requester
+    taskChannel*: Pooled[ChannelSpscSingle[Task]] # Channel for sending tasks back to the requester
     thiefID*: WorkerID
-    retry*: int32                             # 0 <= retry <= num_workers
-    victims*: VictimsBitset                   # bitfield of potential victims
-    state*: WorkerState                       # State of the thief
+    retry*: int32                                 # 0 <= retry <= num_workers
+    victims*: VictimsBitset                       # bitfield of potential victims
+    state*: WorkerState                           # State of the thief
     when StealStrategy == StealKind.adaptative:
-      stealHalf*: bool                        # Thief wants half the tasks
+      stealHalf*: bool                            # Thief wants half the tasks
 
 static: assert sizeof(deref(Task)) == 192,
           "Task is of size " & $sizeof(deref(Task)) &
