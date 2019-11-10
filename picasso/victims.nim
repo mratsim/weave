@@ -11,7 +11,7 @@ import
   ./instrumentation/[contracts, profilers],
   ./channels/[channels_mpsc_bounded_lock, channels_spsc_single],
   ./memory/persistacks,
-  ./static_config,
+  ./config,
   ./thieves
 
 # Victims - Steal requests handling
@@ -37,11 +37,11 @@ proc recv(req: var StealRequest): bool {.inline.} =
       ascertain: req.thiefID == localCtx.worker.left or
                  req.thiefID == localCtx.worker.right
       if req.thiefID == localCtx.worker.left:
-        ascertain: not localCtx.worker.isLeftWaiting
-        localCtx.worker.isLeftWaiting = true
+        ascertain: not localCtx.worker.leftIsWaiting
+        localCtx.worker.leftIsWaiting = true
       else:
-        ascertain: not localCtx.worker.isRightWaiting
-        localCtx.worker.isRightWaiting = true
+        ascertain: not localCtx.worker.rightIsWaiting
+        localCtx.worker.rightIsWaiting = true
       # The child is now passive (work-sharing/sender-initiated/push)
       # instead of actively stealing (receiver-initiated/pull)
       # We keep its steal request for when we have more work.
@@ -51,3 +51,5 @@ proc recv(req: var StealRequest): bool {.inline.} =
       result = myThieves().tryRecv(req)
 
   postCondition: not result or (result and req.state != Waiting)
+
+proc decline(req)

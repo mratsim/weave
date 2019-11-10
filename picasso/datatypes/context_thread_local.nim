@@ -7,7 +7,7 @@
 
 import
   ./bounded_queues, ./sync_types,
-  ../static_config,
+  ../config,
   ../memory/intrusive_stacks,
   ../instrumentation/contracts
 
@@ -40,8 +40,8 @@ type
     ID*: WorkerID
     left*: WorkerID
     right*: WorkerID
-    isLeftWaiting*: bool
-    isRightWaiting*: bool
+    leftIsWaiting*: bool
+    rightIsWaiting*: bool
     isWaiting*: bool
     parent*: WorkerID
     workSharingRequests*: BoundedQueue[2, StealRequest]
@@ -72,6 +72,8 @@ type
     thefts*: Thefts
     taskCache*: IntrusiveStack[Task]
     counters*: Counters
+    # Master thread only - Whole runtime is quiescent
+    runtimeIsQuiescent*: bool
 
   Counters* = object
     tasksExec: int
@@ -118,9 +120,9 @@ func initialize*(w: var Worker, ID, maxID: WorkerID) {.inline.} =
   w.parent = parent(ID)
 
   if w.left == -1:
-    w.isLeftWaiting = true
+    w.leftIsWaiting = true
   if w.right == -1:
-    w.isRightWaiting = true
+    w.rightIsWaiting = true
 
 # Counters
 # ----------------------------------------------------------------------------------

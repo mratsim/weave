@@ -7,11 +7,11 @@
 
 import
   ./datatypes/[victims_bitsets, sync_types, context_thread_local],
-  ./contexts, ./victim_selection,
+  ./contexts, ./targets,
   ./instrumentation/[contracts, profilers],
   ./channels/channels_mpsc_bounded_lock,
   ./memory/persistacks,
-  ./static_config
+  ./config
 
 # Thief
 # ----------------------------------------------------------------------------------

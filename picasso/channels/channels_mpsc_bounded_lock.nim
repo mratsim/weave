@@ -7,7 +7,7 @@
 
 import
   locks, atomics, typetraits,
-  ../static_config,
+  ../config,
   ../instrumentation/contracts
 
 type

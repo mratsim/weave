@@ -7,7 +7,7 @@
 
 import
   ./helpers, ./victims_bitsets,
-  ../static_config,
+  ../config,
   ../channels/channels_spsc_single,
   ../instrumentation/contracts
 

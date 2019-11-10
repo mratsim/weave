@@ -9,7 +9,7 @@ import
   ../channels/channels_mpsc_bounded_lock,
   ../channels/channels_spsc_single,
   ../memory/persistacks,
-  ../static_config,
+  ../config,
   ./sync_types
 
 # Global / inter-thread communication channels

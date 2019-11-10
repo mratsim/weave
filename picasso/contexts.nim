@@ -9,7 +9,7 @@ import
   ./datatypes/[context_global, context_thread_local, sync_types],
   ./channels/[channels_spsc_single, channels_mpsc_bounded_lock],
   ./memory/persistacks,
-  ./static_config
+  ./config
 
 # Contexts
 # ----------------------------------------------------------------------------------
@@ -17,6 +17,8 @@ import
 var globalCtx*: GlobalContext
 var localCtx* {.threadvar.}: TLContext
   # TODO: tlsEmulation off by default on OSX and on by default on iOS?
+
+const MasterID*: WorkerID = 0
 
 # Aliases
 # ----------------------------------------------------------------------------------
@@ -39,14 +41,21 @@ template myThefts*: Thefts =
 template myMetrics*: Counters =
   localCtx.counters
 
-# Dynamic defines
+# Scopes
 # ----------------------------------------------------------------------------------
 
-when not defined(PicassoMaxStealAttempts):
-  template PicassoMaxStealAttempts*: int32 = workforce() - 1
-    ## Number of steal attempts per steal requests
-    ## before a steal request is sent back to the thief
-    ## Default value is the number of workers minus one
-    ##
-    ## The global number of steal requests outstanding
-    ## is PicassoMaxStealsOutstanding * globalCtx.numWorkers
+template metrics*(body: untyped) =
+  when defined(PicassoMetrics):
+    body
+
+template debugTermination*(body: untyped) =
+  when defined(PicassoDebugTermination) or defined(PicassoDebug):
+    body
+
+template debug*(body: untyped) =
+  when defined(PicassoDebug):
+    body
+
+template StealAdaptative*(body: untyped) =
+  when StealStrategy == StealKind.adaptative:
+    body

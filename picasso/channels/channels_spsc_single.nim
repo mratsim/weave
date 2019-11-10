@@ -7,7 +7,7 @@
 
 import
   std/atomics,
-  ../static_config,
+  ../config,
   ../instrumentation/contracts
 
 

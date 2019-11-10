@@ -11,7 +11,7 @@ import
   ./instrumentation/[contracts, profilers],
   ./channels/[channels_mpsc_bounded_lock, channels_spsc_single],
   ./memory/persistacks,
-  ./static_config,
+  ./config,
   ./thieves
 
 # Worker - Tasks handling

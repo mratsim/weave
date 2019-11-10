@@ -61,18 +61,14 @@ const
   StealStrategy* = parseEnum[StealKind](PicassoSteal)
   SplitStrategy* = parseEnum[SplitKind](PicassoSplit)
 
-template metrics*(body: untyped) =
-  when defined(PicassoMetrics):
-    body
+# Dynamic defines
+# ----------------------------------------------------------------------------------
 
-template debugTermination*(body: untyped) =
-  when defined(PicassoDebugTermination) or defined(PicassoDebug):
-    body
-
-template debug*(body: untyped) =
-  when defined(PicassoDebug):
-    body
-
-template StealAdaptative*(body: untyped) =
-  when StealStrategy == StealKind.adaptative:
-    body
+when not defined(PicassoMaxStealAttempts):
+  template PicassoMaxStealAttempts*: int32 = workforce() - 1
+    ## Number of steal attempts per steal requests
+    ## before a steal request is sent back to the thief
+    ## Default value is the number of workers minus one
+    ##
+    ## The global number of steal requests outstanding
+    ## is PicassoMaxStealsOutstanding * globalCtx.numWorkers

@@ -10,7 +10,7 @@ import
   ./contexts,
   ./primitives/c,
   ./instrumentation/contracts,
-  ./static_config
+  ./config
 
 # Victim selection
 # ----------------------------------------------------------------------------------
@@ -128,11 +128,11 @@ proc nextVictim*(req: var StealRequest): WorkerID =
   else:
     # Forward steal request to a different worker if possible
     # Also pass along information on the workers we manage
-    if localCtx.worker.isLeftWaiting and localCtx.worker.isRightWaiting:
+    if localCtx.worker.leftIsWaiting and localCtx.worker.rightIsWaiting:
       markIdle(req.victims, myID())
-    elif localCtx.worker.isLeftWaiting:
+    elif localCtx.worker.leftIsWaiting:
       markIdle(req.victims, localCtx.worker.left)
-    elif localCtx.worker.isRightWaiting:
+    elif localCtx.worker.rightIsWaiting:
       markIdle(req.victims, localCtx.worker.right)
 
     ascertain: myID() notin req.victims

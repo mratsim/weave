@@ -7,7 +7,7 @@
 
 import
   ./contexts,
-  ./static_config,
+  ./config,
   ./datatypes/sync_types,
   ./instrumentation/contracts
 

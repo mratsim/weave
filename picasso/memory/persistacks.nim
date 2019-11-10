@@ -7,7 +7,7 @@
 
 import
   std/typetraits,
-  ../static_config,
+  ../config,
   ../instrumentation/contracts
 
 type
