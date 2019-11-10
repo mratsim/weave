@@ -53,8 +53,8 @@ proc recv(req: var StealRequest): bool {.inline.} =
   postCondition: not result or (result and req.state != Waiting)
 
 proc restartWork() =
-  preCondition: localCtx.thefts.requested == PicassoMaxSteal
-  preCondition: localCtx.taskChannelPool.remaining == PicassoMaxSteal
+  preCondition: localCtx.thefts.requested == PicassoMaxStealOutstanding
+  preCondition: localCtx.taskChannelPool.remaining == PicassoMaxStealOutstanding
 
   # Adjust value of requested by MaxSteal-1, the number of steal
   # requests that have been dropped:
@@ -73,7 +73,7 @@ proc recv(task: var Task, isOutOfTasks: bool): bool =
   # Note we could use a static bool for isOutOfTasks but this
   # increase the code size.
   profile(send_recv_task):
-    for i in 0 ..< PicassoMaxSteal:
+    for i in 0 ..< PicassoMaxStealOutstanding:
       result = globalCtx.com
                         .tasksChannels[localCtx.worker.ID][i]
                         .tryRecv(task)
@@ -87,10 +87,10 @@ proc recv(task: var Task, isOutOfTasks: bool): bool =
   if not result:
     trySteal(isOutOfTasks)
   else:
-    when PicassoMaxSteal == 1:
+    when PicassoMaxStealOutstanding == 1:
       if localCtx.worker.isWaiting:
         restartWork()
-    else: # PicassoMaxSteal > 1
+    else: # PicassoMaxStealOutstanding > 1
       if localCtx.worker.isWaiting:
         restartWork()
       else:
@@ -105,5 +105,5 @@ proc recv(task: var Task, isOutOfTasks: bool): bool =
     # Steal request fulfilled
     localCtx.thefts.requested -= 1
 
-    postCondition: localCtx.thefts.requested in 0 ..< PicassoMaxSteal
+    postCondition: localCtx.thefts.requested in 0 ..< PicassoMaxStealOutstanding
     postCondition: localCtx.thefts.dropped == 0

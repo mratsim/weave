@@ -26,4 +26,4 @@ when not defined(MaxStealAttempts):
     ## Default value is the number of workers minus one
     ##
     ## The global number of steal requests outstanding
-    ## is PicassoMaxSteal * globalCtx.numWorkers
+    ## is PicassoMaxStealOutstanding * globalCtx.numWorkers

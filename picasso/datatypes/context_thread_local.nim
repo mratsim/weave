@@ -73,7 +73,7 @@ type
     worker*: Worker
     thefts*: Thefts
     taskCache*: IntrusiveStack[Task]
-    taskChannelPool*: ObjectPool[PicassoMaxSteal, ChannelSpscSingle[Task]]
+    taskChannelPool*: ObjectPool[PicassoMaxStealOutstanding, ChannelSpscSingle[Task]]
     counters*: Counters
 
   Counters = object
