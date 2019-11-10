@@ -8,7 +8,7 @@
 import
   ./runtime,
   ./static_config,
-  ./workstealing_types/sync_types,
+  ./datatypes/sync_types,
   ./instrumentation/contracts
 
 # Loop splitting
@@ -55,7 +55,7 @@ func splitAdaptative(task: Task): int {.inline.} =
 
   # Send a chunk of work to all
   let chunk = max(itersLeft div (approxNumThieves + 1), 1)
-  
+
   postCondition:
     itersLeft > chunk
 

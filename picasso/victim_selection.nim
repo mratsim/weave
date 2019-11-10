@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./workstealing_types/[victims_bitsets, sync_types, context_thread_local],
+  ./datatypes/[victims_bitsets, sync_types, context_thread_local],
   ./runtime,
   ./primitives/c,
   ./instrumentation/contracts
