@@ -34,7 +34,7 @@ func splitGuided(task: Task): int {.inline.} =
   if itersLeft <= task.chunks:
     return task.splitHalf()
 
-  # log("Worker %2d: sending %ld iterations\n", localCtx.worker.ID, task.chunks)
+  # log("Worker %2d: sending %ld iterations\n", myID(), task.chunks)
   return task.stop - task.chunks
 
 func splitAdaptative(task: Task): int {.inline.} =

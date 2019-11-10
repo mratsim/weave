@@ -20,12 +20,12 @@ proc init(req: var StealRequest) {.inline.} =
   ## Initialize a steal request
   ## This does not initialize the Thief state
   req.thiefAddr = myTodoBoxes.borrow()
-  req.thiefID = localCtx.worker.ID
+  req.thiefID = myID()
   req.retry = 0
-  req.victims.init(workforce)
-  req.victims.clear(localCtx.worker.ID)
+  req.victims.init(workforce())
+  req.victims.clear(myID())
   StealAdaptative:
-    req.stealHalf = localCtx.thefts.stealHalf
+    req.stealHalf = myThefts().stealHalf
 
 proc send(victimID: WorkerID, req: sink StealRequest) {.inline.}=
   ## Send a steal or work sharing request
@@ -42,32 +42,32 @@ proc sendSteal(victimID: WorkerID, req: sink StealRequest) =
   ## Send a steal request and update context
   victimID.send(req)
 
-  localCtx.thefts.requested += 1
-  localCtx.counters.inc(stealsSent)
+  myThefts().requested += 1
+  myMetrics().inc(stealsSent)
 
   metrics:
     StealAdaptative:
-      if localCtx.thefts.stealHalf:
-        localCtx.counters.inc(stealsHalf)
+      if myThefts().stealHalf:
+        myMetrics().inc(stealsHalf)
       else:
-        localCtx.counters.inc(stealsOne)
+        myMetrics().inc(stealsOne)
 
 proc updateStealStrategy() =
   ## Estimate work-stealing efficiency during the last interval
   ## If the value is below a threshold, switch strategies
-  if localCtx.thefts.recentSteals == PicassoStealAdaptativeInterval:
+  if myThefts().recentSteals == PicassoStealAdaptativeInterval:
     # Reevaluate the ratio of tasks processed within the theft interval
-    let ratio = localCtx.thefts.recentTasks.float32 / float32(PicassoStealAdaptativeInterval)
-    if localCtx.thefts.stealHalf and ratio < 2.0f:
+    let ratio = myThefts().recentTasks.float32 / float32(PicassoStealAdaptativeInterval)
+    if myThefts().stealHalf and ratio < 2.0f:
       # Tasks stolen are coarse-grained, steal only one to reduce re-steals
-      localCtx.thefts.stealHalf = false
-    elif not(localCtx.thefts.stealHalf) and ratio == 1.0f:
+      myThefts().stealHalf = false
+    elif not(myThefts().stealHalf) and ratio == 1.0f:
       # All tasks processed were stolen tasks, we need to steal many at a time
-      localCtx.thefts.stealHalf = true
+      myThefts().stealHalf = true
 
     # Reset the interval
-    localCtx.thefts.recentTasks = 0
-    localCtx.thefts.recentSteals = 0
+    myThefts().recentTasks = 0
+    myThefts().recentSteals = 0
 
 proc trySteal*(isOutOfTasks: bool) =
   ## Try to send a steal request
@@ -80,7 +80,7 @@ proc trySteal*(isOutOfTasks: bool) =
   # For code size and improved cache usage
   # we don't use a static bool even though we could.
   profile(send_recv_req):
-    if localCtx.thefts.requested < PicassoMaxStealAttempts:
+    if myThefts().requested < PicassoMaxStealAttempts:
       StealAdaptative:
         updateStealStrategy()
       var req: StealRequest
@@ -94,9 +94,9 @@ proc trySteal*(isOutOfTasks: bool) =
       req.nextVictim().sendSteal(req)
 
 proc forget(req: sink StealRequest) =
-  preCondition: req.thiefID == localCtx.worker.ID
-  preCondition: localCtx.thefts.requested > 1
+  preCondition: req.thiefID == myID()
+  preCondition: myThefts().requested > 1
 
-  localCtx.thefts.requested -= 1
+  myThefts().requested -= 1
   # TODO: Recycle the channel for a future steal request
   # localCtx.taskChannelPool.recycle(req.taskChannel)

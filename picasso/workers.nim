@@ -24,14 +24,14 @@ proc recv(req: var StealRequest): bool {.inline.} =
   ## Updates req and returns true if a StealRequest was found
 
   profile(send_recv_req):
-    result = globalCtx.com.thefts[localCtx.worker.ID].tryRecv(req)
+    result = myIncomingThieves().tryRecv(req)
 
     # We treat specially the case where children fail to steal
     # and defer to the current worker (their parent)
     while result and req.state == Waiting:
       debugTermination:
         log("Worker %d receives STATE_FAILED from worker %d\n",
-            localCtx.worker.ID, req.thiefID)
+            myID(), req.thiefID)
 
       # Only children can forward a request where they sleep
       ascertain: req.thiefID == localCtx.worker.left or
@@ -48,12 +48,12 @@ proc recv(req: var StealRequest): bool {.inline.} =
       # while it backs off to save CPU
       localCtx.worker.workSharingRequests.enqueue(req)
       # Check the next steal request
-      result = globalCtx.com.thefts[localCtx.worker.ID].tryRecv(req)
+      result = myIncomingThieves().tryRecv(req)
 
   postCondition: not result or (result and req.state != Waiting)
 
 proc restartWork() =
-  preCondition: localCtx.thefts.requested == PicassoMaxStealsOutstanding
+  preCondition: myThefts().requested == PicassoMaxStealsOutstanding
   preCondition: myTodoBoxes().len == PicassoMaxStealsOutstanding
 
   # Adjust value of requested by MaxSteal-1, the number of steal
@@ -61,9 +61,9 @@ proc restartWork() =
   # requested = requested - (MaxSteal-1) =
   #           = MaxSteal - MaxSteal + 1 = 1
 
-  localCtx.thefts.requested = 1 # The current steal request is nut fully fulfilled yet
+  myThefts().requested = 1 # The current steal request is nut fully fulfilled yet
   localCtx.worker.isWaiting = false
-  localCtx.thefts.dropped = 0
+  myThefts().dropped = 0
 
 proc recv(task: var Task, isOutOfTasks: bool): bool =
   ## Check the worker task channel for a task successfully stolen
@@ -80,7 +80,7 @@ proc recv(task: var Task, isOutOfTasks: bool): bool =
         # TODO: Recycle the channel for a future steal request
         # localCtx.taskChannelPool.recycle(task)
         debug:
-          log("Worker %d received a task with function address %d\n", localCtx.worker.ID, task.fn)
+          log("Worker %d received a task with function address %d\n", myID(), task.fn)
         break
 
   if not result:
@@ -96,13 +96,13 @@ proc recv(task: var Task, isOutOfTasks: bool): bool =
         # If we have dropped one or more steal requests before receiving
         # tasks, adjust requested to make sure that we can send MaxSteal
         # steal requests again
-        if localCtx.thefts.dropped > 0:
-          ascertain: localCtx.thefts.requested > localCtx.thefts.dropped
-          localCtx.thefts.requested -= localCtx.thefts.dropped
-          localCtx.thefts.dropped = 0
+        if myThefts().dropped > 0:
+          ascertain: myThefts().requested > myThefts().dropped
+          myThefts().requested -= myThefts().dropped
+          myThefts().dropped = 0
 
     # Steal request fulfilled
-    localCtx.thefts.requested -= 1
+    myThefts().requested -= 1
 
-    postCondition: localCtx.thefts.requested in 0 ..< PicassoMaxStealsOutstanding
-    postCondition: localCtx.thefts.dropped == 0
+    postCondition: myThefts().requested in 0 ..< PicassoMaxStealsOutstanding
+    postCondition: myThefts().dropped == 0

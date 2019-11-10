@@ -33,6 +33,12 @@ template workforce*: int32 =
 template myID*: WorkerID =
   localCtx.worker.ID
 
+template myThefts*: Thefts =
+  localCtx.thefts
+
+template myMetrics*: Counters =
+  localCtx.counters
+
 # Dynamic defines
 # ----------------------------------------------------------------------------------
 

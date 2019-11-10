@@ -48,7 +48,7 @@ type
     # deque*: PrellDeque[Task] # Cannot instantiate `=destroy`
     currentTask*: Task
 
-  Thefts = object
+  Thefts* = object
     ## Thief state
     # Outstanding steal requests [0, MaxSteal]
     requested*: int
@@ -73,7 +73,7 @@ type
     taskCache*: IntrusiveStack[Task]
     counters*: Counters
 
-  Counters = object
+  Counters* = object
     tasksExec: int
     tasksSent: int
     tasksSplit: int
