@@ -6,11 +6,11 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./datatypes/[victims_bitsets, sync_types, context_thread_local, bounded_queues],
-  ./runtime, ./victim_selection,
-  ./instrumentation/[contracts, profilers, loggers],
+  ./datatypes/[victims_bitsets, sync_types, context_thread_local],
+  ./contexts, ./victim_selection,
+  ./instrumentation/[contracts, profilers],
   ./channels/channels_mpsc_bounded_lock,
-  ./memory/[intrusive_stacks, object_pools],
+  ./memory/persistacks,
   ./static_config
 
 # Thief
@@ -19,10 +19,10 @@ import
 proc init(req: var StealRequest) {.inline.} =
   ## Initialize a steal request
   ## This does not initialize the Thief state
-  req.taskChannel = localCtx.taskChannelPool.get()
+  req.thiefAddr = myTodoBoxes.borrow()
   req.thiefID = localCtx.worker.ID
   req.retry = 0
-  req.victims.init(globalCtx.numWorkers)
+  req.victims.init(workforce)
   req.victims.clear(localCtx.worker.ID)
   StealAdaptative:
     req.stealHalf = localCtx.thefts.stealHalf
@@ -31,7 +31,7 @@ proc send(victimID: WorkerID, req: sink StealRequest) {.inline.}=
   ## Send a steal or work sharing request
   # TODO: check for race condition on runtime exit
   let success = globalCtx.com
-                         .thievingChannels[victimID]
+                         .thefts[victimID]
                          .trySend(req)
 
   # The channel has a theoretical upper bound of
@@ -80,7 +80,7 @@ proc trySteal*(isOutOfTasks: bool) =
   # For code size and improved cache usage
   # we don't use a static bool even though we could.
   profile(send_recv_req):
-    if localCtx.thefts.requested < MaxStealAttempts:
+    if localCtx.thefts.requested < PicassoMaxStealAttempts:
       StealAdaptative:
         updateStealStrategy()
       var req: StealRequest

@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./runtime,
+  ./contexts,
   ./static_config,
   ./datatypes/sync_types,
   ./instrumentation/contracts
@@ -50,7 +50,7 @@ func splitAdaptative(task: Task): int {.inline.} =
   #     as more requests may pile up concurrently.
   #   - We already read 1 steal request before trying to split so need to add it back.
   #   - Workers may send steal requests before actually running out-of-work
-  let approxNumThieves = 1 + globalCtx.com.thievingChannels[localCtx.worker.ID]
+  let approxNumThieves = 1 + myIncomingThieves
   # log("Worker %2d: has %ld steal requests\n", ID, approxNumThieves)
 
   # Send a chunk of work to all

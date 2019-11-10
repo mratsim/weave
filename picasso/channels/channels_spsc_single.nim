@@ -53,9 +53,6 @@ type
     pad0: array[PicassoCacheLineSize - sizeof(pointer), byte] # If used in a sequence of channels
     buffer: Atomic[pointer]
 
-  # Private aliases
-  Channel[T: ptr] = ChannelSpscSingle[T]
-
 # Internal type-erased implementation
 # ---------------------------------------------------------------
 

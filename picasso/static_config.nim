@@ -28,7 +28,7 @@ const PicassoCacheLineSize* {.intDefine.} = 128
   # Nim threadpool uses 32 bytes :/
   # https://github.com/nim-lang/Nim/blob/v1.0.2/lib/pure/concurrency/threadpool.nim
 
-const PicassoMaxStealOutstanding* {.intdefine.} = 1
+const PicassoMaxStealsOutstanding* {.intdefine.}: int8 = 1
   ## Maximum number of steal requests outstanding per worker
   ## If that maximum is reached a worker will not issue new steal requests
   ## until it receives work.
@@ -36,8 +36,8 @@ const PicassoMaxStealOutstanding* {.intdefine.} = 1
   ## from active stealing and wait for its parent to send work.
 
 static:
-  assert PicassoMaxStealOutstanding >= 1, "Workers need to send at least a steal request"
-  assert PicassoMaxStealOutstanding <= high(int8), "It's a work-stealing scheduler not a thieves guild!"
+  assert PicassoMaxStealsOutstanding >= 1, "Workers need to send at least a steal request"
+  assert PicassoMaxStealsOutstanding <= high(int8), "It's a work-stealing scheduler not a thieves guild!"
 
 const PicassoStealAdaptativeInterval* {.intdefine.} = 25
   ## Number of steal requests after which a worker reevaluate

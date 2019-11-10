@@ -93,7 +93,7 @@ func recycle*[N: static int8, T](ps: var Persistack[N, T], reference: sink(ptr T
   `=sink`(ps.stack[ps.len], reference)
   ps.len += 1
 
-func access*[N: static int8, T](ps: Persistack[N, T], index: SomeInteger): lent T {.inline.} =
+func access*[N: static int8, T](ps: Persistack[N, T], index: SomeInteger): var T {.inline.} =
   ## Access the object at `index`.
   preCondition:
     index < N

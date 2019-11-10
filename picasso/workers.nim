@@ -6,11 +6,11 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./datatypes/[victims_bitsets, sync_types, context_thread_local, bounded_queues],
-  ./runtime,
-  ./instrumentation/[contracts, profilers, loggers],
+  ./datatypes/[sync_types, context_thread_local, bounded_queues],
+  ./contexts,
+  ./instrumentation/[contracts, profilers],
   ./channels/[channels_mpsc_bounded_lock, channels_spsc_single],
-  ./memory/[intrusive_stacks, object_pools],
+  ./memory/persistacks,
   ./static_config,
   ./thieves
 
@@ -24,7 +24,7 @@ proc recv(req: var StealRequest): bool {.inline.} =
   ## Updates req and returns true if a StealRequest was found
 
   profile(send_recv_req):
-    result = globalCtx.com.thievingChannels[localCtx.worker.ID].tryRecv(req)
+    result = globalCtx.com.thefts[localCtx.worker.ID].tryRecv(req)
 
     # We treat specially the case where children fail to steal
     # and defer to the current worker (their parent)
@@ -48,13 +48,13 @@ proc recv(req: var StealRequest): bool {.inline.} =
       # while it backs off to save CPU
       localCtx.worker.workSharingRequests.enqueue(req)
       # Check the next steal request
-      result = globalCtx.com.thievingChannels[localCtx.worker.ID].tryRecv(req)
+      result = globalCtx.com.thefts[localCtx.worker.ID].tryRecv(req)
 
   postCondition: not result or (result and req.state != Waiting)
 
 proc restartWork() =
-  preCondition: localCtx.thefts.requested == PicassoMaxStealOutstanding
-  preCondition: localCtx.taskChannelPool.remaining == PicassoMaxStealOutstanding
+  preCondition: localCtx.thefts.requested == PicassoMaxStealsOutstanding
+  preCondition: myTodoBoxes().len == PicassoMaxStealsOutstanding
 
   # Adjust value of requested by MaxSteal-1, the number of steal
   # requests that have been dropped:
@@ -73,10 +73,9 @@ proc recv(task: var Task, isOutOfTasks: bool): bool =
   # Note we could use a static bool for isOutOfTasks but this
   # increase the code size.
   profile(send_recv_task):
-    for i in 0 ..< PicassoMaxStealOutstanding:
-      result = globalCtx.com
-                        .tasksChannels[localCtx.worker.ID][i]
-                        .tryRecv(task)
+    for i in 0 ..< PicassoMaxStealsOutstanding:
+      result = myTodoBoxes.access(i)
+                          .tryRecv(task)
       if result:
         # TODO: Recycle the channel for a future steal request
         # localCtx.taskChannelPool.recycle(task)
@@ -87,10 +86,10 @@ proc recv(task: var Task, isOutOfTasks: bool): bool =
   if not result:
     trySteal(isOutOfTasks)
   else:
-    when PicassoMaxStealOutstanding == 1:
+    when PicassoMaxStealsOutstanding == 1:
       if localCtx.worker.isWaiting:
         restartWork()
-    else: # PicassoMaxStealOutstanding > 1
+    else: # PicassoMaxStealsOutstanding > 1
       if localCtx.worker.isWaiting:
         restartWork()
       else:
@@ -105,5 +104,5 @@ proc recv(task: var Task, isOutOfTasks: bool): bool =
     # Steal request fulfilled
     localCtx.thefts.requested -= 1
 
-    postCondition: localCtx.thefts.requested in 0 ..< PicassoMaxStealOutstanding
+    postCondition: localCtx.thefts.requested in 0 ..< PicassoMaxStealsOutstanding
     postCondition: localCtx.thefts.dropped == 0

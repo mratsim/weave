@@ -6,8 +6,10 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./datatypes/[context_global, context_thread_local],
-  ./memory/object_pools
+  ./datatypes/[context_global, context_thread_local, sync_types],
+  ./channels/[channels_spsc_single, channels_mpsc_bounded_lock],
+  ./memory/persistacks,
+  ./static_config
 
 # Contexts
 # ----------------------------------------------------------------------------------
@@ -16,14 +18,29 @@ var globalCtx*: GlobalContext
 var localCtx* {.threadvar.}: TLContext
   # TODO: tlsEmulation off by default on OSX and on by default on iOS?
 
+# Aliases
+# ----------------------------------------------------------------------------------
+
+template myTodoBoxes*: Persistack[PicassoMaxStealsOutstanding, ChannelSpscSingle[Task]] =
+  globalCtx.com.tasks[localCtx.worker.ID]
+
+template myIncomingThieves*: ChannelMpscBounded[StealRequest] =
+  globalCtx.com.thefts[localCtx.worker.ID]
+
+template workforce*: int32 =
+  globalCtx.numWorkers
+
+template myID*: WorkerID =
+  localCtx.worker.ID
+
 # Dynamic defines
 # ----------------------------------------------------------------------------------
 
-when not defined(MaxStealAttempts):
-  template MaxStealAttempts*: int32 = globalCtx.numWorkers - 1
+when not defined(PicassoMaxStealAttempts):
+  template PicassoMaxStealAttempts*: int32 = workforce() - 1
     ## Number of steal attempts per steal requests
     ## before a steal request is sent back to the thief
     ## Default value is the number of workers minus one
     ##
     ## The global number of steal requests outstanding
-    ## is PicassoMaxStealOutstanding * globalCtx.numWorkers
+    ## is PicassoMaxStealsOutstanding * globalCtx.numWorkers

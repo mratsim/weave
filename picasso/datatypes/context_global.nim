@@ -8,7 +8,7 @@
 import
   ../channels/channels_mpsc_bounded_lock,
   ../channels/channels_spsc_single,
-  ../memory/object_pools,
+  ../memory/persistacks,
   ../static_config,
   ./sync_types
 
@@ -31,10 +31,10 @@ type
     #   would work but then it requires a pointer indirection
     #   per channel
     #   and a known max number of workers
-    thievingChannels*: ptr UncheckedArray[ChannelMpscBounded[StealRequest]]
-    tasksChannels*: ptr UncheckedArray[array[PicassoMaxStealOutstanding, ChannelSpscSingle[Task]]]
+    thefts*: ptr UncheckedArray[ChannelMpscBounded[StealRequest]]
+    tasks*: ptr UncheckedArray[Persistack[PicassoMaxStealsOutstanding, ChannelSpscSingle[Task]]]
 
   GlobalContext* = object
     com*: ComChannels
     numWorkers*: int32
-      # TODO track workers per socket
+      # TODO track workers per socket / NUMA domain

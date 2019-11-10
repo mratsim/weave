@@ -7,7 +7,7 @@
 
 import
   ./datatypes/[victims_bitsets, sync_types, context_thread_local],
-  ./runtime,
+  ./contexts,
   ./primitives/c,
   ./instrumentation/contracts
 
@@ -16,14 +16,14 @@ import
 
 proc markIdle(victims: var VictimsBitset, workerID: WorkerID) =
   preCondition:
-    -1 <= workerID and workerID < globalCtx.numWorkers
+    -1 <= workerID and workerID < workforce
 
   if workerID == -1:
     # Invalid worker ID (parent of root or out-of-bound child)
     return
 
-  let maxID = globalCtx.numWorkers - 1
-  if workerID < globalCtx.numWorkers:
+  let maxID = workforce - 1
+  if workerID < workforce:
     # mark children
     markIdle(victims, left(workerID, maxID))
     markIdle(victims, right(workerID, maxID))
@@ -37,7 +37,7 @@ func rightmostVictim(victims: var VictimsBitset, workerID: WorkerID): WorkerID =
 
     postCondition: {.noSideEffect.}:
       # Victim found
-      ((result in 0 ..< globalCtx.numWorkers) and
+      ((result in 0 ..< workforce) and
         result != workerID) or
         # No victim found
         result == -1
@@ -63,7 +63,7 @@ func mapVictims(victims: VictimsBitset, mapping: ptr UncheckedArray[WorkerID], l
 proc randomVictim(victims: VictimsBitset, workerID: WorkerID): WorkerID =
   ## Choose a random victim != ID from the list of potential VictimsBitset
   preCondition:
-    localCtx.worker.ID notin victims
+    myID notin victims
 
   localCtx.counters.inc(randomReceiverCalls)
   localCtx.counters.inc(randomReceiverEarlyExits)
@@ -73,10 +73,10 @@ proc randomVictim(victims: VictimsBitset, workerID: WorkerID): WorkerID =
     return -1
 
   # Try to choose a victim at random
-  for i in 0..< 3:
-    let candidate = rand_r(localCtx.thefts.rng) mod globalCtx.numWorkers
+  for i in 0 ..< 3:
+    let candidate = rand_r(localCtx.thefts.rng) mod workforce
     if candidate in victims:
-      postCondition candidate != localCtx.worker.ID
+      postCondition: candidate != myID
       return candidate
 
   # We didn't early exit, i.e. not enough potential victims
@@ -104,23 +104,23 @@ proc randomVictim(victims: VictimsBitset, workerID: WorkerID): WorkerID =
   # log("Worker %d: rng %d, vict: %d\n", localCtx.worker.ID, localCtx.thefts.seed, result)
 
   postCondition result in victims
-  postCondition result in 0 ..< globalCtx.numWorkers
-  postCondition result != localCtx.worker.ID
+  postCondition result in 0 ..< workforce
+  postCondition result != myID
 
 proc nextVictim*(req: var StealRequest): WorkerID =
   preCondition:
-    localCtx.worker.ID notin req.victims
+    myID notin req.victims
 
   result = -1
 
-  if req.thiefID == localCtx.worker.ID:
+  if req.thiefID == myID:
     # Steal request initiated by the current worker.
     # Send it to a random one
     ascertain: req.retry == 0
-    result = rand_r(localCtx.thefts.rng) mod globalCtx.numWorkers
+    result = rand_r(localCtx.thefts.rng) mod workforce()
     while result == localCtx.worker.ID:
-      result = rand_r(localCtx.thefts.rng) mod globalCtx.numWorkers
-  elif req.retry == MaxStealAttempts:
+      result = rand_r(localCtx.thefts.rng) mod workforce()
+  elif req.retry == PicassoMaxStealAttempts:
     # Return steal request to thief
     # logVictims(req.victims, req.thiefID)
     result = req.thiefID
@@ -134,7 +134,7 @@ proc nextVictim*(req: var StealRequest): WorkerID =
     elif localCtx.worker.isRightWaiting:
       markIdle(req.victims, localCtx.worker.right)
 
-    ascertain: localCtx.worker.ID notin req.victims
+    ascertain: myID notin req.victims
     result = randomVictim(req.victims, req.thiefID)
 
   if result == -1:
@@ -146,6 +146,6 @@ proc nextVictim*(req: var StealRequest): WorkerID =
     #   ID, req.ID, victim, req, retry, req.victims.len
     # )
 
-  postCondition: result in 0 ..< globalCtx.numWorkers
-  postCondition: result != localCtx.worker.ID
-  postCondition: req.retry in 0 .. MaxStealAttempts
+  postCondition: result in 0 ..< workforce
+  postCondition: result != myID
+  postCondition: req.retry in 0 .. PicassoMaxStealAttempts

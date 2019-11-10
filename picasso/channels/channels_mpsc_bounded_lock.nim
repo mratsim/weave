@@ -63,7 +63,7 @@ proc `=`[T](
     source: Channel[T]
   ) {.error: "A channel cannot be copied".}
 
-proc delete[T](chan: var Channel[T]) {.inline.} =
+proc delete*[T](chan: var Channel[T]) {.inline.} =
   static: assert T.supportsCopyMem # no custom destructors or ref objects
 
   if not chan.buffer.isNil:

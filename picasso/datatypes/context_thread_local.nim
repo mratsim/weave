@@ -7,10 +7,8 @@
 
 import
   ./bounded_queues, ./sync_types,
-  ./prell_deques,
   ../static_config,
-  ../memory/[object_pools, intrusive_stacks],
-  ../channels/channels_spsc_single,
+  ../memory/intrusive_stacks,
   ../instrumentation/contracts
 
 # Thread-local context
@@ -73,7 +71,6 @@ type
     worker*: Worker
     thefts*: Thefts
     taskCache*: IntrusiveStack[Task]
-    taskChannelPool*: ObjectPool[PicassoMaxStealOutstanding, ChannelSpscSingle[Task]]
     counters*: Counters
 
   Counters = object
