@@ -128,6 +128,8 @@ func trySend*[T](chan: var ChannelSpscSingle[T], src: sink T): bool {.inline.} =
 # Sanity checks
 # ------------------------------------------------------------------------------
 when isMainModule:
+  import strutils
+
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}
 
@@ -177,7 +179,7 @@ when isMainModule:
         args.chan[].recvLoop(val):
           # Busy loop, in prod we might want to yield the core/thread timeslice
           discard
-        echo "                                           Receiver got: ", val.repr
+        echo "                                               Receiver got: ", val[], " at address 0x", toLowerASCII toHex cast[ByteAddress](val)
         doAssert val[] == 42 + j*11
         freeShared(val)
 
@@ -190,7 +192,7 @@ when isMainModule:
         args.chan[].sendLoop(val):
           # Busy loop, in prod we might want to yield the core/thread timeslice
           discard
-        echo "Sender sent: ", val.repr
+        echo "Sender sent: ", val[], " at address 0x", toLowerASCII toHex cast[ByteAddress](val)
 
   proc main() =
     echo "Testing if 2 threads can send data"
