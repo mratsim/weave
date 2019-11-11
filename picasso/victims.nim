@@ -90,10 +90,8 @@ proc decline(req: sink StealRequest) =
           req.retry = 0
           req.victims.init(workforce)
           req.victims.clear(myID())
-          let target = findVictim(req)
-          target.sendSteal(req)
+          req.findVictimAndSteal()
         else: # No-op in "-d:danger"
           postCondition: PI_StealEarly > 0 # Force an error
     else: # Not our own request
-      let target = findVictim(req)
-      target.sendSteal(req)
+      req.findVictimAndSteal()

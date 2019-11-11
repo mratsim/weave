@@ -41,7 +41,7 @@ proc rawSend(victimID: WorkerID, req: sink StealRequest) {.inline.}=
   # N steal requests (from N-1 workers + own request sent back)
   postCondition: success
 
-proc sendSteal*(victimID: WorkerID, req: sink StealRequest) =
+proc sendSteal(victimID: WorkerID, req: sink StealRequest) =
   ## Send a steal request
   victimID.rawSend(req)
 
@@ -68,6 +68,19 @@ proc sendShare*(req: sink StealRequest) =
         incCounter(shareHalf)
       else:
         incCounter(shareOne)
+
+proc findVictimAndSteal*(req: sink StealRequest) =
+  # Note:
+  #   Nim manual guarantees left-to-right function evaluation.
+  #   Hence in the following:
+  #     `req.findVictim().sendSteal(req)`
+  #   findVictim request update should be done before sendSteal
+  #
+  #   but C and C++ do not provides that guarantee
+  #   and debugging that in a multithreading runtime
+  #   would probably be very painful.
+  let target = findVictim(req)
+  target.sendSteal(req)
 
 # Stealing logic
 # ----------------------------------------------------------------------------------
@@ -111,7 +124,7 @@ proc trySteal*(isOutOfTasks: bool) =
         req.state = Working
 
       # TODO LastVictim/LastThief
-      req.findVictim().sendSteal(req)
+      req.findVictimAndSteal()
 
 proc forget*(req: sink StealRequest) =
   ## Removes a steal request from circulation
