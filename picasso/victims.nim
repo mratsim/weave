@@ -116,8 +116,8 @@ proc receivedOwn(req: sink StealRequest) =
   when PI_StealEarly > 0:
     task = myTask()
     let tasksLeft = if not task.isNil and task.isLoop:
-                    abs(task.stop - task.cur)
-                  else: 0
+                      abs(task.stop - task.cur)
+                    else: 0
 
     # Received our own steal request, we can forget about it
     # if we now have more tasks that the threshold
@@ -212,4 +212,55 @@ proc splitAndSend(task: Task, req: sink StealRequest) =
 
   incCounter(tasksSplit)
 
-# proc handle(req: sink StealRequest): bool =
+proc distributeWork(req: sink StealRequest): bool =
+  ## Handle incoming steal request
+  ## Returns true if we found work
+  ## false otherwise
+
+  # Send independent task(s) if possible
+  if not myWorker().deque.isEmpty():
+    req.dispatchTasks()
+    return true
+    # TODO - the control flow is entangled here
+    #        since we have a non-empty deque we will never take
+    #        the branch that leads to termination
+    #        and would logically return true
+
+  # Otherwise try to split the current one
+  if myTask().isSplittable():
+    if req.thiefID != myID():
+      myTask().splitAndSend(req)
+      return true
+    else:
+      req.forget()
+      return false
+
+  if req.state == Waiting:
+    # Only children can send us a failed state.
+    # Request should be saved by caller and
+    # worker tree updates should be done by caller as well
+    # TODO: disantangle control-flow and sink the request
+    postCondition: req.thiefID == myWorker().left or req.thiefID == myWorker().right
+  else:
+    decline(req)
+
+  return false
+
+proc shareWork() {.inline.} =
+  ## Distribute work to all the idle children workers
+  ## if we can
+  while not myWorker().workSharingRequests.isEmpty():
+    # Only dequeue if we find work
+    let req = myWorker().workSharingRequests.peek()
+    ascertain: req.thiefID == myWorker().left or req.thiefID == myWorker.right
+    if distributeWork(req): # Shouldn't this need a copy?
+      if req.thiefID == myWorker().left:
+        ascertain: myWorker().leftIsWaiting
+        myWorker().leftIsWaiting = false
+      else:
+        ascertain: myWorker().rightIsWaiting
+        myWorker().rightIsWaiting = false
+      # Now we can dequeue as we found work
+      discard myWorker().workSharingRequests.dequeue()
+    else:
+      break
