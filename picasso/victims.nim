@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./datatypes/[sync_types, context_thread_local, bounded_queues, victims_bitsets],
+  ./datatypes/[sync_types, context_thread_local, bounded_queues, victims_bitsets, prell_deques],
   ./contexts,
   ./instrumentation/[contracts, profilers],
   ./channels/[channels_mpsc_bounded_lock, channels_spsc_single],
@@ -52,46 +52,109 @@ proc recv(req: var StealRequest): bool {.inline.} =
 
   postCondition: not result or (result and req.state != Waiting)
 
+proc declineOwn(req: sink StealRequest) =
+  ## Decline our own steal request
+  # No one had jobs to steal
+  preCondition: req.victims.isEmpty()
+  preCondition: req.retry == PI_MaxRetriesPerSteal
+
+  if req.state == Stealing and myWorker().leftIsWaiting and myWorker().rightIsWaiting:
+    when PI_MaxConcurrentStealPerWorker == 1:
+      # When there is only one concurrent steal request allowed, it's always the last.
+      lastStealAttempt(req)
+    else:
+      # Is this the last theft attempt allowed per steal request?
+      # - if so: lastStealAttempt special case (termination if lead thread, sleep if worker)
+      # - if not: drop it and wait until we receive work or all out steal requests failed.
+      if myThefts().outstanding == PI_MaxConcurrentStealPerWorker and
+          myTodoBoxes().len == PI_MaxConcurrentStealPerWorker - 1:
+        # "PI_MaxConcurrentStealPerWorker - 1" steal requests have been dropped
+        # as evidenced by the corresponding channel "address boxes" being recycled
+        ascertain: myThefts().dropped == PI_MaxConcurrentStealPerWorker - 1
+        lastStealAttempt(req)
+      else:
+        drop(req)
+  else:
+    # Our own request but we still have work, so we reset it and recirculate.
+    # This can only happen if workers are allowed to steal before finishing their tasks.
+    when PI_StealEarly > 0:
+      req.retry = 0
+      req.victims.init(workforce)
+      req.victims.clear(myID())
+      req.findVictimAndSteal()
+    else: # No-op in "-d:danger"
+      postCondition: PI_StealEarly > 0 # Force an error
+
 proc decline(req: sink StealRequest) =
   ## Pass steal request to another worker
   ## or the manager if it's our own that came back
   preCondition: req.retry <= PI_MaxRetriesPerSteal
 
   req.retry += 1
+  incCounter(stealDeclined)
 
   profile(send_recv_req):
-    incCounter(stealDeclined)
-
     if req.thiefID == myID():
-      # No one had jobs to steal
-      ascertain: req.victims.isEmpty()
-      ascertain: req.retry == PI_MaxRetriesPerSteal
-
-      if req.state == Stealing and myWorker().leftIsWaiting and myWorker().rightIsWaiting:
-        when PI_MaxConcurrentStealPerWorker == 1:
-          # When there is only one concurrent steal request allowed, it's always the last.
-          lastStealAttempt(req)
-        else:
-          # Is this the last theft attempt allowed per steal request?
-          # - if so: lastStealAttempt special case (termination if lead thread, sleep if worker)
-          # - if not: drop it and wait until we receive work or all out steal requests failed.
-          if myThefts().outstanding == PI_MaxConcurrentStealPerWorker and
-             myTodoBoxes().len == PI_MaxConcurrentStealPerWorker - 1:
-            # "PI_MaxConcurrentStealPerWorker - 1" steal requests have been dropped
-            # as evidenced by the corresponding channel "address boxes" being recycled
-            ascertain: myThefts().dropped == PI_MaxConcurrentStealPerWorker - 1
-            lastStealAttempt(req)
-          else:
-            drop(req)
-      else:
-        # Our own request but we still have work, so we reset it and recirculate.
-        # This can only happen if workers are allowed to steal before finishing their tasks.
-        when PI_StealEarly > 0:
-          req.retry = 0
-          req.victims.init(workforce)
-          req.victims.clear(myID())
-          req.findVictimAndSteal()
-        else: # No-op in "-d:danger"
-          postCondition: PI_StealEarly > 0 # Force an error
+      req.declineOwn()
     else: # Not our own request
       req.findVictimAndSteal()
+
+proc receivedOwn(req: sink StealRequest) =
+  preCondition: req.state != Waiting
+
+  when PI_StealEarly > 0:
+    task = myWorker().currentTask
+    let tasksLeft = if not task.isNil and task.isLoop:
+                    abs(task.stop - task.cur)
+                  else: 0
+
+    # Received our own steal request, we can forget about it
+    # if we now have more tasks that the threshold
+    if myWorker().deque > PI_StealEarly or
+        tasksLeft > PI_StealEarly:
+      req.forget()
+  else:
+    decline(req)
+
+proc takeTasks(req: StealRequest): tuple[task: Task, loot: int32] =
+  ## Take tasks in the worker deque to send them
+  ## to other
+  when StealStrategy == StealKind.adaptative:
+    if req.stealHalf:
+      myWorker().deque.stealHalf(result.task, result.loot)
+    else:
+      result.task = myWorker().deque.steal()
+      result.loot = 1
+  elif StealStrategy == StealKind.half:
+    myWorker().deque.stealHalf(result.task, result.loot)
+  else:
+    result.task = myWorker().deque.steal()
+    result.loot = 1
+
+proc dispatchTasks(req: sink StealRequest) =
+  ## Send tasks in return of a steal request
+  ## or decline and relay the steal request to another thread
+
+  if req.thiefID == myID():
+    receivedOwn(req)
+    return
+
+  profile(enq_deq_task):
+    let (task, loot) = req.takeTasks()
+
+  if not task.isNil:
+    profile(send_recv_task):
+      task.batch = loot
+      # TODO LastVictim
+      # TODO LazyFutures
+      debug: log("Worker %2d: preparing a task with function address %d\n", myID(), task.fn)
+      let taskSent = req.thiefAddr[].trySend(task)
+      ascertain: taskSent # SPSC channel with only 1 slot
+      debug: log("Worker %2d: sent %d task%s to worker %d\n",
+                  myID(), loot, if loot > 1: "s" else: "", req.thiefID)
+      incCounter(stealHandled)
+      incCounter(tasksSent, loot)
+      # TODO LastThief
+  else:
+    ascertain: myWorker().deque.isEmpty()
+    decline(req)

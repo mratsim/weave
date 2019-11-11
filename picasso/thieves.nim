@@ -33,13 +33,13 @@ proc init(req: var StealRequest) {.inline.} =
 proc rawSend(victimID: WorkerID, req: sink StealRequest) {.inline.}=
   ## Send a steal or work sharing request
   # TODO: check for race condition on runtime exit
-  let success = globalCtx.com
-                         .thefts[victimID]
-                         .trySend(req)
+  let stealRequestSent = globalCtx.com
+                                  .thefts[victimID]
+                                  .trySend(req)
 
   # The channel has a theoretical upper bound of
   # N steal requests (from N-1 workers + own request sent back)
-  postCondition: success
+  postCondition: stealRequestSent
 
 proc sendSteal(victimID: WorkerID, req: sink StealRequest) =
   ## Send a steal request

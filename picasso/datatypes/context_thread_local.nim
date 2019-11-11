@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./bounded_queues, ./sync_types,
+  ./bounded_queues, ./sync_types, ./prell_deques,
   ../config,
   ../memory/intrusive_stacks,
   ../instrumentation/contracts
@@ -40,13 +40,13 @@ type
     ID*: WorkerID
     left*: WorkerID
     right*: WorkerID
+    parent*: WorkerID
+    workSharingRequests*: BoundedQueue[2, StealRequest]
+    deque*: PrellDeque[Task]
+    currentTask*: Task
     leftIsWaiting*: bool
     rightIsWaiting*: bool
     isWaiting*: bool
-    parent*: WorkerID
-    workSharingRequests*: BoundedQueue[2, StealRequest]
-    # deque*: PrellDeque[Task] # Cannot instantiate `=destroy`
-    currentTask*: Task
 
   Thefts* = object
     ## Thief state
@@ -132,10 +132,10 @@ func initialize*(w: var Worker, ID, maxID: WorkerID) {.inline.} =
 # Counters
 # ----------------------------------------------------------------------------------
 
-template incCounter*(name: untyped{ident}) =
+template incCounter*(name: untyped{ident}, amount = 1) =
   bind name
   metrics:
-    counters.name += 1
+    counters.name += amount
 
 template decCounter*(name: untyped{ident}) =
   bind name
