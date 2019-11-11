@@ -47,7 +47,8 @@ type
     next*: Task
     fn*: proc (param: pointer) {.nimcall.}
     batch*: int32
-    victim*: int32
+    when defined(PI_StealLastVictim):
+      victim*: int32
     start*: int
     cur*: int
     stop*: int
@@ -78,9 +79,10 @@ type
     when StealStrategy == StealKind.adaptative:
       stealHalf*: bool                            # Thief wants half the tasks
 
-static: assert sizeof(deref(Task)) == 192,
-          "Task is of size " & $sizeof(deref(Task)) &
-          " instead of the expected 192 bytes."
+when not defined(PI_StealLastVictim):
+  static: assert sizeof(deref(Task)) == 192,
+            "Task is of size " & $sizeof(deref(Task)) &
+            " instead of the expected 192 bytes."
 
 # StealableTask API
 proc allocate*(task: var Task) {.inline.} =

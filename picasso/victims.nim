@@ -7,12 +7,23 @@
 
 import
   ./datatypes/[sync_types, context_thread_local, bounded_queues, victims_bitsets, prell_deques],
-  ./contexts,
-  ./instrumentation/[contracts, profilers],
+  ./contexts, ./config,
+  ./instrumentation/[contracts, profilers, loggers],
   ./channels/[channels_mpsc_bounded_lock, channels_spsc_single],
-  ./memory/persistacks,
-  ./config,
-  ./thieves, ./targets
+  ./thieves, ./loop_splitting
+
+# Victims - Adaptative task splitting
+# ----------------------------------------------------------------------------------
+
+proc approxNumThieves(): int32 {.inline.} =
+  # We estimate the number of idle workers by counting the number of theft attempts
+  # Notes:
+  #   - We peek into a MPSC channel from the consumer thread: the peek is a lower bound
+  #     as more requests may pile up concurrently.
+  #   - We already read 1 steal request before trying to split so need to add it back.
+  #   - Workers may send steal requests before actually running out-of-work
+  let approxNumThieves = 1 + myThieves().peek()
+  debug: log("Worker %2d: has %ld steal requests\n", myID(), approxNumThieves)
 
 # Victims - Steal requests handling
 # ----------------------------------------------------------------------------------
@@ -103,7 +114,7 @@ proc receivedOwn(req: sink StealRequest) =
   preCondition: req.state != Waiting
 
   when PI_StealEarly > 0:
-    task = myWorker().currentTask
+    task = myTask()
     let tasksLeft = if not task.isNil and task.isLoop:
                     abs(task.stop - task.cur)
                   else: 0
@@ -131,6 +142,16 @@ proc takeTasks(req: StealRequest): tuple[task: Task, loot: int32] =
     result.task = myWorker().deque.steal()
     result.loot = 1
 
+proc send(req: sink StealRequest, task: sink Task, numStolen: int32 = 1) {.inline.}=
+  let taskSent = req.thiefAddr[].trySend(task)
+  when defined(PI_LastThief):
+    myThefts().lastThief = req.thiefID
+
+  postCondition: taskSent # SPSC channel with only 1 slot
+
+  incCounter(stealHandled)
+  incCounter(tasksSent, numStolen)
+
 proc dispatchTasks(req: sink StealRequest) =
   ## Send tasks in return of a steal request
   ## or decline and relay the steal request to another thread
@@ -148,13 +169,47 @@ proc dispatchTasks(req: sink StealRequest) =
       # TODO LastVictim
       # TODO LazyFutures
       debug: log("Worker %2d: preparing a task with function address %d\n", myID(), task.fn)
-      let taskSent = req.thiefAddr[].trySend(task)
-      ascertain: taskSent # SPSC channel with only 1 slot
+      req.send(task, loot)
       debug: log("Worker %2d: sent %d task%s to worker %d\n",
                   myID(), loot, if loot > 1: "s" else: "", req.thiefID)
-      incCounter(stealHandled)
-      incCounter(tasksSent, loot)
-      # TODO LastThief
   else:
     ascertain: myWorker().deque.isEmpty()
     decline(req)
+
+proc splitAndSend(task: Task, req: sink StealRequest) =
+  ## Split a task and send a part to the thief
+  preCondition: req.thiefID != myID()
+
+  profile(enq_deq_task):
+    let dup = newTaskFromCache()
+
+    # Copy the current task
+    dup[] = task[]
+
+    # Split iteration range according to given strategy
+    # [start, stop) => [start, split) + [split, end)
+    let split = split(task, approxNumThieves())
+
+    # New task gets the upper half
+    dup.start = split
+    dup.cur = split
+    dup.stop = task.stop
+
+  log("Worker %2d: Sending [%ld, %ld) to worker %d\n", myID(), dup.start, dup.stop, req.thiefID)
+
+  profile(send_recv_task):
+    dup.batch = 1
+    # TODO StealLastVictim
+
+    if dup.hasFuture:
+      # TODO
+      discard
+
+    req.send(dup)
+
+    # Current task continues with lower half
+    myTask().stop = split
+
+  incCounter(tasksSplit)
+
+# proc handle(req: sink StealRequest): bool =

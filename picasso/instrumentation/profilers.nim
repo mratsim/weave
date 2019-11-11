@@ -22,7 +22,7 @@ const
   CpuFreqMhz {.intdefine.} = 4100
   CpuFreqGhz = CpuFreqMhz.float64 / 100
 
-template checkName(name: untyped) =
+template checkName(name: untyped) {.used.} =
   static:
     if astToStr(name) notin ["run_task", "enq_deq_task", "send_recv_task", "send_recv_req", "idle"]:
       raise newException(

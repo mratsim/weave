@@ -8,7 +8,7 @@
 import
   ./datatypes/[context_global, context_thread_local, sync_types],
   ./channels/[channels_spsc_single, channels_mpsc_bounded_lock],
-  ./memory/persistacks,
+  ./memory/[persistacks, intrusive_stacks],
   ./config
 
 # Contexts
@@ -19,6 +19,15 @@ var localCtx* {.threadvar.}: TLContext
   # TODO: tlsEmulation off by default on OSX and on by default on iOS?
 
 const LeaderID*: WorkerID = 0
+
+# Task caching
+# ----------------------------------------------------------------------------------
+
+proc newTaskFromCache*(): Task {.inline.} =
+  if localCtx.taskCache.isEmpty():
+    allocate(result)
+  else:
+    result = localCtx.taskCache.pop()
 
 # Aliases
 # ----------------------------------------------------------------------------------
@@ -37,6 +46,9 @@ template myID*: WorkerID =
 
 template myWorker*: Worker =
   localCtx.worker
+
+template myTask*: Task =
+  localCtx.worker.currentTask
 
 template myThefts*: Thefts =
   localCtx.thefts

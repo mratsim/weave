@@ -46,14 +46,14 @@ type
     ## - Messages are guaranteed to be delivered
     ## - Messages will be delivered exactly once
     ## - Linearizability
-    pad0: array[PI_CacheLineSize - 3*sizeof(int), byte]
+    pad0: array[PI_CacheLineSize - 3*sizeof(int32), byte]
     backLock: Lock # Padding? - pthread_lock is 40 bytes on Linux, unknown on windows.
-    capacity: int
+    capacity: int32
     buffer: ptr UncheckedArray[T]
-    pad1: array[PI_CacheLineSize - sizeof(int), byte]
-    front: Atomic[int]
-    pad2: array[PI_CacheLineSize - sizeof(int), byte]
-    back: Atomic[int]
+    pad1: array[PI_CacheLineSize - sizeof(int32), byte]
+    front: Atomic[int32]
+    pad2: array[PI_CacheLineSize - sizeof(int32), byte]
+    back: Atomic[int32]
 
   # Private aliases
   Channel[T] = ChannelMpscBounded[T]
@@ -79,7 +79,7 @@ func clear*(chan: var ChannelMpscBounded) {.inline.} =
   chan.front.store(0, moRelaxed)
   chan.back.store(0, moRelaxed)
 
-proc initialize*[T](chan: var ChannelMpscBounded[T], capacity: Positive) {.inline.} =
+proc initialize*[T](chan: var ChannelMpscBounded[T], capacity: int32) {.inline.} =
   ## Creates a new Shared Memory Multi-Producer Producer Single Consumer Bounded channel
   ## Channels should be allocated on the shared memory heap
   ##
@@ -94,7 +94,7 @@ proc initialize*[T](chan: var ChannelMpscBounded[T], capacity: Positive) {.inlin
   ## in arrays.
 
   # We don't need to zero-mem the padding
-
+  preCondition: capacity > 1
   static: assert T.supportsCopyMem
 
   chan.capacity = capacity
@@ -108,7 +108,7 @@ proc initialize*[T](chan: var ChannelMpscBounded[T], capacity: Positive) {.inlin
 # When they are the same the queue is empty.
 # When the difference is capacity, the queue is full.
 
-func isFull(chan: var Channel, back: var int): bool {.inline.} =
+func isFull(chan: var Channel, back: var int32): bool {.inline.} =
   ## Check if channel is full
   ## Update the back index value with its atomically read value
   ##
@@ -124,7 +124,7 @@ template isFull(chan: var Channel): bool =
   ## ⚠ Use only in:
   ##   - a producer thread that writes to the "back" index
   ##     (send / enqueue / pushBack)
-  var back: int
+  var back: int32
   isFull(chan, back)
 
 func trySend*[T](chan: var ChannelMpscBounded[T], src: sink T): bool =
@@ -139,7 +139,7 @@ func trySend*[T](chan: var ChannelMpscBounded[T], src: sink T): bool =
     return false
 
   acquire(chan.backLock)
-  var back: int
+  var back: int32
 
   # Check again if full, if not cache the atomically read back index
   # - front: moAcquire
@@ -181,7 +181,7 @@ func tryRecv*[T](chan: var ChannelMpscBounded[T], dst: var T): bool =
   chan.front.store(nextRead, moRelease)
   return true
 
-func peek*(chan: ChannelMpscBounded): int {.inline.} =
+func peek*(chan: var ChannelMpscBounded): int32 {.inline.} =
   ## Estimates the number of items pending in the channel
   ## - If called by the consumer the true number might be more
   ##   due to producers adding items concurrently.
@@ -277,7 +277,7 @@ when isMainModule:
         const pad = spaces(18)
         echo pad.repeat(ord(args.ID)), $args.ID, " sent: ", val
 
-  proc main(capacity: int) =
+  proc main(capacity: int32) =
     echo "Testing if 3 threads can send data to 1 consumer - channel capacity: ", capacity
     echo "------------------------------------------------------------------------"
     var threads: array[4, Thread[ThreadArgs]]

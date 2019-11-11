@@ -73,15 +73,15 @@ const
 
 template metrics*(body: untyped): untyped =
   when defined(PI_Metrics):
-    body
+    {.noSideEffect.}: body
 
 template debugTermination*(body: untyped): untyped =
   when defined(PicassoDebugTermination) or defined(PicassoDebug):
-    body
+    {.noSideEffect.}: body
 
 template debug*(body: untyped): untyped =
   when defined(PicassoDebug):
-    body
+    {.noSideEffect.}: body
 
 template StealAdaptative*(body: untyped): untyped =
   when StealStrategy == StealKind.adaptative:
