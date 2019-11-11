@@ -18,12 +18,12 @@ var globalCtx*: GlobalContext
 var localCtx* {.threadvar.}: TLContext
   # TODO: tlsEmulation off by default on OSX and on by default on iOS?
 
-const MasterID*: WorkerID = 0
+const LeaderID*: WorkerID = 0
 
 # Aliases
 # ----------------------------------------------------------------------------------
 
-template myTodoBoxes*: Persistack[PicassoMaxStealsOutstanding, ChannelSpscSingle[Task]] =
+template myTodoBoxes*: Persistack[PI_MaxConcurrentStealPerWorker, ChannelSpscSingle[Task]] =
   globalCtx.com.tasks[localCtx.worker.ID]
 
 template myThieves*: ChannelMpscBounded[StealRequest] =
@@ -38,24 +38,17 @@ template myID*: WorkerID =
 template myThefts*: Thefts =
   localCtx.thefts
 
-template myMetrics*: Counters =
-  localCtx.counters
+template myMetrics*: untyped =
+  metrics:
+    localCtx.counters
 
-# Scopes
+# Dynamic Scopes
 # ----------------------------------------------------------------------------------
 
-template metrics*(body: untyped) =
-  when defined(PicassoMetrics):
+template Leader*(body: untyped) =
+  if localCtx.worker.ID == LeaderID:
     body
 
-template debugTermination*(body: untyped) =
-  when defined(PicassoDebugTermination) or defined(PicassoDebug):
-    body
-
-template debug*(body: untyped) =
-  when defined(PicassoDebug):
-    body
-
-template StealAdaptative*(body: untyped) =
-  when StealStrategy == StealKind.adaptative:
+template Worker*(body: untyped) =
+  if localCtx.worker.ID != LeaderID:
     body

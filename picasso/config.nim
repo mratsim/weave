@@ -10,14 +10,16 @@ import strutils
 # Static configuration & compile-time options
 # ----------------------------------------------------------------------------------
 
-# const PicassoMaxWorkers* {.intDefine.} = 256
+# const PI_MaxWorkers* {.intDefine.} = 256
 #   ## Influences the size of the global context
 #   # https://github.com/nim-lang/Nim/blob/v1.0.2/lib/pure/concurrency/threadpool.nim#L319-L322
 
-# PicassoAsserts: turn on specific assertions independently from
+# PI_Asserts: turn on specific assertions independently from
 # --assertions:off or -d:danger
 
-const PicassoCacheLineSize* {.intDefine.} = 128
+# PI_Profile: turn on profiling
+
+const PI_CacheLineSize* {.intDefine.} = 128
   ## Datastructure that are accessed from multiple threads
   ## are padded by this value to avoid
   ## false sharing / cache threashing / cache ping-pong
@@ -28,7 +30,7 @@ const PicassoCacheLineSize* {.intDefine.} = 128
   # Nim threadpool uses 32 bytes :/
   # https://github.com/nim-lang/Nim/blob/v1.0.2/lib/pure/concurrency/threadpool.nim
 
-const PicassoMaxStealsOutstanding* {.intdefine.}: int8 = 1
+const PI_MaxConcurrentStealPerWorker* {.intdefine.}: int8 = 1
   ## Maximum number of steal requests outstanding per worker
   ## If that maximum is reached a worker will not issue new steal requests
   ## until it receives work.
@@ -36,10 +38,10 @@ const PicassoMaxStealsOutstanding* {.intdefine.}: int8 = 1
   ## from active stealing and wait for its parent to send work.
 
 static:
-  assert PicassoMaxStealsOutstanding >= 1, "Workers need to send at least a steal request"
-  assert PicassoMaxStealsOutstanding <= high(int8), "It's a work-stealing scheduler not a thieves guild!"
+  assert PI_MaxConcurrentStealPerWorker >= 1, "Workers need to send at least a steal request"
+  assert PI_MaxConcurrentStealPerWorker <= high(int8), "It's a work-stealing scheduler not a thieves guild!"
 
-const PicassoStealAdaptativeInterval* {.intdefine.} = 25
+const PI_StealAdaptativeInterval* {.intdefine.} = 25
   ## Number of steal requests after which a worker reevaluate
   ## the steal-half vs steal-one strategy
 
@@ -55,20 +57,39 @@ type
     adaptative
 
 const
-  PicassoSteal{.strdefine.} = "adaptative"
-  PicassoSplit{.strdefine.} = "adaptative"
+  PI_Steal{.strdefine.} = "adaptative"
+  PI_Split{.strdefine.} = "adaptative"
 
-  StealStrategy* = parseEnum[StealKind](PicassoSteal)
-  SplitStrategy* = parseEnum[SplitKind](PicassoSplit)
+  StealStrategy* = parseEnum[StealKind](PI_Steal)
+  SplitStrategy* = parseEnum[SplitKind](PI_Split)
+
+# Static scopes
+# ----------------------------------------------------------------------------------
+
+template metrics*(body: untyped): untyped =
+  when defined(PI_Metrics):
+    body
+
+template debugTermination*(body: untyped): untyped =
+  when defined(PicassoDebugTermination) or defined(PicassoDebug):
+    body
+
+template debug*(body: untyped): untyped =
+  when defined(PicassoDebug):
+    body
+
+template StealAdaptative*(body: untyped): untyped =
+  when StealStrategy == StealKind.adaptative:
+    body
 
 # Dynamic defines
 # ----------------------------------------------------------------------------------
 
-when not defined(PicassoMaxStealAttempts):
-  template PicassoMaxStealAttempts*: int32 = workforce() - 1
+when not defined(PI_MaxRetriesPerSteal):
+  template PI_MaxRetriesPerSteal*: int32 = workforce() - 1
     ## Number of steal attempts per steal requests
     ## before a steal request is sent back to the thief
     ## Default value is the number of workers minus one
     ##
     ## The global number of steal requests outstanding
-    ## is PicassoMaxStealsOutstanding * globalCtx.numWorkers
+    ## is PI_MaxConcurrentStealPerWorker * globalCtx.numWorkers

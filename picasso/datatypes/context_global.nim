@@ -32,7 +32,7 @@ type
     #   per channel
     #   and a known max number of workers
     thefts*: ptr UncheckedArray[ChannelMpscBounded[StealRequest]]
-    tasks*: ptr UncheckedArray[Persistack[PicassoMaxStealsOutstanding, ChannelSpscSingle[Task]]]
+    tasks*: ptr UncheckedArray[Persistack[PI_MaxConcurrentStealPerWorker, ChannelSpscSingle[Task]]]
 
   GlobalContext* = object
     com*: ComChannels

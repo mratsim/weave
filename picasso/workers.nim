@@ -18,15 +18,15 @@ import
 # ----------------------------------------------------------------------------------
 
 proc restartWork() =
-  preCondition: myThefts().requested == PicassoMaxStealsOutstanding
-  preCondition: myTodoBoxes().len == PicassoMaxStealsOutstanding
+  preCondition: myThefts().outstanding == PI_MaxConcurrentStealPerWorker
+  preCondition: myTodoBoxes().len == PI_MaxConcurrentStealPerWorker
 
-  # Adjust value of requested by MaxSteal-1, the number of steal
+  # Adjust value of outstanding by MaxSteal-1, the number of steal
   # requests that have been dropped:
-  # requested = requested - (MaxSteal-1) =
+  # outstanding = outstanding - (MaxSteal-1) =
   #           = MaxSteal - MaxSteal + 1 = 1
 
-  myThefts().requested = 1 # The current steal request is not fully fulfilled yet
+  myThefts().outstanding = 1 # The current steal request is not fully fulfilled yet
   localCtx.worker.isWaiting = false
   myThefts().dropped = 0
 
@@ -38,7 +38,7 @@ proc recv(task: var Task, isOutOfTasks: bool): bool =
   # Note we could use a static bool for isOutOfTasks but this
   # increase the code size.
   profile(send_recv_task):
-    for i in 0 ..< PicassoMaxStealsOutstanding:
+    for i in 0 ..< PI_MaxConcurrentStealPerWorker:
       result = myTodoBoxes().access(i)
                             .tryRecv(task)
       if result:
@@ -49,23 +49,23 @@ proc recv(task: var Task, isOutOfTasks: bool): bool =
   if not result:
     trySteal(isOutOfTasks)
   else:
-    when PicassoMaxStealsOutstanding == 1:
+    when PI_MaxConcurrentStealPerWorker == 1:
       if localCtx.worker.isWaiting:
         restartWork()
-    else: # PicassoMaxStealsOutstanding > 1
+    else: # PI_MaxConcurrentStealPerWorker > 1
       if localCtx.worker.isWaiting:
         restartWork()
       else:
         # If we have dropped one or more steal requests before receiving
-        # tasks, adjust requested to make sure that we can send MaxSteal
+        # tasks, adjust outstanding to make sure that we can send MaxSteal
         # steal requests again
         if myThefts().dropped > 0:
-          ascertain: myThefts().requested > myThefts().dropped
-          myThefts().requested -= myThefts().dropped
+          ascertain: myThefts().outstanding > myThefts().dropped
+          myThefts().outstanding -= myThefts().dropped
           myThefts().dropped = 0
 
     # Steal request fulfilled
-    myThefts().requested -= 1
+    myThefts().outstanding -= 1
 
-    postCondition: myThefts().requested in 0 ..< PicassoMaxStealsOutstanding
+    postCondition: myThefts().outstanding in 0 ..< PI_MaxConcurrentStealPerWorker
     postCondition: myThefts().dropped == 0

@@ -50,7 +50,7 @@ type
     ## - Messages will be delivered exactly once
     ## - Linearizability
   ChannelRaw = object
-    pad0: array[PicassoCacheLineSize - sizeof(pointer), byte] # If used in a sequence of channels
+    pad0: array[PI_CacheLineSize - sizeof(pointer), byte] # If used in a sequence of channels
     buffer: Atomic[pointer]
 
 # Internal type-erased implementation

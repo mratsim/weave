@@ -51,7 +51,7 @@ type
   Thefts* = object
     ## Thief state
     # Outstanding steal requests [0, MaxSteal]
-    requested*: int
+    outstanding*: int
     # Before a worker can become quiescent it has to drop MaxSteal - 1
     # steal request and send the remaining one to its parent
     dropped*: int
@@ -71,22 +71,27 @@ type
     worker*: Worker
     thefts*: Thefts
     taskCache*: IntrusiveStack[Task]
-    counters*: Counters
-    # Master thread only - Whole runtime is quiescent
+    # Leader thread only - Whole runtime is quiescent
     runtimeIsQuiescent*: bool
+    when defined(PI_Metrics):
+      counters*: Counters
 
   Counters* = object
     tasksExec: int
     tasksSent: int
     tasksSplit: int
-    stealsSent: int
-    stealsHandled: int
-    stealsDeclined: int
-    when defined(PicassoStealBackoff):
-      stealsResent: int
+    stealSent: int
+    stealHandled: int
+    stealDeclined: int
+    shareSent: int
+    shareHandled: int
+    when defined(PI_StealBackoff):
+      stealResent: int
     when StealStrategy == StealKind.adaptative:
-      stealsOne: int
-      stealsHalf: int
+      stealOne: int
+      stealHalf: int
+      shareOne: int
+      shareHalf: int
     when defined(PicassoLazyFutures):
       futuresConverted: int
     randomReceiverCalls: int
@@ -127,12 +132,12 @@ func initialize*(w: var Worker, ID, maxID: WorkerID) {.inline.} =
 # Counters
 # ----------------------------------------------------------------------------------
 
-template inc*(counters: var Counters, name: untyped{ident}) =
+template incCounter*(name: untyped{ident}) =
   bind name
   metrics:
     counters.name += 1
 
-template dec*(counters: var Counters, name: untyped{ident}) =
+template decCounter*(name: untyped{ident}) =
   bind name
   metrics:
     counters.name -= 1

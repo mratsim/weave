@@ -46,13 +46,13 @@ type
     ## - Messages are guaranteed to be delivered
     ## - Messages will be delivered exactly once
     ## - Linearizability
-    pad0: array[PicassoCacheLineSize - 3*sizeof(int), byte]
+    pad0: array[PI_CacheLineSize - 3*sizeof(int), byte]
     backLock: Lock # Padding? - pthread_lock is 40 bytes on Linux, unknown on windows.
     capacity: int
     buffer: ptr UncheckedArray[T]
-    pad1: array[PicassoCacheLineSize - sizeof(int), byte]
+    pad1: array[PI_CacheLineSize - sizeof(int), byte]
     front: Atomic[int]
-    pad2: array[PicassoCacheLineSize - sizeof(int), byte]
+    pad2: array[PI_CacheLineSize - sizeof(int), byte]
     back: Atomic[int]
 
   # Private aliases

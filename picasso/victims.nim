@@ -30,7 +30,7 @@ proc recv(req: var StealRequest): bool {.inline.} =
     # and defer to the current worker (their parent)
     while result and req.state == Waiting:
       debugTermination:
-        log("Worker %d receives STATE_FAILED from worker %d\n",
+        log("Worker %d receives state passively WAITING from its child worker %d\n",
             myID(), req.thiefID)
 
       # Only children can forward a request where they sleep
@@ -52,4 +52,20 @@ proc recv(req: var StealRequest): bool {.inline.} =
 
   postCondition: not result or (result and req.state != Waiting)
 
-proc decline(req)
+proc decline(req: var StealRequest) =
+  ## Pass steal request to another worker
+  ## or the manager if it's our own that came back
+  preCondition: req.retry <= PI_MaxRetriesPerSteal
+
+  req.retry += 1
+
+  profile(send_recv_req):
+    incCounter(stealDeclined)
+
+    if req.thiefID == myID():
+      # No one had jobs to steal
+      ascertain: req.victim.isEmpty()
+      ascertain: req.retry == PI_MaxRetriesPerSteal
+
+      if req.state == Stealing and localCtx.worker.leftIsWaiting and localCtx.worker.rightIsWaiting:
+        when PI_MaxRetriesPerSteal == 1

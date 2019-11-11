@@ -31,18 +31,6 @@ proc markIdle(victims: var VictimsBitset, workerID: WorkerID) =
     # mark worker
     victims.clear(workerID)
 
-func rightmostVictim(victims: var VictimsBitset, workerID: WorkerID): WorkerID =
-  result = rightmostOneBitPos(victims)
-  if result == workerID:
-    result = rightmostOneBitPos(zeroRightmostOneBit(victims))
-
-    postCondition: {.noSideEffect.}:
-      # Victim found
-      ((result in 0 ..< workforce()) and
-        result != workerID) or
-        # No victim found
-        result == -1
-
 func mapVictims(victims: VictimsBitset, mapping: ptr UncheckedArray[WorkerID], len: int32) =
   ## Update mapping with a mapping
   ## Potential victim ID in the bitset --> Real WorkerID
@@ -66,8 +54,8 @@ proc randomVictim(victims: VictimsBitset, workerID: WorkerID): WorkerID =
   preCondition:
     myID() notin victims
 
-  myMetrics().inc(randomReceiverCalls)
-  myMetrics().inc(randomReceiverEarlyExits)
+  incCounter(randomReceiverCalls)
+  incCounter(randomReceiverEarlyExits)
 
   # No eligible victim? Return message to sender
   if victims.isEmpty():
@@ -82,7 +70,7 @@ proc randomVictim(victims: VictimsBitset, workerID: WorkerID): WorkerID =
 
   # We didn't early exit, i.e. not enough potential victims
   # for completely randomized selection
-  myMetrics().dec(randomReceiverEarlyExits)
+  decCounter(randomReceiverEarlyExits)
 
   # Length of array is upper-bounded by the PicassoMaxWorkers but
   # num_victims is likely less than that or we would
@@ -121,7 +109,7 @@ proc nextVictim*(req: var StealRequest): WorkerID =
     result = rand_r(myThefts().rng) mod workforce()
     while result == myID():
       result = rand_r(myThefts().rng) mod workforce()
-  elif req.retry == PicassoMaxStealAttempts:
+  elif req.retry == PI_MaxRetriesPerSteal:
     # Return steal request to thief
     # logVictims(req.victims, req.thiefID)
     result = req.thiefID
@@ -150,4 +138,4 @@ proc nextVictim*(req: var StealRequest): WorkerID =
 
   postCondition: result in 0 ..< workforce()
   postCondition: result != myID()
-  postCondition: req.retry in 0 .. PicassoMaxStealAttempts
+  postCondition: req.retry in 0 .. PI_MaxRetriesPerSteal

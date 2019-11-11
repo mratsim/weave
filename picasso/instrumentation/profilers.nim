@@ -34,7 +34,7 @@ template checkName(name: untyped) =
 # With untyped dirty templates we need to bind the symbol early
 # otherwise they are resolved too late in a scope where they don't exist/
 # Alternatively we export ./timer.nim.
-when defined(PicassoProfile):
+when defined(PI_Profile):
   template profile_decl*(name: untyped): untyped {.dirty.} =
     bind checkName, Timer
     checkName(name)

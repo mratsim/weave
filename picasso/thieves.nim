@@ -11,7 +11,7 @@ import
   ./instrumentation/[contracts, profilers],
   ./channels/channels_mpsc_bounded_lock,
   ./memory/persistacks,
-  ./config
+  ./config, ./signals
 
 # Thief
 # ----------------------------------------------------------------------------------
@@ -26,6 +26,9 @@ proc init(req: var StealRequest) {.inline.} =
   req.victims.clear(myID())
   StealAdaptative:
     req.stealHalf = myThefts().stealHalf
+
+# Synchronization
+# ----------------------------------------------------------------------------------
 
 proc send(victimID: WorkerID, req: sink StealRequest) {.inline.}=
   ## Send a steal or work sharing request
@@ -42,24 +45,41 @@ proc sendSteal(victimID: WorkerID, req: sink StealRequest) =
   ## Send a steal request and update context
   victimID.send(req)
 
-  myThefts().requested += 1
-  myMetrics().inc(stealsSent)
+  myThefts().outstanding += 1
+  incCounter(stealSent)
 
   metrics:
     StealAdaptative:
       if myThefts().stealHalf:
-        myMetrics().inc(stealsHalf)
+        incCounter(stealHalf)
       else:
-        myMetrics().inc(stealsOne)
+        incCounter(stealOne)
+
+proc sendShare(req: sink StealRequest) =
+  ## Send a work sharing request to parent
+  localCtx.worker.parent.send(req)
+
+  myThefts().outstanding += 1
+  incCounter(shareSent)
+
+  metrics:
+    StealAdaptative:
+      if myThefts().stealHalf:
+        incCounter(shareHalf)
+      else:
+        incCounter(shareOne)
+
+# Stealing logic
+# ----------------------------------------------------------------------------------
 
 proc updateStealStrategy() =
   ## Estimate work-stealing efficiency during the last interval
   ## If the value is below a threshold, switch strategies
-  if myThefts().recentSteals == PicassoStealAdaptativeInterval:
+  if myThefts().recentSteals == PI_StealAdaptativeInterval:
     # Reevaluate the ratio of tasks processed within the theft interval
-    let ratio = myThefts().recentTasks.float32 / float32(PicassoStealAdaptativeInterval)
+    let ratio = myThefts().recentTasks.float32 / float32(PI_StealAdaptativeInterval)
     if myThefts().stealHalf and ratio < 2.0f:
-      # Tasks stolen are coarse-grained, steal only one to reduce re-steals
+      # Tasks stolen are coarse-grained, steal only one to reduce re-steal
       myThefts().stealHalf = false
     elif not(myThefts().stealHalf) and ratio == 1.0f:
       # All tasks processed were stolen tasks, we need to steal many at a time
@@ -80,7 +100,7 @@ proc trySteal*(isOutOfTasks: bool) =
   # For code size and improved cache usage
   # we don't use a static bool even though we could.
   profile(send_recv_req):
-    if myThefts().requested < PicassoMaxStealAttempts:
+    if myThefts().outstanding < PI_MaxRetriesPerSteal:
       StealAdaptative:
         updateStealStrategy()
       var req: StealRequest
@@ -93,9 +113,21 @@ proc trySteal*(isOutOfTasks: bool) =
       # TODO LastVictim/LastThief
       req.nextVictim().sendSteal(req)
 
-proc forget(req: sink StealRequest) =
+proc forget*(req: sink StealRequest) =
   preCondition: req.thiefID == myID()
-  preCondition: myThefts().requested > 1
+  preCondition: myThefts().outstanding > 1
 
-  myThefts().requested -= 1
+  myThefts().outstanding -= 1
   myTodoBoxes().recycle(req.thiefAddr)
+
+proc lastStealAttempt*(req: sink StealRequest) =
+  Leader:
+    detectTermination()
+    forget(req)
+  Worker:
+    req.state = Waiting
+    debugTermination:
+      log("Worker %d sends state passively WAITING to its parent worker %d\n", myID(), localCtx.worker.parent)
+    sendShare(req)
+    ascertain: not localCtx.worker.isWaiting
+    localCtx.worker.isWaiting = true

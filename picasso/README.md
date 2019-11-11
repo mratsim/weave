@@ -68,7 +68,7 @@ As such this leads to the following:
   the memory pools for shared objects.
 
 - Picasso implements state-of-the-art dynamic load balancing including
-  lazy loop splitting and adaptative steals to package or split tasks
+  lazy loop splitting and adaptative stealing to package or split tasks
   depending on real-time conditions.
 
 - Picasso follows a future model, similar to async/await for IO
