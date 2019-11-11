@@ -75,6 +75,7 @@ type
     runtimeIsQuiescent*: bool
     when defined(PI_Metrics):
       counters*: Counters
+    signaledTerminate*: bool
 
   Counters* = object
     tasksExec: int
