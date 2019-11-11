@@ -90,3 +90,6 @@ proc allocate*(task: var Task) {.inline.} =
 proc delete*(task: Task) {.inline.} =
   preCondition: not task.isNil()
   freeShared(task)
+
+# Ensure unicity of a given steal request
+proc `=`(dest: var StealRequest, source: StealRequest) {.error: "A Steal Request must be unique and cannot be copied".}

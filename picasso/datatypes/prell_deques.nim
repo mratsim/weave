@@ -165,7 +165,7 @@ func addListFirst*[T](dq: var PrellDeque[T], head: T, len: int32) =
 # ---------------------------------------------------------------
 
 func popFirstIfChild*[T](dq: var PrellDeque[T], parentTask: T): T =
-  preCondition:p not parentTask.isNil
+  preCondition: not parentTask.isNil
 
   if dq.isEmpty():
     return nil

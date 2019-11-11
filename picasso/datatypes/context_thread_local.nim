@@ -15,7 +15,7 @@ import
 # ----------------------------------------------------------------------------------
 
 type
-  Worker = object
+  Worker* = object
     ## Distributed binary tree
     ##
     ## Each worker/thread is a node ID that will determine

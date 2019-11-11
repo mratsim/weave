@@ -45,6 +45,11 @@ const PI_StealAdaptativeInterval* {.intdefine.} = 25
   ## Number of steal requests after which a worker reevaluate
   ## the steal-half vs steal-one strategy
 
+const PI_StealEarly* {.intdefine.} = 0
+  ## Workers with less tasks than PI_StealEarly will initiate
+  ## steal requests in advance. This might help hide stealing latencies
+  ## or worsen message overhead.
+
 type
   StealKind* {.pure.}= enum
     one

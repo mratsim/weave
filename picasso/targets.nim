@@ -96,7 +96,7 @@ proc randomVictim(victims: VictimsBitset, workerID: WorkerID): WorkerID =
   postCondition result in 0 ..< workforce()
   postCondition result != myID()
 
-proc nextVictim*(req: var StealRequest): WorkerID =
+proc findVictim*(req: var StealRequest): WorkerID =
   preCondition:
     myID() notin req.victims
 
@@ -116,12 +116,12 @@ proc nextVictim*(req: var StealRequest): WorkerID =
   else:
     # Forward steal request to a different worker if possible
     # Also pass along information on the workers we manage
-    if localCtx.worker.leftIsWaiting and localCtx.worker.rightIsWaiting:
+    if myWorker().leftIsWaiting and myWorker().rightIsWaiting:
       markIdle(req.victims, myID())
-    elif localCtx.worker.leftIsWaiting:
-      markIdle(req.victims, localCtx.worker.left)
-    elif localCtx.worker.rightIsWaiting:
-      markIdle(req.victims, localCtx.worker.right)
+    elif myWorker().leftIsWaiting:
+      markIdle(req.victims, myWorker().left)
+    elif myWorker().rightIsWaiting:
+      markIdle(req.victims, myWorker().right)
 
     ascertain: myID() notin req.victims
     result = randomVictim(req.victims, req.thiefID)

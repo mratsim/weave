@@ -27,7 +27,7 @@ proc restartWork() =
   #           = MaxSteal - MaxSteal + 1 = 1
 
   myThefts().outstanding = 1 # The current steal request is not fully fulfilled yet
-  localCtx.worker.isWaiting = false
+  myWorker().isWaiting = false
   myThefts().dropped = 0
 
 proc recv(task: var Task, isOutOfTasks: bool): bool =
@@ -50,10 +50,10 @@ proc recv(task: var Task, isOutOfTasks: bool): bool =
     trySteal(isOutOfTasks)
   else:
     when PI_MaxConcurrentStealPerWorker == 1:
-      if localCtx.worker.isWaiting:
+      if myWorker().isWaiting:
         restartWork()
     else: # PI_MaxConcurrentStealPerWorker > 1
-      if localCtx.worker.isWaiting:
+      if myWorker().isWaiting:
         restartWork()
       else:
         # If we have dropped one or more steal requests before receiving

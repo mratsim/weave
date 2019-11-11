@@ -16,7 +16,7 @@ import
 
 proc detectTermination*() {.inline.} =
   preCondition: myID() == LeaderID
-  preCondition: localCtx.worker.leftIsWaiting and localCtx.worker.rightIsWaiting
+  preCondition: myWorker().leftIsWaiting and myWorker().rightIsWaiting
   preCondition: not localCtx.runtimeIsQuiescent
 
   debugTermination:

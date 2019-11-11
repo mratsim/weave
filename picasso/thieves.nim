@@ -30,7 +30,7 @@ proc init(req: var StealRequest) {.inline.} =
 # Synchronization
 # ----------------------------------------------------------------------------------
 
-proc send(victimID: WorkerID, req: sink StealRequest) {.inline.}=
+proc rawSend(victimID: WorkerID, req: sink StealRequest) {.inline.}=
   ## Send a steal or work sharing request
   # TODO: check for race condition on runtime exit
   let success = globalCtx.com
@@ -41,9 +41,9 @@ proc send(victimID: WorkerID, req: sink StealRequest) {.inline.}=
   # N steal requests (from N-1 workers + own request sent back)
   postCondition: success
 
-proc sendSteal(victimID: WorkerID, req: sink StealRequest) =
-  ## Send a steal request and update context
-  victimID.send(req)
+proc sendSteal*(victimID: WorkerID, req: sink StealRequest) =
+  ## Send a steal request
+  victimID.rawSend(req)
 
   myThefts().outstanding += 1
   incCounter(stealSent)
@@ -55,9 +55,9 @@ proc sendSteal(victimID: WorkerID, req: sink StealRequest) =
       else:
         incCounter(stealOne)
 
-proc sendShare(req: sink StealRequest) =
+proc sendShare*(req: sink StealRequest) =
   ## Send a work sharing request to parent
-  localCtx.worker.parent.send(req)
+  myWorker().parent.rawSend(req)
 
   myThefts().outstanding += 1
   incCounter(shareSent)
@@ -100,7 +100,7 @@ proc trySteal*(isOutOfTasks: bool) =
   # For code size and improved cache usage
   # we don't use a static bool even though we could.
   profile(send_recv_req):
-    if myThefts().outstanding < PI_MaxRetriesPerSteal:
+    if myThefts().outstanding < PI_MaxConcurrentStealPerWorker:
       StealAdaptative:
         updateStealStrategy()
       var req: StealRequest
@@ -111,23 +111,49 @@ proc trySteal*(isOutOfTasks: bool) =
         req.state = Working
 
       # TODO LastVictim/LastThief
-      req.nextVictim().sendSteal(req)
+      req.findVictim().sendSteal(req)
 
 proc forget*(req: sink StealRequest) =
+  ## Removes a steal request from circulation
+  ## Re-increment the worker quota
+
   preCondition: req.thiefID == myID()
   preCondition: myThefts().outstanding > 1
 
   myThefts().outstanding -= 1
   myTodoBoxes().recycle(req.thiefAddr)
 
+proc drop*(req: sink StealRequest) =
+  ## Removes a steal request from circulation
+  ## Worker quota stays as-is for termination detection
+  preCondition: req.thiefID == myID()
+  preCondition: myThefts().outstanding > 1
+  # Worker in Stealing state as it didn't reach
+  # the concurrent steal request quota.
+  preCondition: not myWorker().isWaiting
+
+  debugTermination:
+    log("Worker %d drops steal request\n", myID)
+
+  # A dropped request still counts in requests outstanding
+  # don't decrement the count so that no new theft is initiated
+  myThefts().dropped += 1
+  myTodoBoxes().recycle(req.thiefAddr)
+
 proc lastStealAttempt*(req: sink StealRequest) =
+  ## If it's the last theft attempt per emitted steal requests
+  ## - if we are the lead thread, we know that every other threads are idle/waiting for work
+  ##   but there is none --> termination
+  ## - if we are a worker thread, we message our parent and
+  ##   passively wait for it to send us work or tell us to shutdown.
+
   Leader:
     detectTermination()
     forget(req)
   Worker:
     req.state = Waiting
     debugTermination:
-      log("Worker %d sends state passively WAITING to its parent worker %d\n", myID(), localCtx.worker.parent)
+      log("Worker %d sends state passively WAITING to its parent worker %d\n", myID(), myWorker().parent)
     sendShare(req)
-    ascertain: not localCtx.worker.isWaiting
-    localCtx.worker.isWaiting = true
+    ascertain: not myWorker().isWaiting
+    myWorker().isWaiting = true

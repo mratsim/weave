@@ -35,6 +35,9 @@ template workforce*: int32 =
 template myID*: WorkerID =
   localCtx.worker.ID
 
+template myWorker*: Worker =
+  localCtx.worker
+
 template myThefts*: Thefts =
   localCtx.thefts
 
