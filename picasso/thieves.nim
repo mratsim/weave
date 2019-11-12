@@ -88,7 +88,7 @@ proc findVictimAndSteal*(req: sink StealRequest) =
 proc updateStealStrategy() =
   ## Estimate work-stealing efficiency during the last interval
   ## If the value is below a threshold, switch strategies
-  if myThefts().recentSteals == PI_StealAdaptativeInterval:
+  if myThefts().recentThefts == PI_StealAdaptativeInterval:
     # Reevaluate the ratio of tasks processed within the theft interval
     let ratio = myThefts().recentTasks.float32 / float32(PI_StealAdaptativeInterval)
     if myThefts().stealHalf and ratio < 2.0f:
@@ -100,7 +100,7 @@ proc updateStealStrategy() =
 
     # Reset the interval
     myThefts().recentTasks = 0
-    myThefts().recentSteals = 0
+    myThefts().recentThefts = 0
 
 proc trySteal*(isOutOfTasks: bool) =
   ## Try to send a steal request

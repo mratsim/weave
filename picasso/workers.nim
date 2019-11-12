@@ -30,7 +30,7 @@ proc restartWork() =
   myWorker().isWaiting = false
   myThefts().dropped = 0
 
-proc recv(task: var Task, isOutOfTasks: bool): bool =
+proc recv*(task: var Task, isOutOfTasks: bool): bool =
   ## Check the worker task channel for a task successfully stolen
   ##
   ## Updates task and returns true if a task was found
@@ -69,3 +69,18 @@ proc recv(task: var Task, isOutOfTasks: bool): bool =
 
     postCondition: myThefts().outstanding in 0 ..< PI_MaxConcurrentStealPerWorker
     postCondition: myThefts().dropped == 0
+
+proc run*(task: Task) =
+  preCondition: not task.fn.isNil
+
+  # TODO - logic seems sketchy, why do we do this <-> task.
+  let this = myTask()
+  myTask() = task
+  task.fn(task.data.addr)
+  myTask() = this
+  metrics:
+    if task.isLoop:
+      # We have executed |stop-start| iterations
+      incCounter(tasksExec, abs(task.stop - task.start))
+    else:
+      incCounter(tasksExec)

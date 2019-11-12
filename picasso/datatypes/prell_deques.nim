@@ -90,7 +90,7 @@ func addFirst*[T](dq: var PrellDeque[T], task: sink T) =
   dq.pendingTasks += 1
 
 func popFirst*[T](dq: var PrellDeque[T]): T =
-  ## Pop the last task from the deque
+  ## Pop the first task from the deque
   if dq.isEmpty():
     return nil
 
@@ -151,14 +151,15 @@ func addListFirst*[T](dq: var PrellDeque[T], head: T, len: int32) =
   preCondition: len > 0
 
   var tail = head
-  when defined(debug):
+  when compileOption("boundChecks"):
     var index = 0'i32
   while not tail.next.isNil:
     tail = tail.next
-    when defined(debug):
+    when compileOption("boundChecks"):
       index += 1
 
-  postCondition: index == len
+  when compileOption("boundChecks"):
+    postCondition: index == len
   dq.addListFirst(head, tail, len)
 
 # Task-specific routines
@@ -179,7 +180,7 @@ func popFirstIfChild*[T](dq: var PrellDeque[T], parentTask: T): T =
   dq.head.prev = nil
   result.next = nil
 
-  dec dq.num_tasks
+  dq.pendingTasks -= 1
 
 # Work-stealing routines
 # ---------------------------------------------------------------

@@ -28,7 +28,7 @@ proc approxNumThieves(): int32 {.inline.} =
 # Victims - Steal requests handling
 # ----------------------------------------------------------------------------------
 
-proc recv(req: var StealRequest): bool {.inline.} =
+proc recv*(req: var StealRequest): bool {.inline.} =
   ## Check the worker theft channel
   ## for thieves.
   ##
@@ -96,7 +96,7 @@ proc declineOwn(req: sink StealRequest) =
     else: # No-op in "-d:danger"
       postCondition: PI_StealEarly > 0 # Force an error
 
-proc decline(req: sink StealRequest) =
+proc decline*(req: sink StealRequest) =
   ## Pass steal request to another worker
   ## or the manager if it's our own that came back
   preCondition: req.retry <= PI_MaxRetriesPerSteal
@@ -152,7 +152,7 @@ proc send(req: sink StealRequest, task: sink Task, numStolen: int32 = 1) {.inlin
   incCounter(stealHandled)
   incCounter(tasksSent, numStolen)
 
-proc dispatchTasks(req: sink StealRequest) =
+proc dispatchTasks*(req: sink StealRequest) =
   ## Send tasks in return of a steal request
   ## or decline and relay the steal request to another thread
 
@@ -176,7 +176,7 @@ proc dispatchTasks(req: sink StealRequest) =
     ascertain: myWorker().deque.isEmpty()
     decline(req)
 
-proc splitAndSend(task: Task, req: sink StealRequest) =
+proc splitAndSend*(task: Task, req: sink StealRequest) =
   ## Split a task and send a part to the thief
   preCondition: req.thiefID != myID()
 
@@ -246,7 +246,7 @@ proc distributeWork(req: sink StealRequest): bool =
 
   return false
 
-proc shareWork() {.inline.} =
+proc shareWork*() {.inline.} =
   ## Distribute work to all the idle children workers
   ## if we can
   while not myWorker().workSharingRequests.isEmpty():

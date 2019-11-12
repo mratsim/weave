@@ -51,10 +51,10 @@ type
   Thefts* = object
     ## Thief state
     # Outstanding steal requests [0, MaxSteal]
-    outstanding*: int
+    outstanding*: int32
     # Before a worker can become quiescent it has to drop MaxSteal - 1
     # steal request and send the remaining one to its parent
-    dropped*: int
+    dropped*: int32
     # RRNG state to choose victims
     rng*: uint32
     when defined(StealLastVictim):
@@ -63,8 +63,8 @@ type
       lastThief*: WorkerID
     # Adaptative theft
     stealHalf*: bool
-    recentTasks*: int
-    recentSteals*: int
+    recentTasks*: int32
+    recentThefts*: int32
 
   TLContext* = object
     ## Thread-Local context
