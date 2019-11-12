@@ -64,7 +64,11 @@ proc `=`[T](
   ) {.error: "A channel cannot be copied".}
 
 proc delete*[T](chan: var Channel[T]) {.inline.} =
-  static: assert T.supportsCopyMem # no custom destructors or ref objects
+  static:
+    # Steal request cannot be copied and so
+    # don't "support copyMem"
+    # assert T.supportsCopyMem
+    discard
 
   if not chan.buffer.isNil:
     freeShared(chan.buffer)
@@ -95,7 +99,11 @@ proc initialize*[T](chan: var ChannelMpscBounded[T], capacity: int32) {.inline.}
 
   # We don't need to zero-mem the padding
   preCondition: capacity > 1
-  static: assert T.supportsCopyMem
+  static:
+    # Steal request cannot be copied and so
+    # don't "support copyMem"
+    # assert T.supportsCopyMem
+    discard
 
   chan.capacity = capacity
   chan.buffer = cast[ptr UncheckedArray[T]](createSharedU(T, capacity))

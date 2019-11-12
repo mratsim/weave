@@ -10,6 +10,7 @@ import
   ../channels/channels_spsc_single,
   ../memory/persistacks,
   ../config,
+  ../primitives/barriers,
   ./sync_types
 
 # Global / inter-thread communication channels
@@ -36,5 +37,8 @@ type
 
   GlobalContext* = object
     com*: ComChannels
+    threadpool*: ptr UncheckedArray[Thread[WorkerID]]
     numWorkers*: int32
-      # TODO track workers per socket / NUMA domain
+    barrier*: PthreadBarrier # TODO windows support
+
+    # TODO track workers per socket / NUMA domain

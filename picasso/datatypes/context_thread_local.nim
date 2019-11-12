@@ -120,10 +120,10 @@ func right*(ID, maxID: WorkerID): WorkerID {.inline.} =
 func parent(ID: WorkerID): int32 {.inline.} =
   (ID - 1) shr 1
 
-func initialize*(w: var Worker, ID, maxID: WorkerID) {.inline.} =
-  w.left = left(ID, maxID)
-  w.right = right(ID, maxID)
-  w.parent = parent(ID)
+func initialize*(w: var Worker, maxID: WorkerID) {.inline.} =
+  w.left = left(w.ID, maxID)
+  w.right = right(w.ID, maxID)
+  w.parent = parent(w.ID)
 
   if w.left == -1:
     w.leftIsWaiting = true
