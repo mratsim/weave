@@ -122,6 +122,9 @@ func trySend*[T](chan: var ChannelSpscSingle[T], src: sink T): bool {.inline.} =
   ## ⚠ Use only in the producer thread that writes from the channel.
   chan.trySendImpl(src)
 
+func isEmpty*[T](chan: var ChannelSpscSingle[T]): bool {.inline.} =
+  chan.buffer.load(moRelaxed).isNil
+
 # Sanity checks
 # ------------------------------------------------------------------------------
 when isMainModule:

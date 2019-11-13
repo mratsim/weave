@@ -16,12 +16,9 @@ import
   ./thieves, ./workers
 
 
-# Public routine
+# Public routines
 # ----------------------------------------------------------------------------------
 
-proc sync*() =
-  ## Sync all threads
-  discard globalCtx.barrier.pthread_barrier_wait()
 
 # Local context
 # ----------------------------------------------------------------------------------
@@ -137,7 +134,24 @@ proc schedulingLoop() =
       # The memory is reused but not zero-ed
       localCtx.taskCache.add(task)
 
-proc worker_entry_fn(id: WorkerID) =
+proc threadLocalCleanup*() =
+  myWorker().deque.delete()
+  `=destroy`(localCtx.taskCache)
+  myThieves().delete()
+
+  for i in 0 ..< PI_MaxConcurrentStealPerWorker:
+    # No tasks left
+    ascertain: myTodoBoxes().access(i).isEmpty()
+    # No need to destroy it's on the stack
+
+  # A BoundedQueue (work-sharing requests) is on the stack
+  # It contains steal requests for non-leaf workers
+  # but those are on the stack as well and auto-destroyed
+
+  # The task cache is full of tasks
+  `=destroy`(localCtx.taskCache)
+
+proc worker_entry_fn*(id: WorkerID) =
   ## On the start of the threadpool workers will execute this
   ## until they receive a termination signal
   # We assume that thread_local variables start all at their binary zero value
@@ -145,8 +159,11 @@ proc worker_entry_fn(id: WorkerID) =
 
   myID() = id # If this crashes, you need --tlsemulation:off
   localCtx.init()
-  sync()
+  discard pthread_barrier_wait(globalCtx.barrier)
 
   {.gcsafe.}: # Not GC-safe when multi-threaded due to globals
     schedulingLoop()
-  sync()
+  discard pthread_barrier_wait(globalCtx.barrier)
+
+  # stats
+  threadLocalCleanup()

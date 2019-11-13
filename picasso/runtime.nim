@@ -14,6 +14,7 @@ import
   ./datatypes/sync_types,
   ./channels/[channels_mpsc_bounded_lock, channels_spsc_single],
   ./memory/persistacks,
+  ./scheduler, ./signals,
   # Low-level primitives
   ./primitives/[affinity, barriers]
 
@@ -48,4 +49,34 @@ proc init*(_: type Runtime) =
   pinToCpu(0)
 
   # Create workforce() - 1 worker threads
-  # for i in 1 ..< workforce():
+  for i in 1 ..< workforce():
+    createThread(globalCtx.threadpool[i], worker_entry_fn, WorkerID(i))
+    # TODO: we might want to take into account Hyper-Threading (HT)
+    #       and allow spawning tasks and pinning to cores that are not HT-siblings.
+    #       This is important for memory-bound workloads (like copy, addition, ...)
+    #       where both sibling cores will compete for L1 and L2 cache, effectively
+    #       halving the memory bandwidth or worse, flushing what the other put in cache.
+    #       Note that while 2x siblings is common, Xeon Phi has 4x Hyper-Threading.
+    pinToCpu(globalCtx.threadpool[i], i)
+
+    myWorker.currentTask = newTaskFromCache()
+
+proc globalCleanup() =
+  for i in 1 ..< workforce():
+    joinThread(globalCtx.threadpool[i])
+
+  discard pthread_barrier_destroy(globalCtx.barrier)
+  deallocShared(globalCtx.threadpool)
+
+  # The root task has no parent
+  ascertain: myTask().parent.isNil
+  delete(myTask())
+
+proc exit*(_: type Runtime) =
+  signalTerminate(nil)
+  localCtx.signaledTerminate = true
+
+  discard pthread_barrier_wait(globalCtx.barrier)
+  # statistics
+  threadLocalCleanup()
+  globalCleanup()
