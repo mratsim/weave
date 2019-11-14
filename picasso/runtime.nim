@@ -59,7 +59,10 @@ proc init*(_: type Runtime) =
     #       Note that while 2x siblings is common, Xeon Phi has 4x Hyper-Threading.
     pinToCpu(globalCtx.threadpool[i], i)
 
-    myWorker.currentTask = newTaskFromCache()
+  myWorker().currentTask = newTaskFromCache() # Root task
+  init(localCtx)
+  # Wait for the child threads
+  discard pthread_barrier_wait(globalCtx.barrier)
 
 proc globalCleanup() =
   for i in 1 ..< workforce():

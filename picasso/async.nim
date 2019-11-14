@@ -125,6 +125,8 @@ macro spawn*(funcCall: typed): untyped =
       # Return the future
       `fut`
 
+  # Wrap in a block for namespacing
+  result = nnkBlockStmt.newTree(newEmptyNode(), result)
   # echo result.toStrLit
 
 proc sync*[T](fv: FlowVar[T]): T =
@@ -141,6 +143,7 @@ when isMainModule:
       init(Runtime)
 
       spawn display_int(123456)
+      spawn display_int(654321)
 
       sync(Runtime)
       exit(Runtime)

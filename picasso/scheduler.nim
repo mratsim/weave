@@ -23,7 +23,7 @@ import
 # Local context
 # ----------------------------------------------------------------------------------
 
-proc init(ctx: var TLContext) =
+proc init*(ctx: var TLContext) =
   ## Initialize the thread-local context of a worker (including the lead worker)
 
   myWorker().deque = newPrellDeque(Task)
