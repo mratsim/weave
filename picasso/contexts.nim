@@ -7,7 +7,7 @@
 
 import
   ./datatypes/[context_global, context_thread_local, sync_types],
-  ./channels/[channels_spsc_single, channels_mpsc_bounded_lock],
+  ./channels/[channels_spsc_single_ptr, channels_mpsc_bounded_lock],
   ./memory/[persistacks, intrusive_stacks],
   ./config
 
@@ -32,7 +32,7 @@ proc newTaskFromCache*(): Task {.inline.} =
 # Aliases
 # ----------------------------------------------------------------------------------
 
-template myTodoBoxes*: Persistack[PI_MaxConcurrentStealPerWorker, ChannelSpscSingle[Task]] =
+template myTodoBoxes*: Persistack[PI_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]] =
   globalCtx.com.tasks[localCtx.worker.ID]
 
 template myThieves*: ChannelMpscBounded[StealRequest] =

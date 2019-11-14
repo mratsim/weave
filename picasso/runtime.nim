@@ -11,9 +11,9 @@ import
   # Internal
   ./instrumentation/[contracts, profilers],
   ./contexts, ./config,
-  ./datatypes/sync_types,
-  ./channels/[channels_mpsc_bounded_lock, channels_spsc_single],
-  ./memory/persistacks,
+  ./datatypes/[sync_types, prell_deques],
+  ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr],
+  ./memory/[persistacks, intrusive_stacks],
   ./scheduler, ./signals, ./workers, ./thieves, ./victims,
   # Low-level primitives
   ./primitives/[affinity, barriers]
@@ -41,7 +41,7 @@ proc init*(_: type Runtime) =
   ## Allocation of the global context.
   globalCtx.threadpool = createArray(Thread[WorkerID], workforce())
   globalCtx.com.thefts = createArray(ChannelMpscBounded[StealRequest], workforce())
-  globalCtx.com.tasks = createArray(Persistack[PI_MaxConcurrentStealPerWorker, ChannelSpscSingle[Task]], workforce())
+  globalCtx.com.tasks = createArray(Persistack[PI_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]], workforce())
   discard pthread_barrier_init(globalCtx.barrier, nil, workforce())
 
   # Lead thread - pinned to CPU 0

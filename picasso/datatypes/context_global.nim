@@ -7,7 +7,7 @@
 
 import
   ../channels/channels_mpsc_bounded_lock,
-  ../channels/channels_spsc_single,
+  ../channels/channels_spsc_single_ptr,
   ../memory/persistacks,
   ../config,
   ../primitives/barriers,
@@ -33,7 +33,7 @@ type
     #   per channel
     #   and a known max number of workers
     thefts*: ptr UncheckedArray[ChannelMpscBounded[StealRequest]]
-    tasks*: ptr UncheckedArray[Persistack[PI_MaxConcurrentStealPerWorker, ChannelSpscSingle[Task]]]
+    tasks*: ptr UncheckedArray[Persistack[PI_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]]]
 
   GlobalContext* = object
     com*: ComChannels

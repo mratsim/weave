@@ -10,7 +10,7 @@ import
   ./contexts, ./config,
   ./instrumentation/[contracts, loggers, profilers],
   ./memory/persistacks,
-  ./channels/channels_spsc_single
+  ./channels/channels_spsc_single_ptr
 
 # Signals
 # ----------------------------------------------------------------------------------
@@ -25,7 +25,7 @@ proc detectTermination*() {.inline.} =
 
   localCtx.runtimeIsQuiescent = true
 
-proc asyncSignal(fn: proc (_: pointer) {.nimcall.}, chan: var ChannelSpscSingle[Task]) =
+proc asyncSignal(fn: proc (_: pointer) {.nimcall.}, chan: var ChannelSpscSinglePtr[Task]) =
   ## Send an asynchronous signal `fn` to channel `chan`
 
   # Package the signal in a dummy task

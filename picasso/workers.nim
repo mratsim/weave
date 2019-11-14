@@ -9,7 +9,7 @@ import
   ./datatypes/[sync_types, context_thread_local, bounded_queues],
   ./contexts,
   ./instrumentation/[contracts, profilers],
-  ./channels/[channels_mpsc_bounded_lock, channels_spsc_single],
+  ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr],
   ./memory/persistacks,
   ./config,
   ./thieves

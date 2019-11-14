@@ -8,7 +8,7 @@
 import
   ./helpers, ./victims_bitsets,
   ../config,
-  ../channels/channels_spsc_single,
+  ../channels/channels_spsc_single_ptr,
   ../instrumentation/contracts
 
 # Inter-thread synchronization types
@@ -71,7 +71,7 @@ type
   # Padding shouldn't be needed as steal requests are used as value types
   # and deep-copied between threads
   StealRequest* = object
-    thiefAddr*: ptr ChannelSpscSingle[Task]       # Channel for sending tasks back to the thief
+    thiefAddr*: ptr ChannelSpscSinglePtr[Task]       # Channel for sending tasks back to the thief
     thiefID*: WorkerID
     retry*: int32                                 # 0 <= retry <= num_workers
     victims*: VictimsBitset                       # bitfield of potential victims

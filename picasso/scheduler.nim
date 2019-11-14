@@ -8,8 +8,8 @@
 import
   ./instrumentation/[contracts, profilers],
   ./primitives/barriers,
-  ./datatypes/[sync_types, prell_deques, context_thread_local],
-  ./channels/[channels_mpsc_bounded_lock, channels_spsc_single],
+  ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars],
+  ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr],
   ./memory/[persistacks, intrusive_stacks],
   ./contexts, ./config,
   ./victims, ./loop_splitting,
@@ -175,7 +175,8 @@ template isFutReady(): untyped =
 
 proc forceFuture*[T](fv: Flowvar[T], parentResult: T) =
   ## Eagerly complete an awaited FlowVar
-  debug: let thisTask = myTask()
+  debug:
+    let thisTask = myTask()
 
   block CompleteFuture:
     # Almost duplicate of schedulingLoop and sync() barrier
@@ -236,3 +237,28 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: T) =
       profile(enq_deq_task):
         # The memory is reused but not zero-ed
         localCtx.taskCache.add(task)
+
+proc schedule*(task: sink Task) =
+  ## Add a new task to be scheduled in parallel
+  preCondition: not task.fn.isNil
+  myWorker().deque.addFirst task
+
+  profile_stop(enq_deq_task)
+
+  # Lead thread
+  if localCtx.runtimeIsQuiescent:
+    ascertain: myID() == LeaderID
+    debugTermination:
+      log(">>> Worker %d resumes execution after barrier <<<\n", myID())
+    localCtx.runtimeIsQuiescent = false
+
+  shareWork()
+
+  # Check if someone requested a steal
+  var req: StealRequest
+  while recv(req):
+    dispatchTasks(req)
+
+  profile_start(enq_deq_task)
+
+  ## TODO steal early
