@@ -121,6 +121,7 @@ proc sync*(_: type Runtime) =
           ascertain: myThefts().outstanding > 0
           declineAll()
           if localCtx.runtimeIsQuiescent:
+            # Goto breaks profiling, but the runtime is still idle
             break EmptyLocalQueue
 
 
@@ -129,8 +130,11 @@ proc sync*(_: type Runtime) =
 
       let loot = task.batch
       if loot > 1:
-        # Add everything
-        myWorker().deque.addListFirst(task, loot)
+        profile(enq_deq_task):
+          # Add everything
+          myWorker().deque.addListFirst(task, loot)
+          # And then only use the last
+          task = myWorker().deque.popFirst()
 
       StealAdaptative:
         myThefts().recentThefts += 1

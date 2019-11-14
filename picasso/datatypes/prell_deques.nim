@@ -132,7 +132,7 @@ proc delete*[T: StealableTask](dq: var PrellDeque[T]) =
 # Batch routines
 # ---------------------------------------------------------------
 
-func addListFirst[T](dq: var PrellDeque[T], head, tail: T, len: int32) =
+func addListFirst[T](dq: var PrellDeque[T], head, tail: sink T, len: int32) =
   # Add a list of tasks [head ... tail] of length len to the front of the deque
   preCondition: not head.isNil and not tail.isNil
   preCondition: len > 0
@@ -146,7 +146,7 @@ func addListFirst[T](dq: var PrellDeque[T], head, tail: T, len: int32) =
   dq.head = head
   dq.pendingTasks += len
 
-func addListFirst*[T](dq: var PrellDeque[T], head: T, len: int32) =
+func addListFirst*[T](dq: var PrellDeque[T], head: sink T, len: int32) =
   preCondition: not head.isNil
   preCondition: len > 0
 

@@ -120,6 +120,8 @@ proc schedulingLoop() =
     if loot > 1:
       # Add everything
       myWorker().deque.addListFirst(task, loot)
+      # And then only use the last
+      task = myWorker().deque.popFirst()
 
     StealAdaptative:
       myThefts().recentThefts += 1
@@ -167,3 +169,70 @@ proc worker_entry_fn*(id: WorkerID) =
 
   # stats
   threadLocalCleanup()
+
+template isFutReady(): untyped =
+  fv.tryRecv(parentResult)
+
+proc forceFuture*[T](fv: Flowvar[T], parentResult: T) =
+  ## Eagerly complete an awaited FlowVar
+  debug: let thisTask = myTask()
+
+  block CompleteFuture:
+    # Almost duplicate of schedulingLoop and sync() barrier
+    if isFutReady():
+      break CompleteFuture
+
+    ## 1. Process all the children of the current tasks (and only them)
+    while (let task = nextTask(childTask = true); not task.isNil):
+      profile(run_task):
+        run(task)
+      profile(enq_deq_task):
+        localCtx.taskCache.add(task)
+      if isFutReady():
+        break CompleteFuture
+
+    ascertain: myTask() == thisTask
+
+    # 2. Run out-of-task, become a thief and help other threads
+    #    to reach children faster
+    while not isFutReady():
+      trySteal(isOutOfTasks = false)
+      var task: Task
+      profile(idle):
+        while not recv(task, idle = false):
+          # We might inadvertently remove our own steal request in
+          # dispatchTasks so resteal
+          profile_stop(idle)
+          trySteal(isOutOfTasks = false)
+          # If someone wants our non-child tasks, let's oblige
+          var req: StealRequest
+          while recv(req):
+            dispatchTasks(req)
+          profile_start(idle)
+          if isFutReady():
+            profile_stop(idle)
+            break CompleteFuture
+
+      # 3. We stole some task(s)
+      ascertain: not task.fn.isNil
+
+      let loot = task.batch
+      if loot > 1:
+        profile(enq_deq_task):
+          # Add everything
+          myWorker().deque.addListFirst(task, loot)
+          # And then only use the last
+          task = myWorker().deque.popFirst()
+
+      StealAdaptative:
+        myThefts().recentThefts += 1
+
+      # Share loot with children workers
+      shareWork()
+
+      # Run the rest
+      profile(run_task):
+        run(task)
+      profile(enq_deq_task):
+        # The memory is reused but not zero-ed
+        localCtx.taskCache.add(task)
