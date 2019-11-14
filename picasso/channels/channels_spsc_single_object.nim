@@ -7,14 +7,13 @@
 
 import
   std/atomics,
-  ../config,
-  ../instrumentation/contracts
+  ../config
 
 
 type
-  ChannelSpscSinglePtr*[T: ptr] = ChannelRaw
+  ChannelSpscSingleObject*[T] = object
     ## Wait-free bounded single-producer single-consumer channel
-    ## that can only buffer a single item (a Picasso task)
+    ## that can only buffer a single item
     ## Properties:
     ##   - wait-free
     ##   - supports weak memory models
@@ -24,17 +23,12 @@ type
     ##   - only 1 synchronization variable.
     ##   - No extra indirection to access the item, the buffer is inline the channel
     ##   - Linearizable
-    ##   - Specialized for pointers
-    ##     Using different ptr subtypes will be type-safe
-    ##     but internally they are voided to avoid code duplication
-    ##     due to generics: https://github.com/nim-lang/Nim/issues/12630
-    ##     It is expected though that the compiler inlines (and so duplicates)
-    ##     everything as the code is very small.
+    ##
+    ## Requires T to fit in a CacheLine
     ##
     ## Usage:
-    ##   - Requires a pointer type
+    ##   - Must be heap-allocated
     ##   - There is no need to zero-out the padding fields
-    ##   - Only trivial objects can transit (no GC, can be copied and no custom destructor)
     ##   - The content of the channel is not destroyed upon channel destruction
     ##
     ## Semantics:
@@ -49,42 +43,17 @@ type
     ## - Messages are guaranteed to be delivered
     ## - Messages will be delivered exactly once
     ## - Linearizability
-  ChannelRaw = object
-    pad0: array[PI_CacheLineSize - sizeof(pointer), byte] # If used in a sequence of channels
-    buffer: Atomic[pointer]
+    pad0: array[PI_CacheLineSize, byte] # If used in a sequence of channels
+    buffer: T
+    pad1: array[PI_CacheLineSize  - sizeof(T), byte]
+    full: Atomic[bool]
 
-# Internal type-erased implementation
-# ---------------------------------------------------------------
+proc `=`[T](
+    dest: var ChannelSpscSingleObject[T],
+    source: ChannelSpscSingleObject[T]
+  ) {.error: "A channel cannot be copied".}
 
-proc `=`(dest: var ChannelRaw,source: ChannelRaw) {.error: "A channel cannot be copied".}
-
-func clearImpl(chan: var ChannelRaw) {.inline.} =
-  chan.buffer.store(nil, moRelaxed)
-
-func tryRecvImpl(chan: var ChannelRaw, dst: var pointer): bool {.inline, nodestroy.} =
-  let p = chan.buffer.load(moAcquire)
-  if p.isNil:
-    return false
-  # need atomic "move" - https://github.com/nim-lang/Nim/issues/12631
-  dst = p
-  chan.buffer.store(nil, moRelease)
-  return true
-
-func trySendImpl(chan: var ChannelRaw, src: sink pointer): bool {.inline, nodestroy.} =
-  preCondition:
-    not src.isNil
-
-  let p = chan.buffer.load(moAcquire)
-  if not p.isNil:
-    return false
-  # need atomic "sink" - https://github.com/nim-lang/Nim/issues/12631
-  chan.buffer.store(src, moRelease)
-  return true
-
-# Public well-typed implementation
-# ------------------------------------------------------------------------------
-
-func initialize*[T](chan: var ChannelSpscSinglePtr[T]) {.inline.} =
+func initialize*[T](chan: var ChannelSpscSingleObject[T]) {.inline.} =
   ## Creates a new Shared Memory Single Producer Single Consumer Bounded channel
   ## Channels should be allocated on the shared memory heap
   ##
@@ -99,47 +68,54 @@ func initialize*[T](chan: var ChannelSpscSinglePtr[T]) {.inline.} =
   ## in arrays.
 
   # We don't need to zero-mem the padding
-  clearImpl(chan)
+  chan.buffer = default(T)
+  chan.full.store(false, moRelaxed)
 
-func clear*[T](chan: var ChannelSpscSinglePtr[T]) {.inline.} =
+func clear*(chan: var ChannelSpscSingleObject) {.inline.} =
   ## Reinitialize the data in the channel
   ##
   ## This is not thread-safe.
-  clearImpl(chan)
+  if chan.full.load(moRelaxed) == true:
+    `=destroy`(chan.buffer)
+    chan.full.store(moRelaxed) = false
 
-func tryRecv*[T](chan: var ChannelSpscSinglePtr[T], dst: var T): bool {.inline.} =
+func tryRecv*[T](chan: var ChannelSpscSingleObject[T], dst: var T): bool {.inline.} =
   ## Try receiving the item buffered in the channel
   ## Returns true if successful (channel was not empty)
   ##
   ## ⚠ Use only in the consumer thread that reads from the channel.
-  # Nim implicit conversion to pointer is not mutable
-  chan.tryRecvImpl(cast[var pointer](dst.addr))
+  let full = chan.full.load(moAcquire)
+  if not full:
+    return false
+  dst = move chan.buffer
+  chan.full.store(false, moRelease)
+  return true
 
-func trySend*[T](chan: var ChannelSpscSinglePtr[T], src: sink T): bool {.inline.} =
+func trySend*[T](chan: var ChannelSpscSingleObject[T], src: sink T): bool {.inline.} =
   ## Try sending an item into the channel
   ## Reurns true if successful (channel was empty)
   ##
   ## ⚠ Use only in the producer thread that writes from the channel.
-  chan.trySendImpl(src)
-
-func isEmpty*[T](chan: var ChannelSpscSinglePtr[T]): bool {.inline.} =
-  chan.buffer.load(moRelaxed).isNil
+  let full = chan.full.load(moAcquire)
+  if full:
+    return false
+  `=sink`(chan.buffer, src)
+  chan.full.store(true, moRelease)
+  return true
 
 # Sanity checks
 # ------------------------------------------------------------------------------
 when isMainModule:
-  import strutils
-
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}
 
-  template sendLoop[T](chan: var Channel[T],
+  template sendLoop[T](chan: var ChannelSpscSingleObject[T],
                        data: sink T,
                        body: untyped): untyped =
     while not chan.trySend(data):
       body
 
-  template recvLoop[T](chan: var Channel[T],
+  template recvLoop[T](chan: var ChannelSpscSingleObject[T],
                        data: var T,
                        body: untyped): untyped =
     while not chan.tryRecv(data):
@@ -148,7 +124,7 @@ when isMainModule:
   type
     ThreadArgs = object
       ID: WorkerKind
-      chan: ptr Channel[ptr int]
+      chan: ptr ChannelSpscSingleObject[int]
 
     WorkerKind = enum
       Sender
@@ -172,33 +148,28 @@ when isMainModule:
     # chan <- 53
     # chan <- 64
     Worker(Receiver):
-      # Receives the pointer and free it
-      var val: ptr int
+      var val: int
       for j in 0 ..< 10:
-        var val: ptr int
         args.chan[].recvLoop(val):
           # Busy loop, in prod we might want to yield the core/thread timeslice
           discard
-        echo "                                               Receiver got: ", val[], " at address 0x", toLowerASCII toHex cast[ByteAddress](val)
-        doAssert val[] == 42 + j*11
-        freeShared(val)
+        echo "                  Receiver got: ", val
+        doAssert val == 42 + j*11
 
     Worker(Sender):
-      # Allocates the pointer and sends it
-      doAssert args.chan.buffer.load(moRelaxed) == nil
+      doAssert args.chan.full.load(moRelaxed) == false
       for j in 0 ..< 10:
-        let val = createShared(int)
-        val[] = 42 + j*11
+        let val = 42 + j*11
         args.chan[].sendLoop(val):
           # Busy loop, in prod we might want to yield the core/thread timeslice
           discard
-        echo "Sender sent: ", val[], " at address 0x", toLowerASCII toHex cast[ByteAddress](val)
+        echo "Sender sent: ", val
 
   proc main() =
     echo "Testing if 2 threads can send data"
     echo "-----------------------------------"
     var threads: array[2, Thread[ThreadArgs]]
-    let chan = createSharedU(Channel[ptr int]) # CreateSharedU is not zero-init
+    let chan = createSharedU(ChannelSpscSingleObject[int]) # CreateU is not zero-init
     chan[].initialize()
 
     createThread(threads[0], thread_func, ThreadArgs(ID: Receiver, chan: chan))
