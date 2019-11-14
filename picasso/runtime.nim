@@ -9,12 +9,12 @@ import
   # Standard library
   os, cpuinfo, strutils,
   # Internal
-  ./instrumentation/contracts,
+  ./instrumentation/[contracts, profilers],
   ./contexts, ./config,
   ./datatypes/sync_types,
   ./channels/[channels_mpsc_bounded_lock, channels_spsc_single],
   ./memory/persistacks,
-  ./scheduler, ./signals,
+  ./scheduler, ./signals, ./workers, ./thieves, ./victims,
   # Low-level primitives
   ./primitives/[affinity, barriers]
 
@@ -69,7 +69,7 @@ proc globalCleanup() =
   deallocShared(globalCtx.threadpool)
 
   # The root task has no parent
-  ascertain: myTask().parent.isNil
+  ascertain: myTask().isRootTask()
   delete(myTask())
 
 proc exit*(_: type Runtime) =
@@ -80,3 +80,76 @@ proc exit*(_: type Runtime) =
   # statistics
   threadLocalCleanup()
   globalCleanup()
+
+proc sync*(_: type Runtime) =
+  ## Global barrier for the Picasso runtime
+  ## This is only valid in the root task
+  Worker: return
+
+  debugTermination:
+    log(">>> Worker %d enters barrier <<<\n", myID())
+
+  preCondition: myTask().isRootTask()
+
+  block EmptyLocalQueue:
+    ## Empty all the tasks and beafore leaving the barrier
+    while true:
+      while (let task = nextTask(childTask = false); not task.isNil):
+        # TODO: duplicate schedulingLoop
+        profile(run_task):
+          run(task)
+        profile(enq_deq_task):
+          # The memory is reused but not zero-ed
+          localCtx.taskCache.add(task)
+
+      if workforce() == 1:
+        localCtx.runtimeIsQuiescent = true
+        break EmptyLocalQueue
+
+      if localCtx.runtimeIsQuiescent:
+        break EmptyLocalQueue
+
+      # 2. Run out-of-task, become a thief and help other threads
+      #    to reach the barrier faster
+      trySteal(isOutOfTasks = true)
+      ascertain: myThefts().outstanding > 0
+
+      var task: Task
+      profile(idle):
+        while not recv(task, isOutOfTasks = true):
+          ascertain: myWorker().deque.isEmpty()
+          ascertain: myThefts().outstanding > 0
+          declineAll()
+          if localCtx.runtimeIsQuiescent:
+            break EmptyLocalQueue
+
+
+      # 3. We stole some task(s)
+      ascertain: not task.fn.isNil
+
+      let loot = task.batch
+      if loot > 1:
+        # Add everything
+        myWorker().deque.addListFirst(task, loot)
+
+      StealAdaptative:
+        myThefts().recentThefts += 1
+
+      # 4. Share loot with children
+      shareWork()
+
+      # 5. Work on what is left
+      profile(run_task):
+        run(task)
+      profile(enq_deq_task):
+        # The memory is reused but not zero-ed
+        localCtx.taskCache.add(task)
+
+    # Restart the loop
+
+  # Execution continues but the runtime is quiescent until new tasks
+  # are created
+  postCondition: localCtx.runtimeIsQuiescent
+
+  debugTermination:
+    log(">>> Worker %d leaves barrier <<<\n", myID())

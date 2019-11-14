@@ -46,7 +46,7 @@ proc init(ctx: var TLContext) =
 # Scheduler
 # ----------------------------------------------------------------------------------
 
-proc nextTask(childTask: bool): Task =
+proc nextTask*(childTask: bool): Task =
 
   profile(enq_deq_task):
     if childTask:
@@ -71,7 +71,7 @@ proc nextTask(childTask: bool): Task =
     else:
       dispatchTasks(req)
 
-proc declineAll() =
+proc declineAll*() =
   var req: StealRequest
 
   profile_stop(idle)

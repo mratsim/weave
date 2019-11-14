@@ -57,6 +57,9 @@ template myMetrics*: untyped =
   metrics:
     localCtx.counters
 
+template isRootTask*(task: Task): bool =
+  task.parent.isNil
+
 # Dynamic Scopes
 # ----------------------------------------------------------------------------------
 
