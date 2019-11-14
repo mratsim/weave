@@ -94,4 +94,8 @@ proc delete*(task: Task) {.inline.} =
   freeShared(task)
 
 # Ensure unicity of a given steal request
-proc `=`(dest: var StealRequest, source: StealRequest) {.error: "A Steal Request must be unique and cannot be copied".}
+# -----------------------------------------------------------
+# Unfortunately Nim compiler cannot infer in while loops that
+# all paths will sink the current value
+
+# proc `=`(dest: var StealRequest, source: StealRequest) {.error: "A Steal Request must be unique and cannot be copied".}

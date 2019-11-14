@@ -120,7 +120,7 @@ macro spawn*(funcCall: typed): untyped =
         task.has_future = true
         let `fut` = newFlowvar(`freshIdent`)
         cast[ptr `futArgsTy`](task.data.addr)[] = `futArgs`
-        push task
+        schedule(task)
 
       # Return the future
       `fut`

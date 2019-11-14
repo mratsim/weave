@@ -160,10 +160,10 @@ proc lastStealAttempt*(req: sink StealRequest) =
   ## - if we are a worker thread, we message our parent and
   ##   passively wait for it to send us work or tell us to shutdown.
 
-  Leader:
+  if myID() == LeaderID:
     detectTermination()
     forget(req)
-  Worker:
+  else:
     req.state = Waiting
     debugTermination:
       log("Worker %d sends state passively WAITING to its parent worker %d\n", myID(), myWorker().parent)

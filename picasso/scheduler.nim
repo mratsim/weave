@@ -9,7 +9,7 @@ import
   ./instrumentation/[contracts, profilers],
   ./primitives/barriers,
   ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars],
-  ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr],
+  ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr, channels_spsc_single_object],
   ./memory/[persistacks, intrusive_stacks],
   ./contexts, ./config,
   ./victims, ./loop_splitting,
@@ -171,12 +171,11 @@ proc worker_entry_fn*(id: WorkerID) =
   threadLocalCleanup()
 
 template isFutReady(): untyped =
-  fv.tryRecv(parentResult)
+  fv.chan[].tryRecv(parentResult)
 
-proc forceFuture*[T](fv: Flowvar[T], parentResult: T) =
+proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
   ## Eagerly complete an awaited FlowVar
-  debug:
-    let thisTask = myTask()
+  let thisTask = myTask() # Only for ascertain
 
   block CompleteFuture:
     # Almost duplicate of schedulingLoop and sync() barrier
@@ -200,7 +199,7 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: T) =
       trySteal(isOutOfTasks = false)
       var task: Task
       profile(idle):
-        while not recv(task, idle = false):
+        while not recv(task, isOutOfTasks = false):
           # We might inadvertently remove our own steal request in
           # dispatchTasks so resteal
           profile_stop(idle)
