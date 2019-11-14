@@ -45,18 +45,26 @@ macro assertContract(
         predicate: untyped) =
   let lineinfo = lineinfoObj(predicate)
   let file = extractFilename(lineinfo.filename)
+
+  var strippedPredicate: NimNode
+  if predicate.kind == nnkStmtList:
+    assert predicate.len == 1, "Only one-liner conditions are supported"
+    strippedPredicate = predicate[0]
+  else:
+    strippedPredicate = predicate
+
   let debug = "\n    Contract violated for " & checkName & " at " & file & ":" & $lineinfo.line &
-              "\n        " & $predicate.toStrLit &
+              "\n        " & $strippedPredicate.toStrLit &
               "\n    The following values are contrary to expectations:" &
               "\n        "
-  let values = inspectInfix(predicate)
+  let values = inspectInfix(strippedPredicate)
 
   result = quote do:
     when compileOption("assertions"):
-      assert(`predicate`, `debug` & `values`)
+      assert(`predicate`, `debug` & $`values`)
     elif defined(PI_Asserts):
       if unlikely(not(`predicate`)):
-        raise newException(AssertionError, `debug` & `values`)
+        raise newException(AssertionError, `debug` & $`values`)
 
 # A way way to get the caller function would be nice.
 

@@ -50,9 +50,9 @@ proc nextTask*(childTask: bool): Task =
 
   profile(enq_deq_task):
     if childTask:
-      result = myWorker().deque.popFirst()
-    else:
       result = myWorker().deque.popFirstIfChild(myTask())
+    else:
+      result = myWorker().deque.popFirst()
 
   # TODO: steal early
 
@@ -191,7 +191,7 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
       if isFutReady():
         break CompleteFuture
 
-    ascertain: myTask() == thisTask
+    # ascertain: myTask() == thisTask # need to be able to print tasks TODO
 
     # 2. Run out-of-task, become a thief and help other threads
     #    to reach children faster

@@ -8,7 +8,7 @@
 import
   ./datatypes/[victims_bitsets, sync_types, context_thread_local],
   ./contexts, ./targets,
-  ./instrumentation/[contracts, profilers],
+  ./instrumentation/[contracts, profilers, loggers],
   ./channels/channels_mpsc_bounded_lock,
   ./memory/persistacks,
   ./config, ./signals

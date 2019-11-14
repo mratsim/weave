@@ -204,7 +204,7 @@ func steal*[T](dq: var PrellDeque[T]): T =
 
   if dq.tail.prev.isNil:
     # Stealing last task of the deque
-    ascertain: dq.head == result
+    # ascertain: dq.head == result # Concept are buggy with repr, TODO
     dq.head = dq.tail # isEmpty() condition
   else:
     dq.tail.prev.next = dq.tail # last task points to dummy

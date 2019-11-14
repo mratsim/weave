@@ -31,12 +31,14 @@ template isEmpty*(v: VictimsBitset): bool =
   v.data == 0
 
 func clear*(v: var VictimsBitset, workerID: int32) {.inline.} =
-  v.data.setBit(workerID)
+  # v.data.clearBit(workerID) - TODO: bitset doesn't support > 32 CPU
+  v.data = v.data and not bit(workerID)
 
 func contains*(v: VictimsBitset, workerID: int32): bool {.inline.} =
   # TODO: Nim testBit could use a comparison "!= 0"
   #       instead of "== mask" to save on code size for bit-heavy libraries
-  v.data.testBit(workerID)
+  # v.data.testBit(workerID) - TODO: bitset doesn't support > 32 CPU
+  bool((v.data shr workerID) and 1)
 
 template len*(v: VictimsBitset): int32 =
   int32 countSetBits(v.data)

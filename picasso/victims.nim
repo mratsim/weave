@@ -67,7 +67,6 @@ proc declineOwn(req: sink StealRequest) =
   ## Decline our own steal request
   # No one had jobs to steal
   preCondition: req.victims.isEmpty()
-  preCondition: req.retry == PI_MaxRetriesPerSteal
 
   if req.state == Stealing and myWorker().leftIsWaiting and myWorker().rightIsWaiting:
     when PI_MaxConcurrentStealPerWorker == 1:
@@ -87,14 +86,10 @@ proc declineOwn(req: sink StealRequest) =
         drop(req)
   else:
     # Our own request but we still have work, so we reset it and recirculate.
-    # This can only happen if workers are allowed to steal before finishing their tasks.
-    when PI_StealEarly > 0:
-      req.retry = 0
-      req.victims.init(workforce)
-      req.victims.clear(myID())
-      req.findVictimAndSteal()
-    else: # No-op in "-d:danger"
-      postCondition: PI_StealEarly > 0 # Force an error
+    req.retry = 0
+    req.victims.init(workforce)
+    req.victims.clear(myID())
+    req.findVictimAndSteal()
 
 proc decline*(req: sink StealRequest) =
   ## Pass steal request to another worker
@@ -108,6 +103,7 @@ proc decline*(req: sink StealRequest) =
     if req.thiefID == myID():
       req.declineOwn()
     else: # Not our own request
+      req.victims.clear(myID())
       req.findVictimAndSteal()
 
 proc receivedOwn(req: sink StealRequest) =
