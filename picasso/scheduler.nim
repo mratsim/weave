@@ -93,6 +93,8 @@ proc schedulingLoop() =
     # when all threads are ready.
 
     # 1. Private task deque
+    debugTermination:
+      log("Worker %d: schedloop 1 - task from local deque\n", myID())
     while (let task = nextTask(childTask = false); not task.isNil):
       # Prio is: children, then thieves then us
       ascertain: not task.fn.isNil
@@ -103,6 +105,8 @@ proc schedulingLoop() =
         localCtx.taskCache.add(task)
 
     # 2. Run out-of-task, become a thief
+    debugTermination:
+      log("Worker %d: schedloop 2 - becoming a thief\n", myID())
     trySteal(isOutOfTasks = true)
     ascertain: myThefts().outstanding > 0
 
@@ -115,6 +119,8 @@ proc schedulingLoop() =
 
     # 3. We stole some task(s)
     ascertain: not task.fn.isNil
+    debugTermination:
+      log("Worker %d: schedloop 3 - stoled tasks\n", myID())
 
     let loot = task.batch
     if loot > 1:
@@ -127,9 +133,13 @@ proc schedulingLoop() =
       myThefts().recentThefts += 1
 
     # 4. Share loot with children
+    debugTermination:
+      log("Worker %d: schedloop 4 - sharing work\n", myID())
     shareWork()
 
     # 5. Work on what is left
+    debugTermination:
+      log("Worker %d: schedloop 5 - working on leftover\n", myID())
     profile(run_task):
       run(task)
     profile(enq_deq_task):
@@ -171,7 +181,7 @@ proc worker_entry_fn*(id: WorkerID) =
 
   # 1 matching barrier in init(Runtime) for lead thread
   workerMetrics()
-  
+
   threadLocalCleanup()
 
 template isFutReady(): untyped =
@@ -187,6 +197,8 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
       break CompleteFuture
 
     ## 1. Process all the children of the current tasks (and only them)
+    debugTermination:
+      log("Worker %d: forcefut 1 - task from local deque\n", myID())
     while (let task = nextTask(childTask = true); not task.isNil):
       profile(run_task):
         run(task)
@@ -199,6 +211,8 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
 
     # 2. Run out-of-task, become a thief and help other threads
     #    to reach children faster
+    debugTermination:
+      log("Worker %d: forcefut 2 - becoming a thief\n", myID())
     while not isFutReady():
       trySteal(isOutOfTasks = false)
       var task: Task
@@ -219,6 +233,8 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
 
       # 3. We stole some task(s)
       ascertain: not task.fn.isNil
+      debugTermination:
+        log("Worker %d: forcefut 3 - stoled tasks\n", myID())
 
       let loot = task.batch
       if loot > 1:
@@ -232,6 +248,8 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
         myThefts().recentThefts += 1
 
       # Share loot with children workers
+      debugTermination:
+        log("Worker %d: forcefut 4 - sharing work\n", myID())
       shareWork()
 
       # Run the rest

@@ -83,6 +83,7 @@ proc findVictimAndSteal(req: sink StealRequest) =
   #   and debugging that in a multithreading runtime
   #   would probably be very painful.
   let target = findVictim(req)
+  debugTermination: log("Worker %d: sent steal request to %d\n", myID(), target)
   target.sendSteal(req)
 
 proc findVictimAndRelaySteal*(req: sink StealRequest) =
