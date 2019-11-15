@@ -46,7 +46,7 @@ proc init*(ctx: var TLContext) =
 # Scheduler
 # ----------------------------------------------------------------------------------
 
-proc nextTask*(childTask: bool): Task =
+proc nextTask*(childTask: bool): Task {.inline.} =
 
   profile(enq_deq_task):
     if childTask:
