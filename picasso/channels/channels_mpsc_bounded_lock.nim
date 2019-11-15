@@ -98,7 +98,6 @@ proc initialize*[T](chan: var ChannelMpscBounded[T], capacity: int32) {.inline.}
   ## in arrays.
 
   # We don't need to zero-mem the padding
-  preCondition: capacity > 1
   static:
     # Steal request cannot be copied and so
     # don't "support copyMem"

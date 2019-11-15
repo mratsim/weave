@@ -29,7 +29,7 @@ proc init*(ctx: var TLContext) =
   myWorker().deque = newPrellDeque(Task)
   myThieves().initialize(PI_MaxConcurrentStealPerWorker * workforce())
   myTodoBoxes().initialize()
-  myWorker().initialize(maxID = workforce())
+  myWorker().initialize(maxID = workforce() - 1)
 
   ascertain: myTodoBoxes().len == PI_MaxConcurrentStealPerWorker
 
