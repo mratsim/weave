@@ -75,7 +75,10 @@ proc run*(task: Task) =
   preCondition: not task.fn.isNil
 
   # TODO - logic seems sketchy, why do we do this <-> task.
+  let this = myTask()
+  myTask() = task
   task.fn(task.data.addr)
+  myTask() = this
   metrics:
     if task.isLoop:
       # We have executed |stop-start| iterations
