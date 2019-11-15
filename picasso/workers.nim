@@ -71,7 +71,7 @@ proc recv*(task: var Task, isOutOfTasks: bool): bool =
     postCondition: myThefts().outstanding in 0 ..< PI_MaxConcurrentStealPerWorker
     postCondition: myThefts().dropped == 0
 
-proc run*(task: Task) =
+proc run*(task: Task) {.inline.} =
   preCondition: not task.fn.isNil
 
   # TODO - logic seems sketchy, why do we do this <-> task.
