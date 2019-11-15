@@ -47,7 +47,25 @@ proc newTaskFromCache*(): Task {.inline.} =
 template myTodoBoxes*: Persistack[PI_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]] =
   globalCtx.com.tasks[localCtx.worker.ID]
 
-template myThieves*: ChannelMpscBounded[StealRequest] =
+import ./channels/channels
+type Channel[T] = channels.Channel[T]
+
+func trySend*[T](c: Channel[T], src: sink T): bool {.inline.} =
+  channel_send(c, src, int32 sizeof(src))
+
+func tryRecv*[T](c: Channel[T], dst: var T): bool {.inline.} =
+  channel_receive(c, dst.addr, int32 sizeof(dst))
+
+func peek*[T](c: Channel[T]): int32 =
+  channel_peek(c)
+
+proc initialize*[T](c: var Channel[T], size: int32) =
+  c = channel_alloc(int32 sizeof(T), size, Mpsc)
+
+proc delete*[T](c: var Channel[T]) =
+  channel_free(c)
+
+template myThieves*: Channel[StealRequest] =
   globalCtx.com.thefts[localCtx.worker.ID]
 
 template workforce*: int32 =

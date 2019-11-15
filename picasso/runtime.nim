@@ -23,6 +23,9 @@ import
 
 type Runtime* = object
 
+import ./channels/channels
+type Channel[T] = channels.Channel[T]
+
 proc init*(_: type Runtime) =
   # TODO detect Hyper-Threading and NUMA domain
 
@@ -37,7 +40,7 @@ proc init*(_: type Runtime) =
 
   ## Allocation of the global context.
   globalCtx.threadpool = pi_alloc(Thread[WorkerID], workforce())
-  globalCtx.com.thefts = pi_alloc(ChannelMpscBounded[StealRequest], workforce())
+  globalCtx.com.thefts = pi_alloc(Channel[StealRequest], workforce())
   globalCtx.com.tasks = pi_alloc(Persistack[PI_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]], workforce())
   discard pthread_barrier_init(globalCtx.barrier, nil, workforce())
 

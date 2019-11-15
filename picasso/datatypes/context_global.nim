@@ -16,6 +16,9 @@ import
 # Global / inter-thread communication channels
 # ----------------------------------------------------------------------------------
 
+import ../channels/channels
+type Channel[T] = channels.Channel[T]
+
 type
   ComChannels* = object
     ## Communication channels
@@ -32,7 +35,7 @@ type
     #   would work but then it requires a pointer indirection
     #   per channel
     #   and a known max number of workers
-    thefts*: ptr UncheckedArray[ChannelMpscBounded[StealRequest]]
+    thefts*: ptr UncheckedArray[Channel[StealRequest]]
     tasks*: ptr UncheckedArray[Persistack[PI_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]]]
 
   GlobalContext* = object
