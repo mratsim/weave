@@ -107,10 +107,7 @@ proc run_task*(task: Task) {.inline.} =
     if task.is_loop:
       fprintf(stderr, "%2d: Running [%2ld,%2ld)\n", ID, task.start, task.stop)
 
-  let this = get_current_task()
-  set_current_task(task)
   task.fn(task.data.addr)
-  set_current_task(this)
   if task.is_loop:
     # We have executed |stop-start| iterations
     let n = int abs(task.stop - task.start)
