@@ -9,7 +9,10 @@ import
   ./datatypes/[context_global, context_thread_local, sync_types],
   ./channels/[channels_spsc_single_ptr, channels_mpsc_bounded_lock],
   ./memory/[persistacks, intrusive_stacks],
-  ./config
+  ./config,
+  system/ansi_c,
+  ./primitives/barriers,
+  ./instrumentation/[contracts, profilers, loggers]
 
 # Contexts
 # ----------------------------------------------------------------------------------
@@ -70,3 +73,57 @@ template Leader*(body: untyped) =
 template Worker*(body: untyped) =
   if localCtx.worker.ID != LeaderID:
     body
+
+# Counters
+# ----------------------------------------------------------------------------------
+
+template incCounter*(name: untyped{ident}, amount = 1) =
+  bind name
+  metrics:
+    # Assumes localCtx is in the calling context
+    localCtx.counters.name += amount
+
+template decCounter*(name: untyped{ident}) =
+  bind name
+  metrics:
+    # Assumes localCtx is in the calling context
+    localCtx.counters.name -= 1
+
+proc workerMetrics*() =
+  metrics:
+    Leader:
+      c_printf("\n")
+      c_printf("+========================================+\n")
+      c_printf("|  Per-worker statistics                 |\n")
+      c_printf("+========================================+\n")
+      c_printf("  / use -d:PI_Profile for high-res timers /  \n")
+
+    discard pthread_barrier_wait(globalCtx.barrier)
+
+    c_printf("Worker %d: %u steal requests sent\n", myID(), localCtx.counters.stealSent)
+    c_printf("Worker %d: %u steal requests handled\n", myID(), localCtx.counters.stealHandled)
+    c_printf("Worker %d: %u steal requests declined\n", myID(), localCtx.counters.stealDeclined)
+    c_printf("Worker %d: %u tasks executed\n", myID(), localCtx.counters.tasksExec)
+    c_printf("Worker %d: %u tasks sent\n", myID(), localCtx.counters.tasksSent)
+    c_printf("Worker %d: %u tasks split\n", myID(), localCtx.counters.tasksSplit)
+    when defined(StealBackoff):
+      c_printf("Worker %d: %u steal requests resent\n", myID(), localCtx.counters.stealResent)
+    StealAdaptative:
+      ascertain: localCtx.counters.stealOne + localCtx.counters.stealHalf == localCtx.counters.stealSent
+      if localCtx.counters.stealSent != 0:
+        c_printf("Worker %d: %.2f %% steal-one\n", myID(),
+          localCtx.counters.stealOne.float64 / localCtx.counters.stealSent.float64 * 100)
+        c_printf("Worker %d: %.2f %% steal-half\n", myID(),
+          localCtx.counters.stealHalf.float64 / localCtx.counters.stealSent.float64 * 100)
+      else:
+        c_printf("Worker %d: %.2f %% steal-one\n", myID(), 0)
+        c_printf("Worker %d: %.2f %% steal-half\n", myID(), 0)
+    when defined(LazyFutures):
+      c_printf("Worker %d: %u futures converted\n", myID(), localCtx.counters.futuresConverted)
+    c_printf("Worker %d: random victim fast path (slow path): %3.0f %% (%3.0f %%)\n",
+      myID(), localCtx.counters.randomVictimEarlyExits.float64 * 100 / localCtx.counters.randomVictimCalls.float64,
+      100 - localCtx.counters.randomVictimEarlyExits.float64 * 100 / localCtx.counters.randomVictimCalls.float64
+    )
+
+    profile_results()
+    flushFile(stdout)

@@ -152,7 +152,7 @@ when isMainModule:
       tasking_barrier()
       tasking_exit()
 
-    main()
+    # main()
 
   block: # Async/Await
 
@@ -170,11 +170,11 @@ when isMainModule:
 
       tasking_init()
 
-      let f = async_fib(40)
+      let f = async_fib(30)
 
       tasking_barrier()
       tasking_exit()
 
       echo f
 
-    # main2()
+    main2()

@@ -33,7 +33,7 @@ proc init*(ctx: var TLContext) =
 
   ascertain: myTodoBoxes().len == PI_MaxConcurrentStealPerWorker
 
-  # Workers see their RNG with their ID
+  # Workers see their RNG with their myID()
   myThefts().rng = uint32 myID()
 
   # Thread-Local Profiling
@@ -165,9 +165,13 @@ proc worker_entry_fn*(id: WorkerID) =
 
   {.gcsafe.}: # Not GC-safe when multi-threaded due to globals
     schedulingLoop()
+
+  # 1 matching barrier in init(Runtime) for lead thread
   discard pthread_barrier_wait(globalCtx.barrier)
 
-  # stats
+  # 1 matching barrier in init(Runtime) for lead thread
+  workerMetrics()
+  
   threadLocalCleanup()
 
 template isFutReady(): untyped =

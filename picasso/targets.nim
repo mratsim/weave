@@ -54,8 +54,8 @@ proc randomVictim(victims: VictimsBitset, workerID: WorkerID): WorkerID =
   preCondition:
     myID() notin victims
 
-  incCounter(randomReceiverCalls)
-  incCounter(randomReceiverEarlyExits)
+  incCounter(randomVictimCalls)
+  incCounter(randomVictimEarlyExits)
 
   # No eligible victim? Return message to sender
   if victims.isEmpty():
@@ -70,7 +70,7 @@ proc randomVictim(victims: VictimsBitset, workerID: WorkerID): WorkerID =
 
   # We didn't early exit, i.e. not enough potential victims
   # for completely randomized selection
-  decCounter(randomReceiverEarlyExits)
+  decCounter(randomVictimEarlyExits)
 
   # Length of array is upper-bounded by the PicassoMaxWorkers but
   # num_victims is likely less than that or we would

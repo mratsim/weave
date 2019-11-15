@@ -74,13 +74,19 @@ proc globalCleanup() =
   # The root task has no parent
   ascertain: myTask().isRootTask()
   delete(myTask())
+  metrics:
+    log("+========================================+\n")
 
 proc exit*(_: type Runtime) =
   signalTerminate(nil)
   localCtx.signaledTerminate = true
 
+  # 1 matching barrier in worker_entry_fn
   discard pthread_barrier_wait(globalCtx.barrier)
-  # statistics
+
+  # 1 matching barrier in metrics
+  workerMetrics()
+
   threadLocalCleanup()
   globalCleanup()
 

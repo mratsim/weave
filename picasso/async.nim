@@ -148,7 +148,7 @@ when isMainModule:
       sync(Runtime)
       exit(Runtime)
 
-    main()
+    # main()
 
   block: # Async/Await
 
@@ -166,11 +166,11 @@ when isMainModule:
 
       init(Runtime)
 
-      let f = async_fib(40)
+      let f = async_fib(30)
 
       sync(Runtime)
       exit(Runtime)
 
       echo f
 
-    # main2()
+    main2()

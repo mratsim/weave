@@ -110,8 +110,9 @@ macro async_for*(
         let `data` = cast[ptr `argsTy`](param) # TODO - restrict
       `fnCall`
   # Create the task
+  let prof = bindSym("profile")
   result.add quote do:
-    profile(enq_deq_task):
+    prof(enq_deq_task):
       let task = task_alloc()
       task.parent = get_current_task()
       task.fn = `async_fn`

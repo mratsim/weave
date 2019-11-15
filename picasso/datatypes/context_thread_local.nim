@@ -9,7 +9,8 @@ import
   ./bounded_queues, ./sync_types, ./prell_deques,
   ../config,
   ../memory/intrusive_stacks,
-  ../instrumentation/contracts
+  ../instrumentation/contracts,
+  system/ansi_c
 
 # Thread-local context
 # ----------------------------------------------------------------------------------
@@ -78,25 +79,25 @@ type
     signaledTerminate*: bool
 
   Counters* = object
-    tasksExec: int
-    tasksSent: int
-    tasksSplit: int
-    stealSent: int
-    stealHandled: int
-    stealDeclined: int
-    shareSent: int
-    shareHandled: int
+    tasksExec*: int
+    tasksSent*: int
+    tasksSplit*: int
+    stealSent*: int
+    stealHandled*: int
+    stealDeclined*: int
+    shareSent*: int
+    shareHandled*: int
     when defined(PI_StealBackoff):
-      stealResent: int
+      stealResent*: int
     when StealStrategy == StealKind.adaptative:
-      stealOne: int
-      stealHalf: int
-      shareOne: int
-      shareHalf: int
+      stealOne*: int
+      stealHalf*: int
+      shareOne*: int
+      shareHalf*: int
     when defined(PI_LazyFutures):
-      futuresConverted: int
-    randomReceiverCalls: int
-    randomReceiverEarlyExits: int
+      futuresConverted*: int
+    randomVictimCalls*: int
+    randomVictimEarlyExits*: int
 
 # Worker proc
 # ----------------------------------------------------------------------------------
@@ -129,16 +130,3 @@ func initialize*(w: var Worker, maxID: WorkerID) {.inline.} =
     w.leftIsWaiting = true
   if w.right == -1:
     w.rightIsWaiting = true
-
-# Counters
-# ----------------------------------------------------------------------------------
-
-template incCounter*(name: untyped{ident}, amount = 1) =
-  bind name
-  metrics:
-    counters.name += amount
-
-template decCounter*(name: untyped{ident}) =
-  bind name
-  metrics:
-    counters.name -= 1
