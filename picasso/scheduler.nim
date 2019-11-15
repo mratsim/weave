@@ -185,7 +185,7 @@ proc worker_entry_fn*(id: WorkerID) =
   threadLocalCleanup()
 
 template isFutReady(): untyped =
-  fv.chan[].tryRecv(parentResult)
+  fv.chan.tryRecv(parentResult)
 
 proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
   ## Eagerly complete an awaited FlowVar

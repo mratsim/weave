@@ -9,6 +9,10 @@ import
   ../channels/[channels_spsc_single_ptr, channels_spsc_single_object],
   ../memory/allocs
 
+# TODO for the Flowvar we need critically need a caching scheme for the channels
+# we use the legacy channels in the mean time
+import ../channels/channels_legacy
+
 type Flowvar*[T] = object
   ## A Flowvar is a simple channel
   # Flowvar are optimized when containing a ptr type.
@@ -16,23 +20,24 @@ type Flowvar*[T] = object
   # instead of having an extra atomic bool
   # They also use type-erasure to avoid having duplicate code
   # due to generic monomorphization.
-  when T is ptr:
-    chan: ptr ChannelSpscSinglePtr[T]
-  else:
-    chan: ptr ChannelSpscSingleObject[T]
 
+  # when T is ptr:
+  #   chan: ptr ChannelSpscSinglePtr[T]
+  # else:
+  #   chan: ptr ChannelSpscSingleObject[T]
+  chan: ChannelLegacy[T]
 
 proc newFlowVar*(T: typedesc): Flowvar[T] {.inline.} =
-  result.chan = pi_allocPtr(result.chan.typeof)
-  result.chan[].initialize()
+  # result.chan = pi_allocPtr(result.chan.typeof)
+  result.chan.initialize(int32 sizeof(T))
 
 proc setWith*[T](fv: Flowvar[T], childResult: T) {.inline.} =
   ## Send the Flowvar result from the child thread processing the task
   ## to it's parent thread.
-  discard fv.chan[].trySend(childResult)
+  discard fv.chan.trySend(childResult)
 
 proc forwardTo*[T](fv: Flowvar[T], parentResult: var T) {.inline.} =
   ## From the parent thread awaiting on the result, force its computation
   ## by eagerly processing only the child tasks spawned by the awaited task
   fv.forceFuture(parentResult)
-  pi_free(fv.chan)
+  fv.chan.channel_free() # This caches the channel
