@@ -166,7 +166,7 @@ when isMainModule:
 
       init(Runtime)
 
-      let f = async_fib(30)
+      let f = async_fib(40)
 
       sync(Runtime)
       exit(Runtime)

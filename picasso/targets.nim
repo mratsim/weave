@@ -10,7 +10,8 @@ import
   ./contexts,
   ./primitives/c,
   ./instrumentation/[contracts, loggers],
-  ./config
+  ./config,
+  ./memory/allocs
 
 # Victim selection
 # ----------------------------------------------------------------------------------

@@ -7,7 +7,7 @@
 
 import
   ../channels/[channels_spsc_single_ptr, channels_spsc_single_object],
-  ./helpers
+  ../memory/allocs
 
 type Flowvar*[T] = object
   ## A Flowvar is a simple channel
@@ -23,7 +23,7 @@ type Flowvar*[T] = object
 
 
 proc newFlowVar*(T: typedesc): Flowvar[T] {.inline.} =
-  result.chan = result.chan.typeof.deref.createSharedU()
+  result.chan = pi_allocPtr(result.chan.typeof)
   result.chan[].initialize()
 
 proc setWith*[T](fv: Flowvar[T], childResult: T) {.inline.} =
@@ -35,4 +35,4 @@ proc forwardTo*[T](fv: Flowvar[T], parentResult: var T) {.inline.} =
   ## From the parent thread awaiting on the result, force its computation
   ## by eagerly processing only the child tasks spawned by the awaited task
   fv.forceFuture(parentResult)
-  freeShared(fv.chan)
+  pi_free(fv.chan)

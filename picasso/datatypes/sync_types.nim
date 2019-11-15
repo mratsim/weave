@@ -6,10 +6,11 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./helpers, ./victims_bitsets,
+  ./victims_bitsets,
   ../config,
   ../channels/channels_spsc_single_ptr,
-  ../instrumentation/contracts
+  ../instrumentation/contracts,
+  ../memory/allocs
 
 # Inter-thread synchronization types
 # ----------------------------------------------------------------------------------
@@ -79,19 +80,14 @@ type
     when StealStrategy == StealKind.adaptative:
       stealHalf*: bool                            # Thief wants half the tasks
 
-when not defined(PI_StealLastVictim):
-  static: assert sizeof(deref(Task)) == 192,
-            "Task is of size " & $sizeof(deref(Task)) &
-            " instead of the expected 192 bytes."
-
 # StealableTask API
 proc allocate*(task: var Task) {.inline.} =
   preCondition: task.isNil()
-  task = createShared(deref(Task))
+  task = pi_allocPtr(Task, zero = true)
 
 proc delete*(task: Task) {.inline.} =
   preCondition: not task.isNil()
-  freeShared(task)
+  pi_free(task)
 
 # Ensure unicity of a given steal request
 # -----------------------------------------------------------

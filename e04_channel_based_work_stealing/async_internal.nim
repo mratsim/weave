@@ -170,7 +170,7 @@ when isMainModule:
 
       tasking_init()
 
-      let f = async_fib(30)
+      let f = async_fib(40)
 
       tasking_barrier()
       tasking_exit()

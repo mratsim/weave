@@ -8,7 +8,8 @@
 import
   locks, atomics, typetraits,
   ../config,
-  ../instrumentation/contracts
+  ../instrumentation/contracts,
+  ../memory/allocs
 
 type
   ChannelMpscBounded*[T] = object
@@ -71,7 +72,7 @@ proc delete*[T](chan: var Channel[T]) {.inline.} =
     discard
 
   if not chan.buffer.isNil:
-    freeShared(chan.buffer)
+    pi_free(chan.buffer)
 
 func clear*(chan: var ChannelMpscBounded) {.inline.} =
   ## Reinitialize the data in the channel
@@ -105,7 +106,7 @@ proc initialize*[T](chan: var ChannelMpscBounded[T], capacity: int32) {.inline.}
     discard
 
   chan.capacity = capacity
-  chan.buffer = cast[ptr UncheckedArray[T]](createSharedU(T, capacity))
+  chan.buffer = pi_alloc(T, capacity)
   chan.clear()
 
 # To differentiate between full and empty case

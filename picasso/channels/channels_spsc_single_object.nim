@@ -9,7 +9,6 @@ import
   std/atomics,
   ../config
 
-
 type
   ChannelSpscSingleObject*[T] = object
     ## Wait-free bounded single-producer single-consumer channel
@@ -106,6 +105,8 @@ func trySend*[T](chan: var ChannelSpscSingleObject[T], src: sink T): bool {.inli
 # Sanity checks
 # ------------------------------------------------------------------------------
 when isMainModule:
+  ../memory/allocs
+
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}
 
@@ -169,7 +170,7 @@ when isMainModule:
     echo "Testing if 2 threads can send data"
     echo "-----------------------------------"
     var threads: array[2, Thread[ThreadArgs]]
-    let chan = createSharedU(ChannelSpscSingleObject[int]) # CreateU is not zero-init
+    let chan = pi_alloc(ChannelSpscSingle[int])
     chan[].initialize()
 
     createThread(threads[0], thread_func, ThreadArgs(ID: Receiver, chan: chan))
@@ -178,7 +179,7 @@ when isMainModule:
     joinThread(threads[0])
     joinThread(threads[1])
 
-    freeShared(chan)
+    pi_free(chan)
     echo "-----------------------------------"
     echo "Success"
 

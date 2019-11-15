@@ -5,20 +5,6 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-# Memory
-# ----------------------------------------------------------------------------------
-
-when defined(windows):
-  proc alloca(size: csize): pointer {.header: "<malloc.h>".}
-else:
-  proc alloca(size: csize): pointer {.header: "<alloca.h>".}
-
-template alloca*(T: typedesc): ptr T =
-  cast[ptr T](alloca(sizeof(T)))
-
-template alloca*(T: typedesc, len: Natural): ptr UncheckedArray[T] =
-  cast[ptr UncheckedArray[T]](alloca(sizeof(T) * len))
-
 # Random
 # ----------------------------------------------------------------------------------
 

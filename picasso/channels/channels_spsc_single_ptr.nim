@@ -181,13 +181,13 @@ when isMainModule:
           discard
         echo "                                               Receiver got: ", val[], " at address 0x", toLowerASCII toHex cast[ByteAddress](val)
         doAssert val[] == 42 + j*11
-        freeShared(val)
+        pi_free(val)
 
     Worker(Sender):
       # Allocates the pointer and sends it
       doAssert args.chan.buffer.load(moRelaxed) == nil
       for j in 0 ..< 10:
-        let val = createShared(int)
+        let val = pi_alloc(int)
         val[] = 42 + j*11
         args.chan[].sendLoop(val):
           # Busy loop, in prod we might want to yield the core/thread timeslice
@@ -198,7 +198,7 @@ when isMainModule:
     echo "Testing if 2 threads can send data"
     echo "-----------------------------------"
     var threads: array[2, Thread[ThreadArgs]]
-    let chan = createSharedU(Channel[ptr int]) # CreateSharedU is not zero-init
+    let chan = pi_alloc(Channel[ptr int])
     chan[].initialize()
 
     createThread(threads[0], thread_func, ThreadArgs(ID: Receiver, chan: chan))
@@ -207,7 +207,7 @@ when isMainModule:
     joinThread(threads[0])
     joinThread(threads[1])
 
-    freeShared(chan)
+    pi_free(chan)
     echo "-----------------------------------"
     echo "Success"
 

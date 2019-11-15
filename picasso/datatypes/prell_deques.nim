@@ -327,8 +327,7 @@ when isMainModule:
     TaskDataSize = 192 - 96
 
   type
-    Task = ptr Taskobj
-    TaskObj = object
+    Task = ptr object
       prev, next: Task
       parent: Task
       fn: proc (param: pointer) {.nimcall.}
@@ -340,11 +339,11 @@ when isMainModule:
 
   proc allocate(task: var Task) =
     preCondition: task.isNil
-    task = createShared(TaskObj)
+    task = pi_allocPtr(Task)
 
   proc delete(task: sink Task) =
     if not task.isNil:
-      deallocShared(task)
+      pi_free(task)
 
   proc newTask(stack: var IntrusiveStack[Task]): Task =
     if stack.isEmpty():

@@ -13,7 +13,7 @@ import
   ./contexts, ./config,
   ./datatypes/[sync_types, prell_deques],
   ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr],
-  ./memory/[persistacks, intrusive_stacks],
+  ./memory/[persistacks, intrusive_stacks, allocs],
   ./scheduler, ./signals, ./workers, ./thieves, ./victims,
   # Low-level primitives
   ./primitives/[affinity, barriers]
@@ -22,9 +22,6 @@ import
 # ----------------------------------------------------------------------------------
 
 type Runtime* = object
-
-proc createArray(T: typedesc, capacity: int32): ptr UncheckedArray[T] {.inline.}=
-  cast[ptr UncheckedArray[T]](createSharedU(T, capacity))
 
 proc init*(_: type Runtime) =
   # TODO detect Hyper-Threading and NUMA domain
@@ -39,9 +36,9 @@ proc init*(_: type Runtime) =
     workforce() = int32 countProcessors()
 
   ## Allocation of the global context.
-  globalCtx.threadpool = createArray(Thread[WorkerID], workforce())
-  globalCtx.com.thefts = createArray(ChannelMpscBounded[StealRequest], workforce())
-  globalCtx.com.tasks = createArray(Persistack[PI_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]], workforce())
+  globalCtx.threadpool = pi_alloc(Thread[WorkerID], workforce())
+  globalCtx.com.thefts = pi_alloc(ChannelMpscBounded[StealRequest], workforce())
+  globalCtx.com.tasks = pi_alloc(Persistack[PI_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]], workforce())
   discard pthread_barrier_init(globalCtx.barrier, nil, workforce())
 
   # Lead thread - pinned to CPU 0

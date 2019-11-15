@@ -5,7 +5,9 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import ../instrumentation/contracts
+import
+  ../instrumentation/contracts,
+  ./allocs
 
 type
   IntrusiveStackable* = concept x, type T
@@ -18,7 +20,7 @@ type
     ## that will be used for ordering by the IntrusiveStack
     ##
     ## IntrusiveStack takes ownership of the pointer object pushed into it.
-    ## It expects elements to be allocated via createShared (i.e. shared-memory, not thread-local)
+    ## It expects elements to be allocated via pi_alloc/createShared (i.e. shared-memory, not thread-local)
 
     # TODO: This data-structure is used for caching tasks and reuse them without
     #       stressing the Nim/system allocator.
@@ -57,7 +59,7 @@ func pop*[T](stack: var IntrusiveStack[T]): T {.inline.} =
 
 proc `=destroy`*[T](stack: var IntrusiveStack[T]) =
   while (let elem = stack.pop(); not elem.isNil):
-    deallocShared(elem)
+    pi_free(elem)
 
 # Sanity checks
 # ------------------------------------------------------------------------------
@@ -65,16 +67,15 @@ proc `=destroy`*[T](stack: var IntrusiveStack[T]) =
 
 when isMainModule:
   type
-    Node = ptr NodeObj
-    NodeObj = object
+    Node = ptr object
       payload: int
       next: Node
 
   let
-    a = createShared(NodeObj)
-    b = createShared(NodeObj)
-    c = createShared(NodeObj)
-    d = createShared(NodeObj)
+    a = pi_allocPtr(Node)
+    b = pi_allocPtr(Node)
+    c = pi_allocPtr(Node)
+    d = pi_allocPtr(Node)
 
   a.payload = 10
   b.payload = 20
@@ -88,3 +89,8 @@ when isMainModule:
   x.add d
 
   echo x.repr
+
+  pi_free(a)
+  pi_free(b)
+  pi_free(c)
+  pi_free(d)
