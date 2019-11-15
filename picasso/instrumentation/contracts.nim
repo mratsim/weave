@@ -22,6 +22,8 @@ proc inspectInfix(node: NimNode): NimNode =
   ## Inspect an expression,
   ## Returns the AST as string with runtime values inlined
   ## from infix operators inlined.
+  # TODO: pointer and custom type need a default repr
+  #       otherwise we can only resulve simple expressions
   proc inspect(node: NimNode): NimNode =
     case node.kind:
     of nnkInfix:
@@ -61,10 +63,10 @@ macro assertContract(
 
   result = quote do:
     when compileOption("assertions"):
-      assert(`predicate`, `debug` & $`values`)
+      assert(`predicate`, `debug` & $`values` & '\n')
     elif defined(PI_Asserts):
       if unlikely(not(`predicate`)):
-        raise newException(AssertionError, `debug` & $`values`)
+        raise newException(AssertionError, `debug` & $`values` & '\n')
 
 # A way way to get the caller function would be nice.
 

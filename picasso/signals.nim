@@ -44,12 +44,11 @@ proc signalTerminate*(_: pointer) =
 
   # 1. Terminating means everyone ran out of tasks
   #    so their cache for task channels should be full
+  #    if there were sufficiently more tasks than workers
   # 2. Since they have an unique parent, no one else sent them a signal (checked in asyncSignal)
   if myWorker().left != -1:
-    ascertain: globalCtx.com.tasks[myWorker().left].len == PI_MaxConcurrentStealPerWorker
     asyncSignal(signalTerminate, globalCtx.com.tasks[myWorker().left].access(0))
   if myWorker().right != -1:
-    ascertain: globalCtx.com.tasks[myWorker().right].len == PI_MaxConcurrentStealPerWorker
     asyncSignal(signalTerminate, globalCtx.com.tasks[myWorker().right].access(0))
 
   Worker:

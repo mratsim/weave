@@ -93,7 +93,7 @@ type
       stealHalf: int
       shareOne: int
       shareHalf: int
-    when defined(PicassoLazyFutures):
+    when defined(PI_LazyFutures):
       futuresConverted: int
     randomReceiverCalls: int
     randomReceiverEarlyExits: int

@@ -76,11 +76,11 @@ template metrics*(body: untyped): untyped =
     {.noSideEffect.}: body
 
 template debugTermination*(body: untyped): untyped =
-  when defined(PicassoDebugTermination) or defined(PicassoDebug):
+  when defined(PI_DebugTermination) or defined(PI_Debug):
     {.noSideEffect.}: body
 
 template debug*(body: untyped): untyped =
-  when defined(PicassoDebug):
+  when defined(PI_Debug):
     {.noSideEffect.}: body
 
 template StealAdaptative*(body: untyped): untyped =

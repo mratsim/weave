@@ -147,7 +147,7 @@ proc forget*(req: sink StealRequest) =
   ## Re-increment the worker quota
 
   preCondition: req.thiefID == myID()
-  preCondition: myThefts().outstanding > 1
+  preCondition: myThefts().outstanding > 0
 
   myThefts().outstanding -= 1
   myTodoBoxes().recycle(req.thiefAddr)
