@@ -89,7 +89,7 @@ proc declineOwn(req: sink StealRequest) =
     req.retry = 0
     req.victims.init(workforce)
     req.victims.clear(myID())
-    req.findVictimAndSteal()
+    req.findVictimAndRelaySteal()
 
 proc decline*(req: sink StealRequest) =
   ## Pass steal request to another worker
@@ -104,7 +104,7 @@ proc decline*(req: sink StealRequest) =
       req.declineOwn()
     else: # Not our own request
       req.victims.clear(myID())
-      req.findVictimAndSteal()
+      req.findVictimAndRelaySteal()
 
 proc receivedOwn(req: sink StealRequest) =
   preCondition: req.state != Waiting
@@ -165,9 +165,9 @@ proc dispatchTasks*(req: sink StealRequest) =
       # TODO LastVictim
       # TODO LazyFutures
       debug: log("Worker %2d: preparing a task with function address %d\n", myID(), task.fn)
-      req.send(task, loot)
       debug: log("Worker %2d: sent %d task%s to worker %d\n",
                   myID(), loot, if loot > 1: "s" else: "", req.thiefID)
+      req.send(task, loot)
   else:
     ascertain: myWorker().deque.isEmpty()
     decline(req)

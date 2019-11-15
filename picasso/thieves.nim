@@ -41,6 +41,9 @@ proc rawSend(victimID: WorkerID, req: sink StealRequest) {.inline.}=
   # N steal requests (from N-1 workers + own request sent back)
   postCondition: stealRequestSent
 
+proc relaySteal(victimID: WorkerID, req: sink StealRequest) {.inline.} =
+  rawSend(victimID, req)
+
 proc sendSteal(victimID: WorkerID, req: sink StealRequest) =
   ## Send a steal request
   victimID.rawSend(req)
@@ -59,7 +62,7 @@ proc sendShare*(req: sink StealRequest) =
   ## Send a work sharing request to parent
   myWorker().parent.rawSend(req)
 
-  myThefts().outstanding += 1
+  # Already counted in outstanding
   incCounter(shareSent)
 
   metrics:
@@ -69,7 +72,7 @@ proc sendShare*(req: sink StealRequest) =
       else:
         incCounter(shareOne)
 
-proc findVictimAndSteal*(req: sink StealRequest) =
+proc findVictimAndSteal(req: sink StealRequest) =
   # Note:
   #   Nim manual guarantees left-to-right function evaluation.
   #   Hence in the following:
@@ -81,6 +84,19 @@ proc findVictimAndSteal*(req: sink StealRequest) =
   #   would probably be very painful.
   let target = findVictim(req)
   target.sendSteal(req)
+
+proc findVictimAndRelaySteal*(req: sink StealRequest) =
+  # Note:
+  #   Nim manual guarantees left-to-right function evaluation.
+  #   Hence in the following:
+  #     `req.findVictim().relaySteal(req)`
+  #   findVictim request update should be done before relaySteal
+  #
+  #   but C and C++ do not provides that guarantee
+  #   and debugging that in a multithreading runtime
+  #   would probably be very painful.
+  let target = findVictim(req)
+  target.relaySteal(req)
 
 # Stealing logic
 # ----------------------------------------------------------------------------------

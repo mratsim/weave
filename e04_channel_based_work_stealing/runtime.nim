@@ -550,7 +550,7 @@ proc recv_task(task: var Task, idle: bool): bool {.inline.} =
       if result:
         channel_push(chan_tasks[ID][i])
         when defined(debug):
-          log("Worker %d received a task with function address %d\n", ID, task.fn)
+          log("Worker %d: received a task with function address %d\n", ID, task.fn)
         break
 
   if not result:

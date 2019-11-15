@@ -6,9 +6,9 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./config,
+  ./config, ./contexts,
   ./datatypes/sync_types,
-  ./instrumentation/contracts
+  ./instrumentation/[contracts, loggers]
 
 # Loop splitting
 # ----------------------------------------------------------------------------------
@@ -41,7 +41,7 @@ func splitAdaptative(task: Task, approxNumThieves: int32): int {.inline.} =
   let itersLeft = abs(task.stop - task.cur)
   preCondition: itersLeft > task.splitThreshold
 
-  debug: log("Worker %2d: %ld of %ld iterations left\n", myID(), iters_left, iters_total)
+  debug: log("Worker %2d: %ld of %ld iterations left\n", myID(), iters_left, abs(task.stop - task.start))
 
   # Send a chunk of work to all
   let chunk = max(itersLeft div (approxNumThieves + 1), 1)
@@ -49,7 +49,7 @@ func splitAdaptative(task: Task, approxNumThieves: int32): int {.inline.} =
   postCondition:
     itersLeft > chunk
 
-  debug: log("Worker %2d: sending %ld iterations\n", ID, chunk)
+  debug: log("Worker %2d: sending %ld iterations\n", myID(), chunk)
   return task.stop - chunk
 
 template split*(task: Task, approxNumThieves: int32): int =

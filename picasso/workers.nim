@@ -8,7 +8,7 @@
 import
   ./datatypes/[sync_types, context_thread_local, bounded_queues],
   ./contexts,
-  ./instrumentation/[contracts, profilers],
+  ./instrumentation/[contracts, profilers, loggers],
   ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr],
   ./memory/persistacks,
   ./config,
@@ -67,6 +67,7 @@ proc recv*(task: var Task, isOutOfTasks: bool): bool =
     # Steal request fulfilled
     myThefts().outstanding -= 1
 
+    debug: log("Worker %d: %d theft(s) outstanding after receiving a task\n", myID(), myThefts().outstanding)
     postCondition: myThefts().outstanding in 0 ..< PI_MaxConcurrentStealPerWorker
     postCondition: myThefts().dropped == 0
 

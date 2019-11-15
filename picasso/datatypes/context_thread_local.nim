@@ -51,7 +51,7 @@ type
   Thefts* = object
     ## Thief state
     # Outstanding steal requests [0, MaxSteal]
-    outstanding*: int32
+    outstanding*: range[int32(0)..int32(PI_MaxConcurrentStealPerWorker + 1)]
     # Before a worker can become quiescent it has to drop MaxSteal - 1
     # steal request and send the remaining one to its parent
     dropped*: int32
