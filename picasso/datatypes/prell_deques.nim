@@ -79,7 +79,7 @@ func isEmpty*(dq: PrellDeque): bool {.inline.} =
   # when empty dq.head == dq.tail == dummy node
   (dq.head == dq.tail) and (dq.pendingTasks == 0)
 
-func addFirst*[T](dq: var PrellDeque[T], task: sink T) =
+func addFirst*[T](dq: var PrellDeque[T], task: sink T) {.inline.} =
   ## Prepend a task to the beginning of the deque
   preCondition: not task.isNil
 
@@ -89,7 +89,7 @@ func addFirst*[T](dq: var PrellDeque[T], task: sink T) =
 
   dq.pendingTasks += 1
 
-func popFirst*[T](dq: var PrellDeque[T]): T =
+func popFirst*[T](dq: var PrellDeque[T]): T {.inline.} =
   ## Pop the first task from the deque
   if dq.isEmpty():
     return nil
@@ -165,7 +165,7 @@ func addListFirst*[T](dq: var PrellDeque[T], head: sink T, len: int32) =
 # Task-specific routines
 # ---------------------------------------------------------------
 
-func popFirstIfChild*[T](dq: var PrellDeque[T], parentTask: T): T =
+func popFirstIfChild*[T](dq: var PrellDeque[T], parentTask: T): T {.inline.} =
   preCondition: not parentTask.isNil
 
   if dq.isEmpty():
