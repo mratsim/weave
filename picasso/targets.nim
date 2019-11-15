@@ -132,10 +132,10 @@ proc findVictim*(req: var StealRequest): WorkerID =
     ascertain: req.victims.isEmpty()
     result = req.thiefID
 
-    # debug:
-    #   log("Worker %d: relay thief {%d} -> no victim after %d tries (%u ones)\n",
-    #     myID(), req.thiefID, req.retry, req.victims.len
-    #   )
+    debug:
+      log("Worker %d: relay thief {%d} -> no victim after %d tries (%u ones)\n",
+        myID(), req.thiefID, req.retry, req.victims.len
+      )
 
   postCondition: result in 0 ..< workforce()
   postCondition: result != myID()

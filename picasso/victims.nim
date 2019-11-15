@@ -68,6 +68,9 @@ proc declineOwn(req: sink StealRequest) =
   # No one had jobs to steal
   preCondition: req.victims.isEmpty()
 
+  debugTermination:
+    log("Worker %d: received own request (req.state: %s, left: %d, right %d)\n", myID(), $req.state, myWorker().leftIsWaiting, myWorker().rightIsWaiting)
+
   if req.state == Stealing and myWorker().leftIsWaiting and myWorker().rightIsWaiting:
     when PI_MaxConcurrentStealPerWorker == 1:
       # When there is only one concurrent steal request allowed, it's always the last.

@@ -181,7 +181,7 @@ func tryRecv*[T](chan: var ChannelMpscBounded[T], dst: var T): bool =
 
   let readIdx = if front < chan.capacity: front
                 else: front - chan.capacity
-  dst = move chan.buffer[readIdx]
+  `=sink`(dst, chan.buffer[readIdx])
 
   var nextRead = front + 1
   if nextRead == 2 * chan.capacity:

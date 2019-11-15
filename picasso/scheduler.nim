@@ -197,8 +197,8 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
       break CompleteFuture
 
     ## 1. Process all the children of the current tasks (and only them)
-    debugTermination:
-      log("Worker %d: forcefut 1 - task from local deque\n", myID())
+    # debugTermination:
+    #   log("Worker %d: forcefut 1 - task from local deque\n", myID())
     while (let task = nextTask(childTask = true); not task.isNil):
       profile(run_task):
         run(task)
