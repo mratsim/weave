@@ -16,8 +16,8 @@ import
 # Global / inter-thread communication channels
 # ----------------------------------------------------------------------------------
 
-import ../channels/channels
-type Channel[T] = channels.Channel[T]
+# TODO: used to debug a recurrent deadlock on trySend with 5 workers
+import ../channels/channels_legacy
 
 type
   ComChannels* = object
@@ -35,7 +35,7 @@ type
     #   would work but then it requires a pointer indirection
     #   per channel
     #   and a known max number of workers
-    thefts*: ptr UncheckedArray[Channel[StealRequest]]
+    thefts*: ptr UncheckedArray[ChannelLegacy[StealRequest]]
     tasks*: ptr UncheckedArray[Persistack[PI_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]]]
 
   GlobalContext* = object
