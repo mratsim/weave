@@ -91,7 +91,7 @@ proc randomVictim(victims: VictimsBitset, workerID: WorkerID): WorkerID =
 
   let idx = rand_r(myThefts().rng) mod numVictims
   result = potential_victims[idx]
-  debug: log("Worker %d: rng %d, vict: %d\n", myID(), myThefts().rng, result)
+  # debug: log("Worker %d: rng %d, vict: %d\n", myID(), myThefts().rng, result)
 
   postCondition result in victims
   postCondition result in 0 ..< workforce()
@@ -132,10 +132,10 @@ proc findVictim*(req: var StealRequest): WorkerID =
     ascertain: req.victims.isEmpty()
     result = req.thiefID
 
-    debug:
-      log("Worker %d: relay thief {%d} -> no victim after %d tries (%u ones)\n",
-        myID(), req.thiefID, req.retry, req.victims.len
-      )
+    # debug:
+    #   log("Worker %d: relay thief {%d} -> no victim after %d tries (%u ones)\n",
+    #     myID(), req.thiefID, req.retry, req.victims.len
+    #   )
 
   postCondition: result in 0 ..< workforce()
   postCondition: result != myID()

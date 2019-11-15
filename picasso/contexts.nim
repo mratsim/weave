@@ -23,6 +23,15 @@ var localCtx* {.threadvar.}: TLContext
 
 const LeaderID*: WorkerID = 0
 
+# Profilers
+# ----------------------------------------------------------------------------------
+
+profile_extern_decl(run_task)
+profile_extern_decl(send_recv_req)
+profile_extern_decl(send_recv_task)
+profile_extern_decl(enq_deq_task)
+profile_extern_decl(idle)
+
 # Task caching
 # ----------------------------------------------------------------------------------
 
@@ -125,5 +134,5 @@ proc workerMetrics*() =
       100 - localCtx.counters.randomVictimEarlyExits.float64 * 100 / localCtx.counters.randomVictimCalls.float64
     )
 
-    profile_results()
+    profile_results(myID())
     flushFile(stdout)

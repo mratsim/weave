@@ -65,7 +65,7 @@ when defined(PI_Profile):
     body
     profile_stop(name)
 
-  template profile_results*(ID: typed{sym}): untyped {.dirty.} =
+  template profile_results*(ID: typed): untyped {.dirty.} =
     bind timer_elapsed, tkMicroseconds, timers_elapsed
     # Parsable format
     # The first value should make it easy to grep for these lines, e.g. with
