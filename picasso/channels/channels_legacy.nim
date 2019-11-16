@@ -26,7 +26,7 @@ type
   #       could probably be static enums
 
   ChannelLegacy*[T] = ChannelRaw # Typed channels
-  ChannelRaw = ptr ChannelObj
+  ChannelRaw* = ptr ChannelObj
   ChannelObj = object
     head_lock, tail_lock: Lock
     owner: int32

@@ -185,7 +185,14 @@ proc worker_entry_fn*(id: WorkerID) =
   threadLocalCleanup()
 
 template isFutReady(): untyped =
-  fv.chan.tryRecv(parentResult)
+  when not defined(PI_LazyFlowvar):
+    fv.chan.tryRecv(parentResult)
+  else:
+    if fv.lazyFV.hasChannel:
+      ascertain: not fv.lazyFV.lazy_chan.chan.isNil
+      fv.lazyFV.lazyChan.chan.tryRecv(parentResult)
+    else:
+      fv.lazyFV.isReady
 
 proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
   ## Eagerly complete an awaited FlowVar
@@ -258,6 +265,15 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
       profile(enq_deq_task):
         # The memory is reused but not zero-ed
         localCtx.taskCache.add(task)
+
+  when defined(LazyFlowvar):
+    # Cleanup the lazy flowvar if allocated or copy directly into result
+    if not fv.lazyFV.hasChannel:
+      ascertain: fv.lazyFV.isReady
+      copyMem(parentResult.addr, fv.lazyFV.lazyChan.buf.addr, sizeof(parentResult))
+    else:
+      ascertain: not fv.lazyFV.lazyChan.chan.isNil
+      fv.lazyFV.lazyChan.chan.delete()
 
 proc schedule*(task: sink Task) =
   ## Add a new task to be scheduled in parallel

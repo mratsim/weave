@@ -96,7 +96,7 @@ else:
   template profile_stop*(name: untyped) = discard
   template profile*(name, body: untyped): untyped =
     body
-  template profile_results*(): untyped = discard
+  template profile_results*(ID: typed): untyped = discard
 
 # Smoke test
 # -------------------------------

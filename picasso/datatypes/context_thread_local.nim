@@ -94,7 +94,7 @@ type
       stealHalf*: int
       shareOne*: int
       shareHalf*: int
-    when defined(PI_LazyFutures):
+    when defined(PI_LazyFlowvar):
       futuresConverted*: int
     randomVictimCalls*: int
     randomVictimEarlyExits*: int

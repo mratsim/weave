@@ -6,7 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./datatypes/[sync_types, context_thread_local, bounded_queues, victims_bitsets, prell_deques],
+  ./datatypes/[sync_types, context_thread_local, bounded_queues,
+               victims_bitsets, prell_deques, flowvars],
   ./contexts, ./config,
   ./instrumentation/[contracts, profilers, loggers],
   ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr],
@@ -151,6 +152,26 @@ proc send(req: sink StealRequest, task: sink Task, numStolen: int32 = 1) {.inlin
   incCounter(stealHandled)
   incCounter(tasksSent, numStolen)
 
+when defined(PI_LazyFlowvar):
+  import ./channels/channels_legacy
+
+  proc convertLazyFlowvar(task: Task) {.inline.} =
+    # Allocate the Lazy future on the heap to extend its lifetime
+    var lfv: LazyFlowvar
+    copyMem(lfv.addr, task.data.addr, sizeof(LazyFlowvar))
+    if not lfv.hasChannel:
+      # lfv.allocChannel()
+      lfv.hasChannel = true
+      lfv.lazyChan.chan = channel_alloc(int32 sizeof(lfv.lazyChan), 0, Spsc)
+      incCounter(futuresConverted)
+
+  # proc batchConvertLazyFlowvar(task: Task) =
+  #   var task = task
+  #   while not task.isNil:
+  #     if task.hasFuture:
+  #       convertLazyFlowvar(task)
+  #     task = task.next
+
 proc dispatchTasks*(req: sink StealRequest) =
   ## Send tasks in return of a steal request
   ## or decline and relay the steal request to another thread
@@ -166,7 +187,13 @@ proc dispatchTasks*(req: sink StealRequest) =
     profile(send_recv_task):
       task.batch = loot
       # TODO LastVictim
-      # TODO LazyFutures
+      when defined(PI_LazyFlowvar):
+        # batchConvertLazyFlowvar(task)
+        var t = task
+        while not t.isNil:
+          if t.hasFuture:
+            convertLazyFlowvar(t)
+          t = t.next
       debug: log("Worker %2d: preparing a task with function address %d\n", myID(), task.fn)
       debug: log("Worker %2d: sent %d task%s to worker %d\n",
                   myID(), loot, if loot > 1: "s" else: "", req.thiefID)
