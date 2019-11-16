@@ -42,9 +42,9 @@ type
     ## - Messages are guaranteed to be delivered
     ## - Messages will be delivered exactly once
     ## - Linearizability
-    pad0: array[PI_CacheLineSize, byte] # If used in a sequence of channels
+    pad0: array[WV_CacheLineSize, byte] # If used in a sequence of channels
     buffer: T
-    pad1: array[PI_CacheLineSize  - sizeof(T), byte]
+    pad1: array[WV_CacheLineSize  - sizeof(T), byte]
     full: Atomic[bool]
 
 proc `=`[T](
@@ -170,7 +170,7 @@ when isMainModule:
     echo "Testing if 2 threads can send data"
     echo "-----------------------------------"
     var threads: array[2, Thread[ThreadArgs]]
-    let chan = pi_alloc(ChannelSpscSingle[int])
+    let chan = wv_alloc(ChannelSpscSingle[int])
     chan[].initialize()
 
     createThread(threads[0], thread_func, ThreadArgs(ID: Receiver, chan: chan))
@@ -179,7 +179,7 @@ when isMainModule:
     joinThread(threads[0])
     joinThread(threads[1])
 
-    pi_free(chan)
+    wv_free(chan)
     echo "-----------------------------------"
     echo "Success"
 

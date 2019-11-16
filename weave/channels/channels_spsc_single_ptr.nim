@@ -50,7 +50,7 @@ type
     ## - Messages will be delivered exactly once
     ## - Linearizability
   ChannelRaw = object
-    pad0: array[PI_CacheLineSize - sizeof(pointer), byte] # If used in a sequence of channels
+    pad0: array[WV_CacheLineSize - sizeof(pointer), byte] # If used in a sequence of channels
     buffer: Atomic[pointer]
 
 # Internal type-erased implementation
@@ -181,13 +181,13 @@ when isMainModule:
           discard
         echo "                                               Receiver got: ", val[], " at address 0x", toLowerASCII toHex cast[ByteAddress](val)
         doAssert val[] == 42 + j*11
-        pi_free(val)
+        wv_free(val)
 
     Worker(Sender):
       # Allocates the pointer and sends it
       doAssert args.chan.buffer.load(moRelaxed) == nil
       for j in 0 ..< 10:
-        let val = pi_alloc(int)
+        let val = wv_alloc(int)
         val[] = 42 + j*11
         args.chan[].sendLoop(val):
           # Busy loop, in prod we might want to yield the core/thread timeslice
@@ -198,7 +198,7 @@ when isMainModule:
     echo "Testing if 2 threads can send data"
     echo "-----------------------------------"
     var threads: array[2, Thread[ThreadArgs]]
-    let chan = pi_alloc(Channel[ptr int])
+    let chan = wv_alloc(Channel[ptr int])
     chan[].initialize()
 
     createThread(threads[0], thread_func, ThreadArgs(ID: Receiver, chan: chan))
@@ -207,7 +207,7 @@ when isMainModule:
     joinThread(threads[0])
     joinThread(threads[1])
 
-    pi_free(chan)
+    wv_free(chan)
     echo "-----------------------------------"
     echo "Success"
 

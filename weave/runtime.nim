@@ -29,19 +29,19 @@ import ./channels/channels_legacy
 proc init*(_: type Runtime) =
   # TODO detect Hyper-Threading and NUMA domain
 
-  if existsEnv"PICASSO_NUM_THREADS":
-    workforce() = getEnv"PICASSO_NUM_THREADS".parseInt.int32
+  if existsEnv"WEAVE_NUM_THREADS":
+    workforce() = getEnv"WEAVE_NUM_THREADS".parseInt.int32
     if workforce() <= 0:
-      raise newException(ValueError, "PICASSO_NUM_THREADS must be > 0")
-    # elif workforce() > PI_MaxWorkers:
-    #   echo "PICASSO_NUM_THREADS truncated to ", PI_MaxWorkers
+      raise newException(ValueError, "WEAVE_NUM_THREADS must be > 0")
+    # elif workforce() > WV_MaxWorkers:
+    #   echo "WEAVE_NUM_THREADS truncated to ", WV_MaxWorkers
   else:
     workforce() = int32 countProcessors()
 
   ## Allocation of the global context.
-  globalCtx.threadpool = pi_alloc(Thread[WorkerID], workforce())
-  globalCtx.com.thefts = pi_alloc(ChannelLegacy[StealRequest], workforce())
-  globalCtx.com.tasks = pi_alloc(Persistack[PI_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]], workforce())
+  globalCtx.threadpool = wv_alloc(Thread[WorkerID], workforce())
+  globalCtx.com.thefts = wv_alloc(ChannelLegacy[StealRequest], workforce())
+  globalCtx.com.tasks = wv_alloc(Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]], workforce())
   discard pthread_barrier_init(globalCtx.barrier, nil, workforce())
 
   # Lead thread - pinned to CPU 0

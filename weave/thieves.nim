@@ -106,9 +106,9 @@ proc findVictimAndRelaySteal*(req: sink StealRequest) =
 proc updateStealStrategy() =
   ## Estimate work-stealing efficiency during the last interval
   ## If the value is below a threshold, switch strategies
-  if myThefts().recentThefts == PI_StealAdaptativeInterval:
+  if myThefts().recentThefts == WV_StealAdaptativeInterval:
     # Reevaluate the ratio of tasks processed within the theft interval
-    let ratio = myThefts().recentTasks.float32 / float32(PI_StealAdaptativeInterval)
+    let ratio = myThefts().recentTasks.float32 / float32(WV_StealAdaptativeInterval)
     if myThefts().stealHalf and ratio < 2.0f:
       # Tasks stolen are coarse-grained, steal only one to reduce re-steal
       myThefts().stealHalf = false
@@ -131,7 +131,7 @@ proc trySteal*(isOutOfTasks: bool) =
   # For code size and improved cache usage
   # we don't use a static bool even though we could.
   profile(send_recv_req):
-    if myThefts().outstanding < PI_MaxConcurrentStealPerWorker:
+    if myThefts().outstanding < WV_MaxConcurrentStealPerWorker:
       StealAdaptative:
         updateStealStrategy()
       var req: StealRequest

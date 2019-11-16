@@ -339,11 +339,11 @@ when isMainModule:
 
   proc allocate(task: var Task) =
     preCondition: task.isNil
-    task = pi_allocPtr(Task)
+    task = wv_allocPtr(Task)
 
   proc delete(task: sink Task) =
     if not task.isNil:
-      pi_free(task)
+      wv_free(task)
 
   proc newTask(stack: var IntrusiveStack[Task]): Task =
     if stack.isEmpty():

@@ -48,7 +48,7 @@ type
     next*: Task
     fn*: proc (param: pointer) {.nimcall.}
     batch*: int32
-    when defined(PI_StealLastVictim):
+    when defined(WV_StealLastVictim):
       victim*: int32
     start*: int
     cur*: int
@@ -83,11 +83,11 @@ type
 # StealableTask API
 proc allocate*(task: var Task) {.inline.} =
   preCondition: task.isNil()
-  task = pi_allocPtr(Task, zero = true)
+  task = wv_allocPtr(Task, zero = true)
 
 proc delete*(task: Task) {.inline.} =
   preCondition: not task.isNil()
-  pi_free(task)
+  wv_free(task)
 
 # Ensure unicity of a given steal request
 # -----------------------------------------------------------

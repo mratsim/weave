@@ -27,11 +27,11 @@ proc init*(ctx: var TLContext) =
   ## Initialize the thread-local context of a worker (including the lead worker)
 
   myWorker().deque = newPrellDeque(Task)
-  myThieves().initialize(PI_MaxConcurrentStealPerWorker * workforce())
+  myThieves().initialize(WV_MaxConcurrentStealPerWorker * workforce())
   myTodoBoxes().initialize()
   myWorker().initialize(maxID = workforce() - 1)
 
-  ascertain: myTodoBoxes().len == PI_MaxConcurrentStealPerWorker
+  ascertain: myTodoBoxes().len == WV_MaxConcurrentStealPerWorker
 
   # Workers see their RNG with their myID()
   myThefts().rng = uint32 myID()
@@ -146,7 +146,7 @@ proc threadLocalCleanup*() =
   `=destroy`(localCtx.taskCache)
   myThieves().delete()
 
-  for i in 0 ..< PI_MaxConcurrentStealPerWorker:
+  for i in 0 ..< WV_MaxConcurrentStealPerWorker:
     # No tasks left
     ascertain: myTodoBoxes().access(i).isEmpty()
     # No need to destroy it's on the stack

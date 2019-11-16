@@ -47,13 +47,13 @@ type
     ## - Messages are guaranteed to be delivered
     ## - Messages will be delivered exactly once
     ## - Linearizability
-    pad0: array[PI_CacheLineSize - 3*sizeof(int32), byte]
+    pad0: array[WV_CacheLineSize - 3*sizeof(int32), byte]
     backLock: Lock # Padding? - pthread_lock is 40 bytes on Linux, unknown on windows.
     capacity: int32
     buffer: ptr UncheckedArray[T]
-    pad1: array[PI_CacheLineSize - sizeof(int32), byte]
+    pad1: array[WV_CacheLineSize - sizeof(int32), byte]
     front: Atomic[int32]
-    pad2: array[PI_CacheLineSize - sizeof(int32), byte]
+    pad2: array[WV_CacheLineSize - sizeof(int32), byte]
     back: Atomic[int32]
 
   # Private aliases
@@ -72,7 +72,7 @@ proc delete*[T](chan: var Channel[T]) {.inline.} =
     discard
 
   if not chan.buffer.isNil:
-    pi_free(chan.buffer)
+    wv_free(chan.buffer)
 
 func clear*(chan: var ChannelMpscBounded) {.inline.} =
   ## Reinitialize the data in the channel
@@ -106,7 +106,7 @@ proc initialize*[T](chan: var ChannelMpscBounded[T], capacity: int32) {.inline.}
     discard
 
   chan.capacity = capacity
-  chan.buffer = pi_alloc(T, capacity)
+  chan.buffer = wv_alloc(T, capacity)
   chan.clear()
 
 # To differentiate between full and empty case

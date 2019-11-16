@@ -110,7 +110,7 @@ proc findVictim*(req: var StealRequest): WorkerID =
     result = rand_r(myThefts().rng) mod workforce()
     while result == myID():
       result = rand_r(myThefts().rng) mod workforce()
-  elif req.retry == PI_MaxRetriesPerSteal:
+  elif req.retry == WV_MaxRetriesPerSteal:
     # Return steal request to thief
     # logVictims(req.victims, req.thiefID)
     result = req.thiefID
@@ -139,4 +139,4 @@ proc findVictim*(req: var StealRequest): WorkerID =
 
   postCondition: result in 0 ..< workforce()
   postCondition: result != myID()
-  postCondition: req.retry in 0 .. PI_MaxRetriesPerSteal
+  postCondition: req.retry in 0 .. WV_MaxRetriesPerSteal

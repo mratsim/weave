@@ -52,7 +52,7 @@ type
   Thefts* = object
     ## Thief state
     # Outstanding steal requests [0, MaxSteal]
-    outstanding*: range[int32(0)..int32(PI_MaxConcurrentStealPerWorker + 1)]
+    outstanding*: range[int32(0)..int32(WV_MaxConcurrentStealPerWorker + 1)]
     # Before a worker can become quiescent it has to drop MaxSteal - 1
     # steal request and send the remaining one to its parent
     dropped*: int32
@@ -74,7 +74,7 @@ type
     taskCache*: IntrusiveStack[Task]
     # Leader thread only - Whole runtime is quiescent
     runtimeIsQuiescent*: bool
-    when defined(PI_Metrics):
+    when defined(WV_Metrics):
       counters*: Counters
     signaledTerminate*: bool
 
@@ -87,14 +87,14 @@ type
     stealDeclined*: int
     shareSent*: int
     shareHandled*: int
-    when defined(PI_StealBackoff):
+    when defined(WV_StealBackoff):
       stealResent*: int
     when StealStrategy == StealKind.adaptative:
       stealOne*: int
       stealHalf*: int
       shareOne*: int
       shareHalf*: int
-    when defined(PI_LazyFlowvar):
+    when defined(WV_LazyFlowvar):
       futuresConverted*: int
     randomVictimCalls*: int
     randomVictimEarlyExits*: int

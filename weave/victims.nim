@@ -73,18 +73,18 @@ proc declineOwn(req: sink StealRequest) =
     log("Worker %d: received own request (req.state: %s, left: %d, right %d)\n", myID(), $req.state, myWorker().leftIsWaiting, myWorker().rightIsWaiting)
 
   if req.state == Stealing and myWorker().leftIsWaiting and myWorker().rightIsWaiting:
-    when PI_MaxConcurrentStealPerWorker == 1:
+    when WV_MaxConcurrentStealPerWorker == 1:
       # When there is only one concurrent steal request allowed, it's always the last.
       lastStealAttempt(req)
     else:
       # Is this the last theft attempt allowed per steal request?
       # - if so: lastStealAttempt special case (termination if lead thread, sleep if worker)
       # - if not: drop it and wait until we receive work or all out steal requests failed.
-      if myThefts().outstanding == PI_MaxConcurrentStealPerWorker and
-          myTodoBoxes().len == PI_MaxConcurrentStealPerWorker - 1:
-        # "PI_MaxConcurrentStealPerWorker - 1" steal requests have been dropped
+      if myThefts().outstanding == WV_MaxConcurrentStealPerWorker and
+          myTodoBoxes().len == WV_MaxConcurrentStealPerWorker - 1:
+        # "WV_MaxConcurrentStealPerWorker - 1" steal requests have been dropped
         # as evidenced by the corresponding channel "address boxes" being recycled
-        ascertain: myThefts().dropped == PI_MaxConcurrentStealPerWorker - 1
+        ascertain: myThefts().dropped == WV_MaxConcurrentStealPerWorker - 1
         lastStealAttempt(req)
       else:
         drop(req)
@@ -98,7 +98,7 @@ proc declineOwn(req: sink StealRequest) =
 proc decline*(req: sink StealRequest) =
   ## Pass steal request to another worker
   ## or the manager if it's our own that came back
-  preCondition: req.retry <= PI_MaxRetriesPerSteal
+  preCondition: req.retry <= WV_MaxRetriesPerSteal
 
   req.retry += 1
   incCounter(stealDeclined)
@@ -113,7 +113,7 @@ proc decline*(req: sink StealRequest) =
 proc receivedOwn(req: sink StealRequest) =
   preCondition: req.state != Waiting
 
-  when PI_StealEarly > 0:
+  when WV_StealEarly > 0:
     task = myTask()
     let tasksLeft = if not task.isNil and task.isLoop:
                       abs(task.stop - task.cur)
@@ -121,8 +121,8 @@ proc receivedOwn(req: sink StealRequest) =
 
     # Received our own steal request, we can forget about it
     # if we now have more tasks that the threshold
-    if myWorker().deque > PI_StealEarly or
-        tasksLeft > PI_StealEarly:
+    if myWorker().deque > WV_StealEarly or
+        tasksLeft > WV_StealEarly:
       req.forget()
   else:
     decline(req)
@@ -144,7 +144,7 @@ proc takeTasks(req: StealRequest): tuple[task: Task, loot: int32] =
 
 proc send(req: sink StealRequest, task: sink Task, numStolen: int32 = 1) {.inline.}=
   let taskSent = req.thiefAddr[].trySend(task)
-  when defined(PI_LastThief):
+  when defined(WV_LastThief):
     myThefts().lastThief = req.thiefID
 
   postCondition: taskSent # SPSC channel with only 1 slot

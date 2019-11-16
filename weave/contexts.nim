@@ -44,7 +44,7 @@ proc newTaskFromCache*(): Task {.inline.} =
 # Aliases
 # ----------------------------------------------------------------------------------
 
-template myTodoBoxes*: Persistack[PI_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]] =
+template myTodoBoxes*: Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]] =
   globalCtx.com.tasks[localCtx.worker.ID]
 
 # TODO: used to debug a recurrent deadlock on trySend with 5 workers
@@ -123,7 +123,7 @@ proc workerMetrics*() =
       c_printf("+========================================+\n")
       c_printf("|  Per-worker statistics                 |\n")
       c_printf("+========================================+\n")
-      c_printf("  / use -d:PI_profile for high-res timers /  \n")
+      c_printf("  / use -d:WV_profile for high-res timers /  \n")
 
     discard pthread_barrier_wait(globalCtx.barrier)
 

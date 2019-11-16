@@ -18,8 +18,8 @@ import
 # ----------------------------------------------------------------------------------
 
 proc restartWork() =
-  preCondition: myThefts().outstanding == PI_MaxConcurrentStealPerWorker
-  preCondition: myTodoBoxes().len == PI_MaxConcurrentStealPerWorker
+  preCondition: myThefts().outstanding == WV_MaxConcurrentStealPerWorker
+  preCondition: myTodoBoxes().len == WV_MaxConcurrentStealPerWorker
 
   # Adjust value of outstanding by MaxSteal-1, the number of steal
   # requests that have been dropped:
@@ -38,7 +38,7 @@ proc recv*(task: var Task, isOutOfTasks: bool): bool =
   # Note we could use a static bool for isOutOfTasks but this
   # increase the code size.
   profile(send_recv_task):
-    for i in 0 ..< PI_MaxConcurrentStealPerWorker:
+    for i in 0 ..< WV_MaxConcurrentStealPerWorker:
       result = myTodoBoxes().access(i)
                             .tryRecv(task)
       if result:
@@ -49,10 +49,10 @@ proc recv*(task: var Task, isOutOfTasks: bool): bool =
   if not result:
     trySteal(isOutOfTasks)
   else:
-    when PI_MaxConcurrentStealPerWorker == 1:
+    when WV_MaxConcurrentStealPerWorker == 1:
       if myWorker().isWaiting:
         restartWork()
-    else: # PI_MaxConcurrentStealPerWorker > 1
+    else: # WV_MaxConcurrentStealPerWorker > 1
       if myWorker().isWaiting:
         restartWork()
       else:
@@ -68,7 +68,7 @@ proc recv*(task: var Task, isOutOfTasks: bool): bool =
     myThefts().outstanding -= 1
 
     debug: log("Worker %d: %d theft(s) outstanding after receiving a task\n", myID(), myThefts().outstanding)
-    postCondition: myThefts().outstanding in 0 ..< PI_MaxConcurrentStealPerWorker
+    postCondition: myThefts().outstanding in 0 ..< WV_MaxConcurrentStealPerWorker
     postCondition: myThefts().dropped == 0
 
 proc run*(task: Task) {.inline.} =

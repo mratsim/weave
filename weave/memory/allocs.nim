@@ -25,19 +25,19 @@ template deref*(T: typedesc): typedesc =
   ## Return the base object type behind a ptr type
   typeof(default(T)[])
 
-proc pi_alloc*(T: typedesc): ptr T {.inline.}=
+proc wv_alloc*(T: typedesc): ptr T {.inline.}=
   ## Default allocator for the Picasso library
   ## This allocates memory to hold the type T
   ## and returns a pointer to it
   ##
   ## Can use Nim allocator to measure the overhead of its lock
   ## Memory is not zeroed
-  when defined(PI_useNimAlloc):
+  when defined(WV_useNimAlloc):
     createSharedU(T)
   else:
     cast[ptr T](c_malloc(sizeof(T)))
 
-proc pi_allocPtr*(T: typedesc[ptr], zero: static bool = false): T {.inline.}=
+proc wv_allocPtr*(T: typedesc[ptr], zero: static bool = false): T {.inline.}=
   ## Default allocator for the Picasso library
   ## This allocates memory to hold the
   ## underlying type of the pointer type T.
@@ -45,11 +45,11 @@ proc pi_allocPtr*(T: typedesc[ptr], zero: static bool = false): T {.inline.}=
   ##
   ## Can use Nim allocator to measure the overhead of its lock
   ## Memory is not zeroed
-  result = pi_alloc(deref(T))
+  result = wv_alloc(deref(T))
   when zero:
     zeroMem(result, sizeof(deref(T)))
 
-proc pi_alloc*(T: typedesc, len: SomeInteger): ptr UncheckedArray[T] {.inline.} =
+proc wv_alloc*(T: typedesc, len: SomeInteger): ptr UncheckedArray[T] {.inline.} =
   ## Default allocator for the Picasso library.
   ## This allocates a contiguous chunk of memory
   ## to hold ``len`` elements of type T
@@ -57,13 +57,13 @@ proc pi_alloc*(T: typedesc, len: SomeInteger): ptr UncheckedArray[T] {.inline.} 
   ##
   ## Can use Nim allocator to measure the overhead of its lock
   ## Memory is not zeroed
-  when defined(PI_useNimAlloc):
+  when defined(WV_useNimAlloc):
     cast[type result](createSharedU(T, len))
   else:
     cast[type result](c_malloc(len * sizeof(T)))
 
-proc pi_free*[T: ptr](p: T) {.inline.} =
-  when defined(PI_useNimAlloc):
+proc wv_free*[T: ptr](p: T) {.inline.} =
+  when defined(WV_useNimAlloc):
     freeShared(p)
   else:
     c_free(p)

@@ -38,14 +38,14 @@ type
     #   chan: ptr ChannelSpscSinglePtr[T]
     # else:
     #   chan: ptr ChannelSpscSingleObject[T]
-    when not defined(PI_LazyFlowvar):
+    when not defined(WV_LazyFlowvar):
       chan: ChannelLegacy[T]
     else:
       lazyFV: LazyFlowvar
 
 EagerFV:
   proc newFlowVar*(T: typedesc): Flowvar[T] {.inline.} =
-    # result.chan = pi_allocPtr(result.chan.typeof)
+    # result.chan = wv_allocPtr(result.chan.typeof)
     result.chan.initialize(int32 sizeof(T))
 
   proc setWith*[T](fv: Flowvar[T], childResult: T) {.inline.} =

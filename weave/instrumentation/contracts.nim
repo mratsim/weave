@@ -11,7 +11,7 @@ import macros, os
 # ----------------------------------------------------------------------------------
 
 # Everything should be a template that doesn't produce any code
-# when PI_Asserts is not defined.
+# when WV_Asserts is not defined.
 # Those checks are controlled by a custom flag instead of
 # "--boundsChecks" or "--nilChecks" to decouple them from user code checks.
 # Furthermore, we want them to be very lightweight on performance
@@ -64,7 +64,7 @@ macro assertContract(
   result = quote do:
     when compileOption("assertions"):
       assert(`predicate`, `debug` & $`values` & '\n')
-    elif defined(PI_Asserts):
+    elif defined(WV_Asserts):
       if unlikely(not(`predicate`)):
         raise newException(AssertionError, `debug` & $`values` & '\n')
 

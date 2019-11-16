@@ -20,7 +20,7 @@ type
     ## that will be used for ordering by the IntrusiveStack
     ##
     ## IntrusiveStack takes ownership of the pointer object pushed into it.
-    ## It expects elements to be allocated via pi_alloc/createShared (i.e. shared-memory, not thread-local)
+    ## It expects elements to be allocated via wv_alloc/createShared (i.e. shared-memory, not thread-local)
 
     # TODO: This data-structure is used for caching tasks and reuse them without
     #       stressing the Nim/system allocator.
@@ -59,7 +59,7 @@ func pop*[T](stack: var IntrusiveStack[T]): T {.inline.} =
 
 proc `=destroy`*[T](stack: var IntrusiveStack[T]) =
   while (let elem = stack.pop(); not elem.isNil):
-    pi_free(elem)
+    wv_free(elem)
 
 # Sanity checks
 # ------------------------------------------------------------------------------
@@ -72,10 +72,10 @@ when isMainModule:
       next: Node
 
   let
-    a = pi_allocPtr(Node)
-    b = pi_allocPtr(Node)
-    c = pi_allocPtr(Node)
-    d = pi_allocPtr(Node)
+    a = wv_allocPtr(Node)
+    b = wv_allocPtr(Node)
+    c = wv_allocPtr(Node)
+    d = wv_allocPtr(Node)
 
   a.payload = 10
   b.payload = 20
@@ -90,7 +90,7 @@ when isMainModule:
 
   echo x.repr
 
-  pi_free(a)
-  pi_free(b)
-  pi_free(c)
-  pi_free(d)
+  wv_free(a)
+  wv_free(b)
+  wv_free(c)
+  wv_free(d)

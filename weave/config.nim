@@ -10,16 +10,16 @@ import strutils
 # Static configuration & compile-time options
 # ----------------------------------------------------------------------------------
 
-# const PI_MaxWorkers* {.intDefine.} = 256
+# const WV_MaxWorkers* {.intDefine.} = 256
 #   ## Influences the size of the global context
 #   # https://github.com/nim-lang/Nim/blob/v1.0.2/lib/pure/concurrency/threadpool.nim#L319-L322
 
-# PI_Asserts: turn on specific assertions independently from
+# WV_Asserts: turn on specific assertions independently from
 # --assertions:off or -d:danger
 
-# PI_Profile: turn on profiling
+# WV_Profile: turn on profiling
 
-const PI_CacheLineSize* {.intDefine.} = 128
+const WV_CacheLineSize* {.intDefine.} = 128
   ## Datastructure that are accessed from multiple threads
   ## are padded by this value to avoid
   ## false sharing / cache threashing / cache ping-pong
@@ -30,7 +30,7 @@ const PI_CacheLineSize* {.intDefine.} = 128
   # Nim threadpool uses 32 bytes :/
   # https://github.com/nim-lang/Nim/blob/v1.0.2/lib/pure/concurrency/threadpool.nim
 
-const PI_MaxConcurrentStealPerWorker* {.intdefine.}: int8 = 1
+const WV_MaxConcurrentStealPerWorker* {.intdefine.}: int8 = 1
   ## Maximum number of steal requests outstanding per worker
   ## If that maximum is reached a worker will not issue new steal requests
   ## until it receives work.
@@ -38,15 +38,15 @@ const PI_MaxConcurrentStealPerWorker* {.intdefine.}: int8 = 1
   ## from active stealing and wait for its parent to send work.
 
 static:
-  assert PI_MaxConcurrentStealPerWorker >= 1, "Workers need to send at least a steal request"
-  assert PI_MaxConcurrentStealPerWorker <= high(int8), "It's a work-stealing scheduler not a thieves guild!"
+  assert WV_MaxConcurrentStealPerWorker >= 1, "Workers need to send at least a steal request"
+  assert WV_MaxConcurrentStealPerWorker <= high(int8), "It's a work-stealing scheduler not a thieves guild!"
 
-const PI_StealAdaptativeInterval* {.intdefine.} = 25
+const WV_StealAdaptativeInterval* {.intdefine.} = 25
   ## Number of steal requests after which a worker reevaluate
   ## the steal-half vs steal-one strategy
 
-const PI_StealEarly* {.intdefine.} = 0
-  ## Workers with less tasks than PI_StealEarly will initiate
+const WV_StealEarly* {.intdefine.} = 0
+  ## Workers with less tasks than WV_StealEarly will initiate
   ## steal requests in advance. This might help hide stealing latencies
   ## or worsen message overhead.
 
@@ -62,25 +62,25 @@ type
     adaptative
 
 const
-  PI_Steal{.strdefine.} = "adaptative"
-  PI_Split{.strdefine.} = "adaptative"
+  WV_Steal{.strdefine.} = "adaptative"
+  WV_Split{.strdefine.} = "adaptative"
 
-  StealStrategy* = parseEnum[StealKind](PI_Steal)
-  SplitStrategy* = parseEnum[SplitKind](PI_Split)
+  StealStrategy* = parseEnum[StealKind](WV_Steal)
+  SplitStrategy* = parseEnum[SplitKind](WV_Split)
 
 # Static scopes
 # ----------------------------------------------------------------------------------
 
 template metrics*(body: untyped): untyped =
-  when defined(PI_Metrics):
+  when defined(WV_Metrics):
     {.noSideEffect.}: body
 
 template debugTermination*(body: untyped): untyped =
-  when defined(PI_DebugTermination) or defined(PI_Debug):
+  when defined(WV_DebugTermination) or defined(WV_Debug):
     {.noSideEffect.}: body
 
 template debug*(body: untyped): untyped =
-  when defined(PI_Debug):
+  when defined(WV_Debug):
     {.noSideEffect.}: body
 
 template StealAdaptative*(body: untyped): untyped =
@@ -88,21 +88,21 @@ template StealAdaptative*(body: untyped): untyped =
     body
 
 template LazyFV*(body: untyped): untyped =
-  when defined(PI_LazyFLowvar):
+  when defined(WV_LazyFLowvar):
     body
 
 template EagerFV*(body: untyped): untyped =
-  when not defined(PI_LazyFLowvar):
+  when not defined(WV_LazyFLowvar):
     body
 
 # Dynamic defines
 # ----------------------------------------------------------------------------------
 
-when not defined(PI_MaxRetriesPerSteal):
-  template PI_MaxRetriesPerSteal*: int32 = workforce() - 1
+when not defined(WV_MaxRetriesPerSteal):
+  template WV_MaxRetriesPerSteal*: int32 = workforce() - 1
     ## Number of steal attempts per steal requests
     ## before a steal request is sent back to the thief
     ## Default value is the number of workers minus one
     ##
     ## The global number of steal requests outstanding
-    ## is PI_MaxConcurrentStealPerWorker * globalCtx.numWorkers
+    ## is WV_MaxConcurrentStealPerWorker * globalCtx.numWorkers
