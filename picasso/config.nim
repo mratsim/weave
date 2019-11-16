@@ -87,6 +87,14 @@ template StealAdaptative*(body: untyped): untyped =
   when StealStrategy == StealKind.adaptative:
     body
 
+template LazyFV*(body: untyped): untyped =
+  when defined(PI_LazyFLowvar):
+    body
+
+template EagerFV*(body: untyped): untyped =
+  when not defined(PI_LazyFLowvar):
+    body
+
 # Dynamic defines
 # ----------------------------------------------------------------------------------
 

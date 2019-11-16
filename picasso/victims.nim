@@ -152,7 +152,7 @@ proc send(req: sink StealRequest, task: sink Task, numStolen: int32 = 1) {.inlin
   incCounter(stealHandled)
   incCounter(tasksSent, numStolen)
 
-when defined(PI_LazyFlowvar):
+LazyFV:
   import ./channels/channels_legacy
 
   proc convertLazyFlowvar(task: Task) {.inline.} =
@@ -165,12 +165,12 @@ when defined(PI_LazyFlowvar):
       lfv.lazyChan.chan = channel_alloc(int32 sizeof(lfv.lazyChan), 0, Spsc)
       incCounter(futuresConverted)
 
-  # proc batchConvertLazyFlowvar(task: Task) =
-  #   var task = task
-  #   while not task.isNil:
-  #     if task.hasFuture:
-  #       convertLazyFlowvar(task)
-  #     task = task.next
+  proc batchConvertLazyFlowvar(task: Task) =
+    var task = task
+    while not task.isNil:
+      if task.hasFuture:
+        convertLazyFlowvar(task)
+      task = task.next
 
 proc dispatchTasks*(req: sink StealRequest) =
   ## Send tasks in return of a steal request
@@ -187,13 +187,8 @@ proc dispatchTasks*(req: sink StealRequest) =
     profile(send_recv_task):
       task.batch = loot
       # TODO LastVictim
-      when defined(PI_LazyFlowvar):
-        # batchConvertLazyFlowvar(task)
-        var t = task
-        while not t.isNil:
-          if t.hasFuture:
-            convertLazyFlowvar(t)
-          t = t.next
+      LazyFV:
+        batchConvertLazyFlowvar(task)
       debug: log("Worker %2d: preparing a task with function address %d\n", myID(), task.fn)
       debug: log("Worker %2d: sent %d task%s to worker %d\n",
                   myID(), loot, if loot > 1: "s" else: "", req.thiefID)

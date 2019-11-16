@@ -9,7 +9,7 @@ import
   ../channels/[channels_spsc_single_ptr, channels_spsc_single_object],
   ../memory/allocs,
   ../instrumentation/contracts,
-  ../contexts
+  ../contexts, ../config
 
 # TODO for the Flowvar we need critically need a caching scheme for the channels
 # we use the legacy channels in the mean time
@@ -43,7 +43,7 @@ type
     else:
       lazyFV: LazyFlowvar
 
-when not defined(PI_LazyFlowvar):
+EagerFV:
   proc newFlowVar*(T: typedesc): Flowvar[T] {.inline.} =
     # result.chan = pi_allocPtr(result.chan.typeof)
     result.chan.initialize(int32 sizeof(T))
@@ -59,7 +59,7 @@ when not defined(PI_LazyFlowvar):
     fv.forceFuture(parentResult)
     fv.chan.channel_free() # This caches the channel
 
-else:
+LazyFV:
   # Templates everywhere as we use alloca
   template newFlowVar*(T: typedesc): Flowvar[T] =
     var fv = cast[Flowvar[T]](alloca(LazyFlowvarObj))
@@ -88,3 +88,6 @@ else:
     preCondition: not lfv.hasChannel
     lfv.hasChannel = true
     lfv.lazyChan.chan = channel_alloc(int32 sizeof(lfv.lazyChan), 0, Spsc)
+
+  proc delete*(chan: ChannelRaw) =
+    channel_free(chan)

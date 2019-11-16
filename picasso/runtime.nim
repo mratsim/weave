@@ -103,8 +103,7 @@ proc sync*(_: type Runtime) =
   block EmptyLocalQueue:
     ## Empty all the tasks and before leaving the barrier
     while true:
-      debugTermination:
-        log("Worker %d: globalsync 1 - task from local deque\n", myID())
+      debug: log("Worker %d: globalsync 1 - task from local deque\n", myID())
       while (let task = nextTask(childTask = false); not task.isNil):
         # TODO: duplicate schedulingLoop
         profile(run_task):
@@ -122,8 +121,7 @@ proc sync*(_: type Runtime) =
 
       # 2. Run out-of-task, become a thief and help other threads
       #    to reach the barrier faster
-      debugTermination:
-        log("Worker %d: globalsync 2 - becoming a thief\n", myID())
+      debug: log("Worker %d: globalsync 2 - becoming a thief\n", myID())
       trySteal(isOutOfTasks = true)
       ascertain: myThefts().outstanding > 0
 
@@ -139,8 +137,7 @@ proc sync*(_: type Runtime) =
 
 
       # 3. We stole some task(s)
-      debugTermination:
-        log("Worker %d: globalsync 3 - stoled tasks\n", myID())
+      debug: log("Worker %d: globalsync 3 - stoled tasks\n", myID())
       ascertain: not task.fn.isNil
 
       let loot = task.batch
@@ -155,13 +152,11 @@ proc sync*(_: type Runtime) =
         myThefts().recentThefts += 1
 
       # 4. Share loot with children
-      debugTermination:
-        log("Worker %d: globalsync 4 - sharing work\n", myID())
+      debug: log("Worker %d: globalsync 4 - sharing work\n", myID())
       shareWork()
 
       # 5. Work on what is left
-      debugTermination:
-        log("Worker %d: globalsync 5 - working on leftover\n", myID())
+      debug: log("Worker %d: globalsync 5 - working on leftover\n", myID())
       profile(run_task):
         run(task)
       profile(enq_deq_task):

@@ -145,7 +145,7 @@ proc workerMetrics*() =
       else:
         c_printf("Worker %d: %.2f %% steal-one\n", myID(), 0)
         c_printf("Worker %d: %.2f %% steal-half\n", myID(), 0)
-    when defined(PI_LazyFlowvar):
+    LazyFV:
       c_printf("Worker %d: %u futures converted\n", myID(), localCtx.counters.futuresConverted)
     c_printf("Worker %d: random victim fast path (slow path): %3.0f %% (%3.0f %%)\n",
       myID(), localCtx.counters.randomVictimEarlyExits.float64 * 100 / localCtx.counters.randomVictimCalls.float64,
