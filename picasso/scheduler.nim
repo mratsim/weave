@@ -179,10 +179,11 @@ proc worker_entry_fn*(id: WorkerID) =
 
   threadLocalCleanup()
 
-template isFutReady(): untyped =
-  EagerFV:
+EagerFV:
+  template isFutReady(): untyped =
     fv.chan.tryRecv(parentResult)
-  LazyFV:
+LazyFV:
+  template isFutReady(): untyped =
     if fv.lazyFV.hasChannel:
       ascertain: not fv.lazyFV.lazy_chan.chan.isNil
       fv.lazyFV.lazyChan.chan.tryRecv(parentResult)
