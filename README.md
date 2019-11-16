@@ -26,6 +26,8 @@ Weave provides an unique scheduler with the following properties:
   - Weave also uses an adaptative lazy loop splitting strategy.
     Loops will only be split when needed. There is no partitioning issue or grain size issue,
     or estimating if the workload is memory-bound or compute-bound, see [PyTorch OpenMP woes on parallel map](https://github.com/zy97140/omp-benchmark-for-pytorch).
+  - Weave aims efficient multicore scaling for very fine-grained tasks starting from the 200 cycles range upward (67 µs on 3GHz).
+    Note that Weave benchmarks are done with granularities of 1µs, 10µs and 100µs.
 - Fast and low-overhead:
   While the number of cores have been growing steadily, many programs
   are now hitting the limit of memory bandwidth and require tuning allocators,
