@@ -150,7 +150,7 @@ proc threadLocalCleanup*() =
   for i in 0 ..< WV_MaxConcurrentStealPerWorker:
     # No tasks left
     ascertain: myTodoBoxes().access(i).isEmpty()
-    # No need to destroy it's on the stack
+  myTodoBoxes().delete()
 
   # A BoundedQueue (work-sharing requests) is on the stack
   # It contains steal requests for non-leaf workers

@@ -71,6 +71,11 @@ proc globalCleanup() =
   discard pthread_barrier_destroy(globalCtx.barrier)
   deallocShared(globalCtx.threadpool)
 
+  # Channels, each thread cleaned its channels
+  # We just need to reclaim the memory
+  wv_free(globalCtx.com.thefts)
+  wv_free(globalCtx.com.tasks)
+
   # The root task has no parent
   ascertain: myTask().isRootTask()
   delete(myTask())
