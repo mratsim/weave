@@ -10,7 +10,7 @@ import
   ../config,
   ../memory/[intrusive_stacks, persistacks, allocs],
   ../instrumentation/contracts,
-  system/ansi_c
+  ../random/rng
 
 # Thread-local context
 # ----------------------------------------------------------------------------------
@@ -57,7 +57,7 @@ type
     # steal request and send the remaining one to its parent
     dropped*: int32
     # RRNG state to choose victims
-    rng*: uint32
+    rng*: RngState
     when defined(StealLastVictim):
       lastVictim*: WorkerID
     when defined(StealLastThief):
