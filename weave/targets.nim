@@ -24,13 +24,13 @@ proc markIdle(victims: var VictimsBitset, workerID: WorkerID) =
     # Invalid worker ID (parent of root or out-of-bound child)
     return
 
+  preCondition: workerID notin victims
+
   let maxID = workforce() - 1
   if workerID < workforce():
     # mark children
     markIdle(victims, left(workerID, maxID))
     markIdle(victims, right(workerID, maxID))
-    # mark worker
-    victims.clear(workerID)
 
 func mapVictims(victims: VictimsBitset, mapping: ptr UncheckedArray[WorkerID], len: int32) =
   ## Update mapping with a mapping
