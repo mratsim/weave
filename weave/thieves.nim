@@ -16,16 +16,17 @@ import
 # Thief
 # ----------------------------------------------------------------------------------
 
-proc init(req: var StealRequest) {.inline.} =
-  ## Initialize a steal request
+proc newStealRequest(): StealRequest {.inline.} =
+  ## Create a new steal request
   ## This does not initialize the Thief state
-  req.thiefAddr = myTodoBoxes.borrow()
-  req.thiefID = myID()
-  req.retry = 0
-  req.victims.init(workforce())
-  req.victims.clear(myID())
+  result = localCtx.stealCache.borrow()
+  result.thiefAddr = myTodoBoxes.borrow()
+  result.thiefID = myID()
+  result.retry = 0
+  result.victims.init(workforce())
+  result.victims.clear(myID())
   StealAdaptative:
-    req.stealHalf = myThefts().stealHalf
+    result.stealHalf = myThefts().stealHalf
 
 # Synchronization
 # ----------------------------------------------------------------------------------
@@ -134,8 +135,7 @@ proc trySteal*(isOutOfTasks: bool) =
     if myThefts().outstanding < WV_MaxConcurrentStealPerWorker:
       StealAdaptative:
         updateStealStrategy()
-      var req: StealRequest
-      req.init()
+      let req = newStealRequest()
       if isOutOfTasks:
         req.state = Stealing
       else:
@@ -153,6 +153,7 @@ proc forget*(req: sink StealRequest) =
 
   myThefts().outstanding -= 1
   myTodoBoxes().recycle(req.thiefAddr)
+  localCtx.stealCache.recycle(req)
 
 proc drop*(req: sink StealRequest) =
   ## Removes a steal request from circulation
@@ -170,6 +171,7 @@ proc drop*(req: sink StealRequest) =
   # don't decrement the count so that no new theft is initiated
   myThefts().dropped += 1
   myTodoBoxes().recycle(req.thiefAddr)
+  localCtx.stealCache.recycle(req)
 
 proc lastStealAttempt*(req: sink StealRequest) =
   ## If it's the last theft attempt per emitted steal requests

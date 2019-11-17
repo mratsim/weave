@@ -29,6 +29,7 @@ proc init*(ctx: var TLContext) =
   myWorker().deque = newPrellDeque(Task)
   myThieves().initialize(WV_MaxConcurrentStealPerWorker * workforce())
   myTodoBoxes().initialize()
+  localCtx.stealCache.initialize()
   myWorker().initialize(maxID = workforce() - 1)
 
   ascertain: myTodoBoxes().len == WV_MaxConcurrentStealPerWorker

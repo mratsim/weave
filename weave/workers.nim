@@ -43,6 +43,7 @@ proc recv*(task: var Task, isOutOfTasks: bool): bool =
                             .tryRecv(task)
       if result:
         myTodoBoxes().nowAvailable(i)
+        localCtx.stealCache.nowAvailable(i)
         debug: log("Worker %d received a task with function address %d\n", myID(), task.fn)
         break
 
