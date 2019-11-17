@@ -31,8 +31,6 @@ proc markIdle(victims: var SparseSet, workerID: WorkerID) =
     # mark children
     markIdle(victims, left(workerID, maxID))
     markIdle(victims, right(workerID, maxID))
-    # mark worker - already assumed in findVictims
-    # victims.excl(workerID)
 
 proc randomVictim(victims: SparseSet, workerID: WorkerID): WorkerID =
   ## Choose a random victim != ID from the list of potential VictimsBitset
