@@ -56,13 +56,13 @@ type
 # Persistack
 # ------------------------------------------------------------------------------
 
-proc `=destroy`[N: static int8, T](ps: var Persistack[N, T]) =
+proc delete*[N: static int8, T](ps: var Persistack[N, T]) =
   if not T.supportsCopyMem():
     # T has custom destructors or ref objects
     for i in 0 ..< N:
       `=destroy`(ps.rawMem[i])
   if not ps.rawMem.isNil:
-    dealloc(ps.rawMem)
+    wv_free(ps.rawMem)
 
 proc initialize*[N: static int8, T](ps: var Persistack[N, T]) =
   ## Reserve raw memory and setup the persistack

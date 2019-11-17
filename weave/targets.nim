@@ -93,9 +93,9 @@ proc randomVictim(victims: VictimsBitset, workerID: WorkerID): WorkerID =
   result = potential_victims[idx]
   # debug: log("Worker %d: rng %d, vict: %d\n", myID(), myThefts().rng, result)
 
-  postCondition result in victims
-  postCondition result in 0 ..< workforce()
-  postCondition result != myID()
+  postCondition: result in victims
+  postCondition: result in 0 ..< workforce()
+  postCondition: result != myID()
 
 proc findVictim*(req: var StealRequest): WorkerID =
   preCondition:

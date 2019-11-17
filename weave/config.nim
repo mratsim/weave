@@ -88,11 +88,11 @@ template StealAdaptative*(body: untyped): untyped =
     body
 
 template LazyFV*(body: untyped): untyped =
-  when defined(WV_LazyFLowvar):
+  when defined(WV_LazyFlowvar):
     body
 
 template EagerFV*(body: untyped): untyped =
-  when not defined(WV_LazyFLowvar):
+  when not defined(WV_LazyFlowvar):
     body
 
 # Dynamic defines
