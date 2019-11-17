@@ -8,7 +8,8 @@
 import
   std/typetraits,
   ../config,
-  ../instrumentation/contracts
+  ../instrumentation/contracts,
+  ../memory/allocs
 
 type
   Persistack*[N: static int8, T: object] = object
@@ -68,7 +69,7 @@ proc initialize*[N: static int8, T](ps: var Persistack[N, T]) =
   ##
   ## Important: The objects themselves are created uninitialized.
   ##            Make sure you properly initialize them before use.
-  ps.rawMem = cast[ptr array[N, T]](createU(T, N))
+  ps.rawMem = cast[ptr array[N, T]](wv_alloc(T, N))
   for i in 0 ..< N:
     ps.stack[i] = ps.rawMem[i].addr
   ps.len = N

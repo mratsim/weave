@@ -71,7 +71,7 @@ type
 
   # Padding shouldn't be needed as steal requests are used as value types
   # and deep-copied between threads
-  StealRequest* = object
+  StealRequest* = ptr object
     thiefAddr*: ptr ChannelSpscSinglePtr[Task]       # Channel for sending tasks back to the thief
     thiefID*: WorkerID
     retry*: int32                                 # 0 <= retry <= num_workers
