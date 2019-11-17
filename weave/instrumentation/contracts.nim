@@ -31,10 +31,10 @@ proc inspectInfix(node: NimNode): NimNode =
           bindSym"&",
           newCall(
             bindSym"&",
-            newCall(bindSym"$", inspect(node[1])),
+            newCall(ident"$", inspect(node[1])),
             newLit(" " & $node[0] & " ")
           ),
-          newCall(bindSym"$", inspect(node[2]))
+          newCall(ident"$", inspect(node[2]))
         )
     of {nnkIdent, nnkSym}:
       return node

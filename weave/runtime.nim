@@ -33,8 +33,8 @@ proc init*(_: type Runtime) =
     workforce() = getEnv"WEAVE_NUM_THREADS".parseInt.int32
     if workforce() <= 0:
       raise newException(ValueError, "WEAVE_NUM_THREADS must be > 0")
-    # elif workforce() > WV_MaxWorkers:
-    #   echo "WEAVE_NUM_THREADS truncated to ", WV_MaxWorkers
+    elif workforce() > WV_MaxWorkers:
+      echo "WEAVE_NUM_THREADS truncated to ", WV_MaxWorkers, " (WV_MaxWorkers)"
   else:
     workforce() = int32 countProcessors()
 

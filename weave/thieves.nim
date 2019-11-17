@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./datatypes/[victims_bitsets, sync_types, context_thread_local],
+  ./datatypes/[sparsesets, sync_types, context_thread_local],
   ./contexts, ./targets,
   ./instrumentation/[contracts, profilers, loggers],
   ./channels/channels_mpsc_bounded_lock,
@@ -20,11 +20,13 @@ proc newStealRequest(): StealRequest {.inline.} =
   ## Create a new steal request
   ## This does not initialize the Thief state
   result = localCtx.stealCache.borrow()
+  ascertain: result.victims.capacity.int32 == workforce()
+
   result.thiefAddr = myTodoBoxes.borrow()
   result.thiefID = myID()
   result.retry = 0
-  result.victims.init(workforce())
-  result.victims.clear(myID())
+  result.victims.refill()
+  result.victims.excl(myID())
   StealAdaptative:
     result.stealHalf = myThefts().stealHalf
 

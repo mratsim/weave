@@ -7,7 +7,7 @@
 
 import
   ./datatypes/[sync_types, context_thread_local, bounded_queues,
-               victims_bitsets, prell_deques, flowvars],
+               sparsesets, prell_deques, flowvars],
   ./contexts, ./config,
   ./instrumentation/[contracts, profilers, loggers],
   ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr],
@@ -90,9 +90,10 @@ proc declineOwn(req: sink StealRequest) =
         drop(req)
   else:
     # Our own request but we still have work, so we reset it and recirculate.
+    ascertain: req.victims.capacity.int32 == workforce()
     req.retry = 0
-    req.victims.init(workforce)
-    req.victims.clear(myID())
+    req.victims.refill()
+    req.victims.excl(myID())
     req.findVictimAndRelaySteal()
 
 proc decline*(req: sink StealRequest) =
@@ -107,7 +108,7 @@ proc decline*(req: sink StealRequest) =
     if req.thiefID == myID():
       req.declineOwn()
     else: # Not our own request
-      req.victims.clear(myID())
+      req.victims.excl(myID())
       req.findVictimAndRelaySteal()
 
 proc receivedOwn(req: sink StealRequest) =
