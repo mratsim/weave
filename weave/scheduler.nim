@@ -13,7 +13,8 @@ import
   ./memory/[persistacks, intrusive_stacks],
   ./contexts, ./config,
   ./victims, ./loop_splitting,
-  ./thieves, ./workers
+  ./thieves, ./workers,
+  ./random/rng
 
 
 # Public routines
@@ -38,7 +39,7 @@ proc init*(ctx: var TLContext) =
   ascertain: myTodoBoxes().len == WV_MaxConcurrentStealPerWorker
 
   # Workers see their RNG with their myID()
-  myThefts().rng = uint32 myID()
+  myThefts().rng.seed(myID())
 
   # Thread-Local Profiling
   profile_init(run_task)

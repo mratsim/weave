@@ -8,7 +8,7 @@
 import
   ./datatypes/[sparsesets, sync_types, context_thread_local],
   ./contexts,
-  ./primitives/c,
+  ./random/rng,
   ./instrumentation/[contracts, loggers],
   ./config,
   ./memory/allocs
@@ -60,9 +60,9 @@ proc findVictim*(req: var StealRequest): WorkerID =
     # Steal request initiated by the current worker.
     # Send it to a random one
     ascertain: req.retry == 0
-    result = rand_r(myThefts().rng) mod workforce()
+    result = myThefts().rng.uniform(workforce())
     while result == myID():
-      result = rand_r(myThefts().rng) mod workforce()
+      result = myThefts().rng.uniform(workforce())
   elif req.retry == WV_MaxRetriesPerSteal:
     # Return steal request to thief
     # logVictims(req.victims, req.thiefID)

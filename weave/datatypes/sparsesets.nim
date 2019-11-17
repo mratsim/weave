@@ -9,7 +9,7 @@ import
   ../config,
   ../instrumentation/contracts,
   ../memory/allocs,
-  ../primitives/c
+  ../random/rng
 
 template selectUint(): typedesc =
   # we keep high(uint) i;e. 0xFFFFFFFF ...
@@ -117,12 +117,12 @@ func excl*(s: var SparseSet, n: SomeInteger) {.inline.} =
   # Erase the item
   s.indices[n] = Empty
 
-func randomPick*(s: SparseSet, rngState: var uint32): int32 =
+func randomPick*(s: SparseSet, rng: var RngState): int32 =
   ## Randomly pick from the set.
   # The value is NOT removed from it.
   # TODO: this would require rejection sampling for proper uniform distribution
   # TODO: use a rng with better speed / distribution
-  let pickIdx = rand_r(rngState) mod s.len.int32
+  let pickIdx = rng.uniform(s.len)
   result = s.values[pickIdx].int32
 
 func `$`*(s: SparseSet): string =
