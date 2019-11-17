@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./victims_bitsets,
+  ./sparsesets,
   ../config,
   ../channels/channels_spsc_single_ptr,
   ../instrumentation/contracts,
@@ -75,7 +75,7 @@ type
     thiefAddr*: ptr ChannelSpscSinglePtr[Task]       # Channel for sending tasks back to the thief
     thiefID*: WorkerID
     retry*: int32                                 # 0 <= retry <= num_workers
-    victims*: VictimsBitset                       # bitfield of potential victims
+    victims*: SparseSet                           # set of potential victims
     state*: WorkerState                           # State of the thief
     when StealStrategy == StealKind.adaptative:
       stealHalf*: bool                            # Thief wants half the tasks

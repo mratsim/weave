@@ -8,7 +8,7 @@
 import
   ./instrumentation/[contracts, profilers, loggers],
   ./primitives/barriers,
-  ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars],
+  ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars, sparsesets],
   ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr, channels_spsc_single_object],
   ./memory/[persistacks, intrusive_stacks],
   ./contexts, ./config,
@@ -29,8 +29,11 @@ proc init*(ctx: var TLContext) =
   myWorker().deque = newPrellDeque(Task)
   myThieves().initialize(WV_MaxConcurrentStealPerWorker * workforce())
   myTodoBoxes().initialize()
-  localCtx.stealCache.initialize()
   myWorker().initialize(maxID = workforce() - 1)
+
+  localCtx.stealCache.initialize()
+  for i in 0 ..< localCtx.stealCache.len:
+    localCtx.stealCache.access(i).victims.allocate(capacity = workforce())
 
   ascertain: myTodoBoxes().len == WV_MaxConcurrentStealPerWorker
 
@@ -144,12 +147,15 @@ proc schedulingLoop() =
 
 proc threadLocalCleanup*() =
   myWorker().deque.delete()
-  `=destroy`(localCtx.taskCache)
   myThieves().delete()
 
   for i in 0 ..< WV_MaxConcurrentStealPerWorker:
     # No tasks left
     ascertain: myTodoBoxes().access(i).isEmpty()
+  myTodoBoxes().delete()
+
+    localCtx.stealCache.access(i).victims.delete()
+
   myTodoBoxes().delete()
 
   # A BoundedQueue (work-sharing requests) is on the stack
@@ -158,6 +164,7 @@ proc threadLocalCleanup*() =
 
   # The task cache is full of tasks
   `=destroy`(localCtx.taskCache)
+  delete(localCtx.stealCache)
 
 proc worker_entry_fn*(id: WorkerID) =
   ## On the start of the threadpool workers will execute this

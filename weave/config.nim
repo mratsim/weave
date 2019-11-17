@@ -10,9 +10,9 @@ import strutils
 # Static configuration & compile-time options
 # ----------------------------------------------------------------------------------
 
-# const WV_MaxWorkers* {.intDefine.} = 256
-#   ## Influences the size of the global context
-#   # https://github.com/nim-lang/Nim/blob/v1.0.2/lib/pure/concurrency/threadpool.nim#L319-L322
+const WV_MaxWorkers* {.intDefine.} = 255
+  ## Influences the size of the size of the sets of victims
+  # https://github.com/nim-lang/Nim/blob/v1.0.2/lib/pure/concurrency/threadpool.nim#L319-L322
 
 # WV_Asserts: turn on specific assertions independently from
 # --assertions:off or -d:danger
