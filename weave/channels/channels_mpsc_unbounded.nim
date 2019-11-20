@@ -8,7 +8,7 @@ type
     x is ptr
     x.next is Atomic[T]
 
-  ChannelMPSCunbounded*[T: Enqueueable] = object
+  ChannelMpscUnbounded*[T: Enqueueable] = object
     ## Lockless multi-producer single-consumer channel
     ##
     ## Properties:
@@ -25,7 +25,7 @@ type
     # TODO: align
     back: Atomic[T]
 
-proc initialize*[T](chan: var ChannelMPSCunbounded[T], dummy: T) =
+proc initialize*[T](chan: var ChannelMpscUnbounded[T], dummy: T) =
   ## This queue is designed for use within a thread-safe allocator
   ## It requires an allocated dummy node for initialization
   ## but cannot rely on an allocator.
@@ -37,7 +37,20 @@ proc initialize*[T](chan: var ChannelMPSCunbounded[T], dummy: T) =
   assert not(chan.front.isNil)
   assert not(chan.back.load(moRelaxed).isNil)
 
-proc trySend*[T](chan: var ChannelMPSCunbounded[T], src: sink T): bool =
+proc removeDummy*[T](chan: var ChannelMpscUnbounded[T]): T =
+  ## Remove dummy for its deallocation
+  ## The queue should be testroyed afterwards
+  assert not(chan.front.isNil)
+  assert not(chan.back.load(moRelaxed).isNil)
+  # Only the dummy should be left
+  assert chan.front == chan.back.load(moRelease)
+  assert chan.front.next.load(moRelease).isNil
+
+  result = chan.front
+  chan.front = nil
+  chan.back.store(nil, moRelaxed)
+
+proc trySend*[T](chan: var ChannelMpscUnbounded[T], src: sink T): bool =
   ## Send an item to the back of the channel
   ## As the channel as unbounded capacity, this should never fail
   assert not(chan.front.isNil)
@@ -50,7 +63,7 @@ proc trySend*[T](chan: var ChannelMPSCunbounded[T], src: sink T): bool =
 
   return true
 
-proc tryRecv*[T](chan: var ChannelMPSCunbounded[T], dst: var T): bool =
+proc tryRecv*[T](chan: var ChannelMpscUnbounded[T], dst: var T): bool =
   ## Try receiving the next item buffered in the channel
   ## Returns true if successful (channel was not empty)
   assert not(chan.front.isNil)
@@ -72,7 +85,7 @@ proc tryRecv*[T](chan: var ChannelMPSCunbounded[T], dst: var T): bool =
 # Sanity checks
 # ------------------------------------------------------------------------------
 when isMainModule:
-  import strutils
+  import strutils, system/ansi_c
 
   # Data structure test
   # --------------------------------------------------------
@@ -85,17 +98,20 @@ when isMainModule:
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}
 
-  template sendLoop[T](chan: var ChannelMPSCunbounded[T],
+  template sendLoop[T](chan: var ChannelMpscUnbounded[T],
                        data: sink T,
                        body: untyped): untyped =
     while not chan.trySend(data):
       body
 
-  template recvLoop[T](chan: var ChannelMPSCunbounded[T],
+  template recvLoop[T](chan: var ChannelMpscUnbounded[T],
                        data: var T,
                        body: untyped): untyped =
     while not chan.tryRecv(data):
       body
+
+  const NumVals = 10
+  const Padding = 10 * NumVals # Pad with a 0 so that iteration 10 of thread 3 is 3010 with 99 max iters
 
   type
     WorkerKind = enum
@@ -123,7 +139,7 @@ when isMainModule:
 
     ThreadArgs = object
       ID: WorkerKind
-      chan: ptr ChannelMPSCunbounded[Val]
+      chan: ptr ChannelMpscUnbounded[Val]
 
   template Worker(id: WorkerKind, body: untyped): untyped {.dirty.} =
     if args.ID == id:
@@ -132,6 +148,19 @@ when isMainModule:
   template Worker(id: Slice[WorkerKind], body: untyped): untyped {.dirty.} =
     if args.ID in id:
       body
+
+  # I think the createShared/freeShared allocators have a race condition
+  proc valAlloc(): Val =
+    when not defined(debugNimAlloc):
+      cast[Val](c_malloc(sizeof(ValObj)))
+    else:
+      createShared(ValObj)
+
+  proc valFree(val: Val) =
+    when not defined(debugNimAlloc):
+      c_free(val)
+    else:
+      freeShared(val)
 
   proc thread_func(args: ThreadArgs) =
 
@@ -148,21 +177,21 @@ when isMainModule:
     # chan <- 64
     Worker(Receiver):
       var counts: array[Sender1..Sender15, int]
-      for j in 0 ..< 150:
+      for j in 0 ..< 15 * NumVals:
         var val: Val
         args.chan[].recvLoop(val):
           # Busy loop, in prod we might want to yield the core/thread timeslice
           discard
         echo "Receiver got: ", val.val, " at address 0x", toLowerASCII toHex cast[ByteAddress](val)
-        let sender = WorkerKind(val.val div 100)
-        doAssert val.val == counts[sender] + ord(sender) * 100, "Incorrect value: " & $val.val
+        let sender = WorkerKind(val.val div Padding)
+        doAssert val.val == counts[sender] + ord(sender) * Padding, "Incorrect value: " & $val.val
         inc counts[sender]
-        freeShared(val)
+        valFree(val)
 
     Worker(Sender1..Sender15):
-      for j in 0 ..< 10:
-        let val = createShared(ValObj)
-        val.val = ord(args.ID) * 100 + j
+      for j in 0 ..< NumVals:
+        let val = valAlloc()
+        val.val = ord(args.ID) * Padding + j
         args.chan[].sendLoop(val):
           # Busy loop, in prod we might want to yield the core/thread timeslice
           discard
@@ -174,8 +203,8 @@ when isMainModule:
     echo "Testing if 15 threads can send data to 1 consumer"
     echo "------------------------------------------------------------------------"
     var threads: array[WorkerKind, Thread[ThreadArgs]]
-    let chan = createSharedU(ChannelMPSCunbounded[Val]) # CreateU is not zero-init
-    let dummy = createShared(ValObj)
+    let chan = createSharedU(ChannelMpscUnbounded[Val]) # CreateU is not zero-init
+    let dummy = valAlloc()
     chan[].initialize(dummy)
 
     createThread(threads[Receiver], thread_func, ThreadArgs(ID: Receiver, chan: chan))
@@ -185,7 +214,7 @@ when isMainModule:
     for worker in WorkerKind:
       joinThread(threads[worker])
 
-    deallocShared(dummy)
+    chan[].removeDummy.valFree()
     deallocShared(chan)
     echo "------------------------------------------------------------------------"
     echo "Success"
