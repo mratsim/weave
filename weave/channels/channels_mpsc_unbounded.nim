@@ -77,17 +77,18 @@ proc tryRecv*[T](chan: var ChannelMpscUnbounded[T], dst: var T): bool =
   let first = chan.front # dummy
   let next = cast[T](first.next.load(moRelaxed)) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
 
-  if not next.isNil:
-    chan.front = next
-    prefetch(first.next.load(moRelaxed))
+  if next.isNil:
     fence(moAcquire)
-    dst = next
+    dst = nil
+    return false
 
-    discard chan.count.fetchSub(1, moRelaxed)
-    return true
+  chan.front = next
+  prefetch(first.next.load(moRelaxed))
+  fence(moAcquire)
+  dst = next
 
-  dst = nil
-  return false
+  discard chan.count.fetchSub(1, moRelaxed)
+  return true
 
 func peek*(chan: var ChannelMpscUnbounded): int32 {.inline.} =
   ## Estimates the number of items pending in the channel
@@ -152,7 +153,7 @@ when isMainModule:
 
     Val = ptr ValObj
     ValObj = object
-      next: Atomic[Val]
+      next: Atomic[pointer]
       val: int
 
     ThreadArgs = object
