@@ -64,7 +64,7 @@ func next(rng: var RngState): uint64 =
 func uniform*(rng: var RngState, max: SomeInteger): int32 =
   ## Returns a random integer in the range 0 ..< max
   ## Unlike Nim ``random`` stdlib, max is excluded.
-  preCondition: max > 0
+  preCondition: max.int > 0
   while true:
     let x = rng.next()
     if x <= high(uint64) - (high(uint64) mod uint64(max)):
