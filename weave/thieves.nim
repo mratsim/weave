@@ -9,7 +9,7 @@ import
   ./datatypes/[sparsesets, sync_types, context_thread_local],
   ./contexts, ./targets,
   ./instrumentation/[contracts, profilers, loggers],
-  ./channels/channels_mpsc_bounded_lock,
+  ./channels/channels_mpsc_unbounded,
   ./memory/persistacks,
   ./config, ./signals
 

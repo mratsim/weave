@@ -10,7 +10,7 @@ import
   ./primitives/barriers,
   ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars, sparsesets],
   ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr, channels_spsc_single_object],
-  ./memory/[persistacks, intrusive_stacks],
+  ./memory/[persistacks, intrusive_stacks, allocs],
   ./contexts, ./config,
   ./victims, ./loop_splitting,
   ./thieves, ./workers,
@@ -28,9 +28,13 @@ proc init*(ctx: var TLContext) =
   ## Initialize the thread-local context of a worker (including the lead worker)
 
   myWorker().deque = newPrellDeque(Task)
-  myThieves().initialize(WV_MaxConcurrentStealPerWorker * workforce())
   myTodoBoxes().initialize()
   myWorker().initialize(maxID = workforce() - 1)
+
+  # The StealRequest MPSC channel requires a dummy node
+  var dummy: StealRequest
+  wv_allocPtr(dummy)
+  myThieves().initialize(dummy)
 
   localCtx.stealCache.initialize()
   for i in 0 ..< localCtx.stealCache.len:
@@ -148,6 +152,7 @@ proc schedulingLoop() =
 
 proc threadLocalCleanup*() =
   myWorker().deque.delete()
+  myThieves().removeDummy().wv_free()
   myThieves().delete()
 
   for i in 0 ..< WV_MaxConcurrentStealPerWorker:
