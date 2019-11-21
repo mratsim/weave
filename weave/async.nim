@@ -148,7 +148,7 @@ when isMainModule:
       sync(Runtime)
       exit(Runtime)
 
-    # main()
+    main()
 
   block: # Async/Await
 
@@ -173,4 +173,4 @@ when isMainModule:
 
       echo f
 
-    main2()
+    # main2()

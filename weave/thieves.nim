@@ -11,7 +11,8 @@ import
   ./instrumentation/[contracts, profilers, loggers],
   ./channels/channels_mpsc_unbounded,
   ./memory/persistacks,
-  ./config, ./signals
+  ./config, ./signals,
+  std/atomics
 
 # Thief
 # ----------------------------------------------------------------------------------
@@ -22,6 +23,7 @@ proc newStealRequest(): StealRequest {.inline.} =
   result = localCtx.stealCache.borrow()
   ascertain: result.victims.capacity.int32 == workforce()
 
+  result.next.store(nil, moRelaxed)
   result.thiefAddr = myTodoBoxes.borrow()
   result.thiefID = myID()
   result.retry = 0

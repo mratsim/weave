@@ -10,7 +10,7 @@ import
                sparsesets, prell_deques, flowvars],
   ./contexts, ./config,
   ./instrumentation/[contracts, profilers, loggers],
-  ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr],
+  ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr, channels_mpsc_unbounded],
   ./thieves, ./loop_splitting
 
 # Victims - Adaptative task splitting

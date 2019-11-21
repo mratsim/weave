@@ -18,8 +18,8 @@ const withBuiltins = defined(gcc) or defined(clang) or defined(icc)
 when withBuiltins:
   proc builtin_prefetch(data: pointer, rw: PrefetchRW, locality: PrefetchLocality) {.importc: "__builtin_prefetch", noDecl.}
 
-template prefetch*[T](
-            data: ptr (T or UncheckedArray[T]),
+template prefetch*(
+            data: pointer,
             rw: static PrefetchRW = Read,
             locality: static PrefetchLocality = HighTemporalLocality) =
   ## Prefetch examples:

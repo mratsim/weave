@@ -1,12 +1,13 @@
 import
   std/atomics,
-  ../config, # TODO: for CacheLineSize
+  ../config,
   ../primitives/compiler_optimization_hints # for prefetch
 
 type
   Enqueueable = concept x, type T
     x is ptr
-    x.next is Atomic[T]
+    x.next is Atomic[pointer]
+    # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
 
   ChannelMpscUnbounded*[T: Enqueueable] = object
     ## Lockless multi-producer single-consumer channel
@@ -16,14 +17,17 @@ type
     ## - Lock-free (?): Progress guarantees to determine
     ## - Unbounded
     ## - Intrusive List based
+    ## - Keep an approximate count on enqueued
 
     # TODO: pass this through Relacy and Valgrind/Helgrind
     #       to make sure there are no bugs
     #       on arch with relaxed memory models
 
     front: T
-    # TODO: align
-    back: Atomic[T]
+    pad0: array[WV_CacheLineSize - sizeof(pointer), byte]
+    back: Atomic[pointer] # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
+    pad1: array[WV_CacheLineSize - sizeof(int), byte]
+    count: Atomic[int]
 
 proc initialize*[T](chan: var ChannelMpscUnbounded[T], dummy: T) =
   ## This queue is designed for use within a thread-safe allocator
@@ -59,7 +63,8 @@ proc trySend*[T](chan: var ChannelMpscUnbounded[T], src: sink T): bool =
   src.next.store(nil, moRelaxed)
   fence(moRelease)
   let oldBack = chan.back.exchange(src, moRelaxed)
-  oldBack.next.store(src, moRelaxed)
+  cast[T](oldBack).next.store(src, moRelaxed) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
+  discard chan.count.fetchAdd(1, moRelaxed)
 
   return true
 
@@ -70,17 +75,30 @@ proc tryRecv*[T](chan: var ChannelMpscUnbounded[T], dst: var T): bool =
   assert not(chan.back.load(moRelaxed).isNil)
 
   let first = chan.front # dummy
-  let next = first.next.load(moRelaxed)
+  let next = cast[T](first.next.load(moRelaxed)) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
 
   if not next.isNil:
     chan.front = next
     prefetch(first.next.load(moRelaxed))
     fence(moAcquire)
     dst = next
+
+    discard chan.count.fetchSub(1, moRelaxed)
     return true
 
   dst = nil
   return false
+
+func peek*(chan: var ChannelMpscUnbounded): int32 {.inline.} =
+  ## Estimates the number of items pending in the channel
+  ## - If called by the consumer the true number might be more
+  ##   due to producers adding items concurrently.
+  ## - If called by a producer the true number is undefined
+  ##   as other producers also add items concurrently and
+  ##   the consumer removes them concurrently.
+  ##
+  ## This is a non-locking operation.
+  result = int32 chan.count.load(moRelaxed)
 
 # Sanity checks
 # ------------------------------------------------------------------------------

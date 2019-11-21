@@ -9,7 +9,7 @@ import
   ./instrumentation/[contracts, profilers, loggers],
   ./primitives/barriers,
   ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars, sparsesets],
-  ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr, channels_spsc_single_object],
+  ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr, channels_spsc_single_object, channels_mpsc_unbounded],
   ./memory/[persistacks, intrusive_stacks, allocs],
   ./contexts, ./config,
   ./victims, ./loop_splitting,
@@ -32,8 +32,7 @@ proc init*(ctx: var TLContext) =
   myWorker().initialize(maxID = workforce() - 1)
 
   # The StealRequest MPSC channel requires a dummy node
-  var dummy: StealRequest
-  wv_allocPtr(dummy)
+  let dummy = wv_allocPtr(StealRequest)
   myThieves().initialize(dummy)
 
   localCtx.stealCache.initialize()
@@ -153,7 +152,7 @@ proc schedulingLoop() =
 proc threadLocalCleanup*() =
   myWorker().deque.delete()
   myThieves().removeDummy().wv_free()
-  myThieves().delete()
+  # myThieves().delete()
 
   for i in 0 ..< WV_MaxConcurrentStealPerWorker:
     # No tasks left
