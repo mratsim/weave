@@ -87,7 +87,9 @@ func contains*(s: SparseSet, n: SomeInteger): bool {.inline.} =
 
 func incl*(s: var SparseSet, n: SomeInteger) {.inline.} =
   preCondition: n < Empty
-  preCondition: n notin s
+
+  if n in s: return
+
   preCondition: s.len < s.capacity
 
   s.indices[n] = s.len
@@ -101,7 +103,7 @@ func peek*(s: SparseSet): int32 {.inline.} =
   int32 s.values[s.len - 1]
 
 func excl*(s: var SparseSet, n: SomeInteger) {.inline.} =
-  preCondition: n in s
+  if n notin s: return
 
   # We do constant time deletion by replacing the deleted
   # integer by the last value in the array of values

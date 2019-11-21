@@ -24,11 +24,10 @@ proc markIdle(victims: var SparseSet, workerID: WorkerID) =
     # Invalid worker ID (parent of root or out-of-bound child)
     return
 
-  preCondition: workerID notin victims
-
   let maxID = workforce() - 1
   if workerID < workforce():
     # mark children
+    victims.excl(workerID)
     markIdle(victims, left(workerID, maxID))
     markIdle(victims, right(workerID, maxID))
 
