@@ -38,6 +38,8 @@ proc newStealRequest(): StealRequest {.inline.} =
 proc rawSend(victimID: WorkerID, req: sink StealRequest) {.inline.}=
   ## Send a steal or work sharing request
   # TODO: check for race condition on runtime exit
+  # log("Worker %d: sending request 0x%.08x to %d (Channel: 0x%.08x)\n",
+  #       myID(), cast[ByteAddress](req), victimID, globalCtx.com.thefts[victimID].addr)
   let stealRequestSent = globalCtx.com
                                   .thefts[victimID]
                                   .trySend(req)

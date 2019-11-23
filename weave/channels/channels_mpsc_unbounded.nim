@@ -1,7 +1,8 @@
 import
   std/atomics,
   ../config,
-  ../primitives/compiler_optimization_hints # for prefetch
+  ../primitives/compiler_optimization_hints, # for prefetch
+  ../instrumentation/[contracts, loggers]
 
 type
   Enqueueable = concept x, type T
@@ -23,72 +24,111 @@ type
     #       to make sure there are no bugs
     #       on arch with relaxed memory models
 
-    front: T
-    pad0: array[WV_CacheLineSize - sizeof(pointer), byte]
-    back: Atomic[pointer] # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
-    pad1: array[WV_CacheLineSize - sizeof(int), byte]
     count: Atomic[int]
+    dummy: typeof(default(T)[]) # Deref the pointer type
+    pad0: array[WV_CacheLineSize - sizeof(pointer), byte]
+    front: T
+    pad1: array[WV_CacheLineSize - sizeof(int), byte]
+    back: Atomic[pointer] # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
 
-proc initialize*[T](chan: var ChannelMpscUnbounded[T], dummy: T) =
-  ## This queue is designed for use within a thread-safe allocator
-  ## It requires an allocated dummy node for initialization
-  ## but cannot rely on an allocator.
-  assert not dummy.isNil
-  dummy.next.store(nil, moRelaxed)
-  chan.front = dummy
-  chan.back.store(dummy, moRelaxed)
+template checkInvariants(): untyped =
+  ascertain: not(chan.front.isNil)
+  ascertain: not(chan.back.load(moRelaxed).isNil)
 
-  assert not(chan.front.isNil)
-  assert not(chan.back.load(moRelaxed).isNil)
+proc initialize*[T](chan: var ChannelMpscUnbounded[T]) =
+  # We keep a dummy node within the queue itself
+  # it doesn't need any dynamic allocation which simplify
+  # its use in an allocator
+  chan.dummy.reset()
+  chan.front = chan.dummy.addr
+  chan.back.store(chan.dummy.addr, moRelaxed)
 
-proc removeDummy*[T](chan: var ChannelMpscUnbounded[T]): T =
-  ## Remove dummy for its deallocation
-  ## The queue should be testroyed afterwards
-  assert not(chan.front.isNil)
-  assert not(chan.back.load(moRelaxed).isNil)
-  # Only the dummy should be left
-  assert chan.front == chan.back.load(moRelease)
-  assert chan.front.next.load(moRelease).isNil
-
-  result = chan.front
-  chan.front = nil
-  chan.back.store(nil, moRelaxed)
-
-proc trySend*[T](chan: var ChannelMpscUnbounded[T], src: sink T): bool =
+proc trySendImpl[T](chan: var ChannelMpscUnbounded[T], src: sink T, count: static bool): bool {.inline.}=
   ## Send an item to the back of the channel
   ## As the channel as unbounded capacity, this should never fail
-  assert not(chan.front.isNil)
-  assert not(chan.back.load(moRelaxed).isNil)
+  checkInvariants()
 
   src.next.store(nil, moRelaxed)
   fence(moRelease)
   let oldBack = chan.back.exchange(src, moRelaxed)
   cast[T](oldBack).next.store(src, moRelaxed) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
-  discard chan.count.fetchAdd(1, moRelaxed)
+  when count:
+    discard chan.count.fetchAdd(1, moRelaxed)
 
   return true
+
+proc trySend*[T](chan: var ChannelMpscUnbounded[T], src: sink T): bool =
+  # log("Channel 0x%.08x trySend - front: 0x%.08x (%d), second: 0x%.08x, back: 0x%.08x\n", chan.addr, chan.front, chan.front.val, chan.front.next, chan.back)
+  chan.trySendImpl(src, count = true)
+
+proc reenqueueDummy[T](chan: var ChannelMpscUnbounded[T]) =
+  # log("Channel 0x%.08x reenqueing dummy\n")
+  discard chan.trySendImpl(chan.dummy.addr, count = false)
 
 proc tryRecv*[T](chan: var ChannelMpscUnbounded[T], dst: var T): bool =
   ## Try receiving the next item buffered in the channel
   ## Returns true if successful (channel was not empty)
+  ## This can fail spuriously on the last element if producer
+  ## enqueues a new element while the consumer was dequeing it
   assert not(chan.front.isNil)
   assert not(chan.back.load(moRelaxed).isNil)
 
-  let first = chan.front # dummy
-  let next = cast[T](first.next.load(moRelaxed)) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
+  var first = chan.front
+  # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
+  var next = cast[T](first.next.load(moRelaxed))
 
-  if next.isNil:
+  # log("Channel 0x%.08x tryRecv - first: 0x%.08x (%d), next: 0x%.08x (%d), last: 0x%.08x\n",
+  #   chan.addr, first, first.val, next, if not next.isNil: next.val else: 0, chan.back)
+
+  if first == chan.dummy.addr:
+    # First node is the dummy
+    if next.isNil:
+      # Dummy has no next node
+      return false
+    # Overwrite the dummy, with the real first element
+    chan.front = next
+    first = next
+    next = cast[T](next.next.load(moRelaxed))
+
+  # Fast-path
+  if not next.isNil:
+    # second element exist, setup the queue, only consumer touches the front
+    chan.front = next                     # switch the front
+    prefetch(first.next.load(moRelaxed))
+    # Publish the changes
     fence(moAcquire)
-    dst = nil
+    dst = first
+    discard chan.count.fetchSub(1, moRelaxed)
+    return true
+  # End fast-path
+
+  # No second element, but we really need something to take
+  # the place of the first, have a look on the producer side
+  fence(moAcquire)
+  let last = chan.back.load(moRelaxed)
+  if first != last:
+    # A producer got ahead of us, spurious failure
     return false
 
-  chan.front = next
-  prefetch(first.next.load(moRelaxed))
-  fence(moAcquire)
-  dst = next
+  # Reenqueue dummy, it is now in the second slot or later
+  chan.reenqueueDummy()
+  # Reload the second item
+  next = cast[T](first.next.load(moRelaxed))
 
-  discard chan.count.fetchSub(1, moRelaxed)
-  return true
+  if not next.isNil:
+    # second element exist, setup the queue, only consumer touches the front
+    chan.front = next                     # switch the front
+    prefetch(first.next.load(moRelaxed))
+    # Publish the changes
+    fence(moAcquire)
+    dst = first
+    discard chan.count.fetchSub(1, moRelaxed)
+    return true
+
+  # No empty element?! There was a race in enqueueing
+  # and the new "next" still isn't published
+  # spurious failure
+  return false
 
 func peek*(chan: var ChannelMpscUnbounded): int32 {.inline.} =
   ## Estimates the number of items pending in the channel
@@ -129,7 +169,7 @@ when isMainModule:
     while not chan.tryRecv(data):
       body
 
-  const NumVals = 100000
+  const NumVals = 1000000
   const Padding = 10 * NumVals # Pad with a 0 so that iteration 10 of thread 3 is 3010 with 99 max iters
 
   type
@@ -204,7 +244,7 @@ when isMainModule:
         args.chan[].recvLoop(val):
           # Busy loop, in prod we might want to yield the core/thread timeslice
           discard
-        # echo "Receiver got: ", val.val, " at address 0x", toLowerASCII toHex cast[ByteAddress](val)
+        # log("Receiver got: %d at address 0x%.08x\n", val.val, val)
         let sender = WorkerKind(val.val div Padding)
         doAssert val.val == counts[sender] + ord(sender) * Padding, "Incorrect value: " & $val.val
         inc counts[sender]
@@ -228,8 +268,7 @@ when isMainModule:
     echo "------------------------------------------------------------------------"
     var threads: array[WorkerKind, Thread[ThreadArgs]]
     let chan = createSharedU(ChannelMpscUnbounded[Val]) # CreateU is not zero-init
-    let dummy = valAlloc()
-    chan[].initialize(dummy)
+    chan[].initialize()
 
     createThread(threads[Receiver], thread_func, ThreadArgs(ID: Receiver, chan: chan))
     for sender in Sender1..Sender15:
@@ -238,7 +277,6 @@ when isMainModule:
     for worker in WorkerKind:
       joinThread(threads[worker])
 
-    chan[].removeDummy.valFree()
     deallocShared(chan)
     echo "------------------------------------------------------------------------"
     echo "Success"

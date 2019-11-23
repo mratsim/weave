@@ -38,6 +38,11 @@ proc recv*(req: var StealRequest): bool {.inline.} =
   profile(send_recv_req):
     result = myThieves().tryRecv(req)
 
+    debug:
+      if result:
+        log("Worker %d: receives request 0x%.08x from %d with %d potential victims. (Channel: 0x%.08x)\n",
+              myID(), cast[ByteAddress](req), req.thiefID, req.victims.len, myThieves().addr)
+
     # We treat specially the case where children fail to steal
     # and defer to the current worker (their parent)
     while result and req.state == Waiting:

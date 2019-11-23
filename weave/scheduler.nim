@@ -30,10 +30,7 @@ proc init*(ctx: var TLContext) =
   myWorker().deque = newPrellDeque(Task)
   myTodoBoxes().initialize()
   myWorker().initialize(maxID = workforce() - 1)
-
-  # The StealRequest MPSC channel requires a dummy node
-  let dummy = wv_allocPtr(StealRequest)
-  myThieves().initialize(dummy)
+  myThieves().initialize()
 
   localCtx.stealCache.initialize()
   for i in 0 ..< localCtx.stealCache.len:
@@ -41,7 +38,7 @@ proc init*(ctx: var TLContext) =
 
   ascertain: myTodoBoxes().len == WV_MaxConcurrentStealPerWorker
 
-  # Workers see their RNG with their myID()
+  # Workers seed their RNG with their myID()
   myThefts().rng.seed(myID())
 
   # Thread-Local Profiling
@@ -151,8 +148,6 @@ proc schedulingLoop() =
 
 proc threadLocalCleanup*() =
   myWorker().deque.delete()
-  myThieves().removeDummy().wv_free()
-  # myThieves().delete()
 
   for i in 0 ..< WV_MaxConcurrentStealPerWorker:
     # No tasks left
