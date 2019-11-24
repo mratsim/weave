@@ -7,7 +7,7 @@
 
 import
   ./datatypes/[context_global, context_thread_local, sync_types],
-  ./channels/[channels_spsc_single_ptr, channels_mpsc_bounded_lock],
+  ./channels/[channels_spsc_single_ptr, channels_mpsc_bounded_lock, channels_mpsc_unbounded],
   ./memory/[persistacks, intrusive_stacks],
   ./config,
   system/ansi_c,
@@ -65,7 +65,7 @@ proc initialize*[T](c: var ChannelLegacy[T], size: int32) =
 proc delete*[T](c: var ChannelLegacy[T]) =
   channel_free(c)
 
-template myThieves*: ChannelLegacy[StealRequest] =
+template myThieves*: ChannelMpscUnbounded[StealRequest] =
   globalCtx.com.thefts[localCtx.worker.ID]
 
 template workforce*: int32 =

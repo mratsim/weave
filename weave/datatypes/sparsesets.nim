@@ -49,9 +49,6 @@ type
 
 func allocate*(s: var SparseSet, capacity: SomeInteger) =
   preCondition: capacity <= WV_MaxWorkers
-  preCondition: s.indices.isNil
-  preCondition: s.values.isNil
-  preCondition: s.rawBuffer.isNil
 
   s.capacity = Setuint capacity
   s.rawBuffer = wv_alloc(Setuint, 2*capacity)

@@ -9,8 +9,8 @@ import
   ./instrumentation/[contracts, profilers, loggers],
   ./primitives/barriers,
   ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars, sparsesets],
-  ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr, channels_spsc_single_object],
-  ./memory/[persistacks, intrusive_stacks],
+  ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr, channels_spsc_single_object, channels_mpsc_unbounded],
+  ./memory/[persistacks, intrusive_stacks, allocs],
   ./contexts, ./config,
   ./victims, ./loop_splitting,
   ./thieves, ./workers,
@@ -28,9 +28,9 @@ proc init*(ctx: var TLContext) =
   ## Initialize the thread-local context of a worker (including the lead worker)
 
   myWorker().deque = newPrellDeque(Task)
-  myThieves().initialize(WV_MaxConcurrentStealPerWorker * workforce())
   myTodoBoxes().initialize()
   myWorker().initialize(maxID = workforce() - 1)
+  myThieves().initialize()
 
   localCtx.stealCache.initialize()
   for i in 0 ..< localCtx.stealCache.len:
@@ -38,7 +38,7 @@ proc init*(ctx: var TLContext) =
 
   ascertain: myTodoBoxes().len == WV_MaxConcurrentStealPerWorker
 
-  # Workers see their RNG with their myID()
+  # Workers seed their RNG with their myID()
   myThefts().rng.seed(myID())
 
   # Thread-Local Profiling
@@ -148,7 +148,6 @@ proc schedulingLoop() =
 
 proc threadLocalCleanup*() =
   myWorker().deque.delete()
-  myThieves().delete()
 
   for i in 0 ..< WV_MaxConcurrentStealPerWorker:
     # No tasks left

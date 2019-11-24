@@ -10,7 +10,8 @@ import
   ../config,
   ../channels/channels_spsc_single_ptr,
   ../instrumentation/contracts,
-  ../memory/allocs
+  ../memory/allocs,
+  std/atomics
 
 # Inter-thread synchronization types
 # ----------------------------------------------------------------------------------
@@ -72,7 +73,10 @@ type
   # Padding shouldn't be needed as steal requests are used as value types
   # and deep-copied between threads
   StealRequest* = ptr object
-    thiefAddr*: ptr ChannelSpscSinglePtr[Task]       # Channel for sending tasks back to the thief
+    # TODO: padding to cache line
+    # TODO: Remove workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
+    next*: Atomic[pointer]                        # For intrusive lists and queues
+    thiefAddr*: ptr ChannelSpscSinglePtr[Task]    # Channel for sending tasks back to the thief
     thiefID*: WorkerID
     retry*: int32                                 # 0 <= retry <= num_workers
     victims*: SparseSet                           # set of potential victims

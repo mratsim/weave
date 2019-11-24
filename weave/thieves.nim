@@ -9,9 +9,10 @@ import
   ./datatypes/[sparsesets, sync_types, context_thread_local],
   ./contexts, ./targets,
   ./instrumentation/[contracts, profilers, loggers],
-  ./channels/channels_mpsc_bounded_lock,
+  ./channels/channels_mpsc_unbounded,
   ./memory/persistacks,
-  ./config, ./signals
+  ./config, ./signals,
+  std/atomics
 
 # Thief
 # ----------------------------------------------------------------------------------
@@ -22,6 +23,7 @@ proc newStealRequest(): StealRequest {.inline.} =
   result = localCtx.stealCache.borrow()
   ascertain: result.victims.capacity.int32 == workforce()
 
+  result.next.store(nil, moRelaxed)
   result.thiefAddr = myTodoBoxes.borrow()
   result.thiefID = myID()
   result.retry = 0
@@ -36,6 +38,8 @@ proc newStealRequest(): StealRequest {.inline.} =
 proc rawSend(victimID: WorkerID, req: sink StealRequest) {.inline.}=
   ## Send a steal or work sharing request
   # TODO: check for race condition on runtime exit
+  # log("Worker %d: sending request 0x%.08x to %d (Channel: 0x%.08x)\n",
+  #       myID(), cast[ByteAddress](req), victimID, globalCtx.com.thefts[victimID].addr)
   let stealRequestSent = globalCtx.com
                                   .thefts[victimID]
                                   .trySend(req)

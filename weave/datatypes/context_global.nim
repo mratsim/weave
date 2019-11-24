@@ -7,6 +7,7 @@
 
 import
   ../channels/channels_mpsc_bounded_lock,
+  ../channels/channels_mpsc_unbounded,
   ../channels/channels_spsc_single_ptr,
   ../memory/persistacks,
   ../config,
@@ -35,7 +36,7 @@ type
     #   would work but then it requires a pointer indirection
     #   per channel
     #   and a known max number of workers
-    thefts*: ptr UncheckedArray[ChannelLegacy[StealRequest]]
+    thefts*: ptr UncheckedArray[ChannelMPSCunbounded[StealRequest]]
     tasks*: ptr UncheckedArray[Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]]]
 
   GlobalContext* = object

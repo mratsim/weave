@@ -10,7 +10,7 @@ import
                sparsesets, prell_deques, flowvars],
   ./contexts, ./config,
   ./instrumentation/[contracts, profilers, loggers],
-  ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr],
+  ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr, channels_mpsc_unbounded],
   ./thieves, ./loop_splitting
 
 # Victims - Adaptative task splitting
@@ -37,6 +37,11 @@ proc recv*(req: var StealRequest): bool {.inline.} =
 
   profile(send_recv_req):
     result = myThieves().tryRecv(req)
+
+    debug:
+      if result:
+        log("Worker %d: receives request 0x%.08x from %d with %d potential victims. (Channel: 0x%.08x)\n",
+              myID(), cast[ByteAddress](req), req.thiefID, req.victims.len, myThieves().addr)
 
     # We treat specially the case where children fail to steal
     # and defer to the current worker (their parent)
