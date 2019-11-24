@@ -6,7 +6,6 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../channels/channels_mpsc_bounded_lock,
   ../channels/channels_mpsc_unbounded,
   ../channels/channels_spsc_single_ptr,
   ../memory/persistacks,
@@ -16,9 +15,6 @@ import
 
 # Global / inter-thread communication channels
 # ----------------------------------------------------------------------------------
-
-# TODO: used to debug a recurrent deadlock on trySend with 5 workers
-import ../channels/channels_legacy
 
 type
   ComChannels* = object
@@ -36,7 +32,9 @@ type
     #   would work but then it requires a pointer indirection
     #   per channel
     #   and a known max number of workers
-    thefts*: ptr UncheckedArray[ChannelMPSCunbounded[StealRequest]]
+
+    # Theft channels is bounded to "NumWorkers * WV_MaxConcurrentStealPerWorker"
+    thefts*: ptr UncheckedArray[ChannelMpscUnbounded[StealRequest]]
     tasks*: ptr UncheckedArray[Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]]]
 
   GlobalContext* = object

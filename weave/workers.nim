@@ -6,10 +6,10 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./datatypes/[sync_types, context_thread_local, bounded_queues],
+  ./datatypes/[sync_types, context_thread_local],
   ./contexts,
   ./instrumentation/[contracts, profilers, loggers],
-  ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr],
+  ./channels/channels_spsc_single_ptr,
   ./memory/persistacks,
   ./config,
   ./thieves

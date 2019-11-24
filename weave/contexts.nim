@@ -7,12 +7,11 @@
 
 import
   ./datatypes/[context_global, context_thread_local, sync_types],
-  ./channels/[channels_spsc_single_ptr, channels_mpsc_bounded_lock, channels_mpsc_unbounded],
+  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded],
   ./memory/[persistacks, intrusive_stacks],
   ./config,
   system/ansi_c,
-  ./primitives/barriers,
-  ./instrumentation/[contracts, profilers, loggers]
+  ./instrumentation/[profilers, loggers]
 
 # Contexts
 # ----------------------------------------------------------------------------------
@@ -46,24 +45,6 @@ proc newTaskFromCache*(): Task {.inline.} =
 
 template myTodoBoxes*: Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]] =
   globalCtx.com.tasks[localCtx.worker.ID]
-
-# TODO: used to debug a recurrent deadlock on trySend with 5 workers
-import ./channels/channels_legacy
-
-func trySend*[T](c: ChannelLegacy[T], src: sink T): bool {.inline.} =
-  channel_send(c, src, int32 sizeof(src))
-
-func tryRecv*[T](c: ChannelLegacy[T], dst: var T): bool {.inline.} =
-  channel_receive(c, dst.addr, int32 sizeof(dst))
-
-func peek*[T](c: ChannelLegacy[T]): int32 =
-  channel_peek(c)
-
-proc initialize*[T](c: var ChannelLegacy[T], size: int32) =
-  c = channel_alloc(int32 sizeof(T), size, Mpsc)
-
-proc delete*[T](c: var ChannelLegacy[T]) =
-  channel_free(c)
 
 template myThieves*: ChannelMpscUnbounded[StealRequest] =
   globalCtx.com.thefts[localCtx.worker.ID]

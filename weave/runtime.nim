@@ -12,7 +12,7 @@ import
   ./instrumentation/[contracts, profilers, loggers],
   ./contexts, ./config,
   ./datatypes/[sync_types, prell_deques],
-  ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr, channels_mpsc_unbounded],
+  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded],
   ./memory/[persistacks, intrusive_stacks, allocs],
   ./scheduler, ./signals, ./workers, ./thieves, ./victims,
   # Low-level primitives
@@ -22,9 +22,6 @@ import
 # ----------------------------------------------------------------------------------
 
 type Runtime* = object
-
-# TODO: used to debug a recurrent deadlock on trySend with 5 workers
-import ./channels/channels_legacy
 
 proc init*(_: type Runtime) =
   # TODO detect Hyper-Threading and NUMA domain

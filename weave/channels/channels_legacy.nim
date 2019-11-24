@@ -607,6 +607,24 @@ proc channel_receive*[T](chan: ChannelLegacy[T], data: ptr T, size: int32): bool
   ## (Remove the first item)
   recv_fn[chan.impl](chan, data, size)
 
+# Weave API
+# ----------------------------------------------------------------------------------
+
+func trySend*[T](c: ChannelLegacy[T], src: sink T): bool {.inline.} =
+  channel_send(c, src, int32 sizeof(src))
+
+func tryRecv*[T](c: ChannelLegacy[T], dst: var T): bool {.inline.} =
+  channel_receive(c, dst.addr, int32 sizeof(dst))
+
+func peek*[T](c: ChannelLegacy[T]): int32 =
+  channel_peek(c)
+
+proc initialize*[T](c: var ChannelLegacy[T], size: int32) =
+  c = channel_alloc(int32 sizeof(T), size, Mpsc)
+
+proc delete*[T](c: var ChannelLegacy[T]) =
+  channel_free(c)
+
 # Tests
 # ----------------------------------------------------------------------------------
 

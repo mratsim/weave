@@ -17,6 +17,7 @@ kind:
 
 unbuf/bounded/unbounded:
   - unbuf: unbuffered channel (also called rendezvous). Blocking.
+  - single: channel can only buffer a single element
   - bounded: channel has a max pre-allocated capacity. Usually array-based.
   - unbounded: channel has no max capacity. List-based.
 
@@ -34,7 +35,7 @@ between senders and receivers however it might be interesting to explore
 endpoints with only the recv and send proc implemented.
 Furthermore we can add a "can only be moved" restrictions for single consumer or single receiver endpoints.
 
-It prevents misuse of channels however for Picasso:
+It prevents misuse of channels however for Weave:
 - We store all channels in a context/global, with the sender/receiver distinction
   it will be twice the size (and potentially twice the cache misses).
 - It would require tracing for the channel buffer to be destroyed

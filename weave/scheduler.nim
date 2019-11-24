@@ -9,7 +9,7 @@ import
   ./instrumentation/[contracts, profilers, loggers],
   ./primitives/barriers,
   ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars, sparsesets],
-  ./channels/[channels_mpsc_bounded_lock, channels_spsc_single_ptr, channels_spsc_single_object, channels_mpsc_unbounded],
+  ./channels/[channels_legacy, channels_spsc_single_ptr, channels_mpsc_unbounded],
   ./memory/[persistacks, intrusive_stacks, allocs],
   ./contexts, ./config,
   ./victims, ./loop_splitting,

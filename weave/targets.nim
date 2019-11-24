@@ -10,8 +10,7 @@ import
   ./contexts,
   ./random/rng,
   ./instrumentation/[contracts, loggers],
-  ./config,
-  ./memory/allocs
+  ./config
 
 # Victim selection
 # ----------------------------------------------------------------------------------

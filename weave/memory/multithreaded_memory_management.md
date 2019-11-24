@@ -332,6 +332,12 @@ This article goes over the skeleton of a threadsafe growable pool allocator (but
 
 https://www.qt.io/blog/a-fast-and-thread-safe-pool-allocator-for-qt-part-1
 
+#### comp.programming.threads
+
+Lock-free slab allocator by Chris Thomasson: https://groups.google.com/forum/embed/#!topic/comp.programming.threads/gkX0tIWR_Gk
+
+Associated memory queue by Dmitry Vyukov: https://groups.google.com/forum/#!topic/comp.programming.threads/4ILh6yY5fV4
+
 ## False sharing
 
 keywords: cache ping-pong, false sharing, cache threashing, cache lines

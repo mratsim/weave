@@ -9,7 +9,7 @@ import
   ../channels/[channels_spsc_single_ptr, channels_spsc_single_object],
   ../memory/allocs,
   ../instrumentation/contracts,
-  ../contexts, ../config
+  ../config
 
 # TODO for the Flowvar we need critically need a caching scheme for the channels
 # we use the legacy channels in the mean time
