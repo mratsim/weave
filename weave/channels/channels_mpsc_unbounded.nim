@@ -1,5 +1,5 @@
 import
-  std/atomics,
+  std/atomics, std/macros,
   ../config,
   ../primitives/compiler_optimization_hints, # for prefetch
   ../instrumentation/[contracts, loggers]
@@ -24,12 +24,13 @@ type
     #       to make sure there are no bugs
     #       on arch with relaxed memory models
 
-    count: Atomic[int]
+    # Accessed by all
+    count{.align: WV_CacheLinePadding.}: Atomic[int]
+    # Consumer only
+    front{.align: WV_CacheLinePadding.}: T
+    # Producers and consumer slow-path
+    back{.align: WV_CacheLinePadding.}: Atomic[pointer] # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
     dummy: typeof(default(T)[]) # Deref the pointer type
-    pad0: array[WV_CacheLineSize - sizeof(pointer), byte]
-    front: T
-    pad1: array[WV_CacheLineSize - sizeof(int), byte]
-    back: Atomic[pointer] # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
 
 template checkInvariants(): untyped =
   ascertain: not(chan.front.isNil)
@@ -213,7 +214,7 @@ when isMainModule:
     when defined(debugNimalloc):
       createShared(ValObj)
     else:
-      cast[Val](c_malloc(sizeof(ValObj)))
+      cast[Val](c_malloc(csize_t sizeof(ValObj)))
 
   proc valFree(val: Val) =
     ## Note: it seems like freeing memory

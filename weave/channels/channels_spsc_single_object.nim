@@ -42,9 +42,7 @@ type
     ## - Messages are guaranteed to be delivered
     ## - Messages will be delivered exactly once
     ## - Linearizability
-    pad0: array[WV_CacheLineSize, byte] # If used in a sequence of channels
-    buffer: T
-    pad1: array[WV_CacheLineSize  - sizeof(T), byte]
+    buffer {.align:WV_CacheLinePadding.}: T # Ensure proper padding if used in sequence of channels
     full: Atomic[bool]
 
 proc `=`[T](

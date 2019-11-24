@@ -47,14 +47,11 @@ type
     ## - Messages are guaranteed to be delivered
     ## - Messages will be delivered exactly once
     ## - Linearizability
-    pad0: array[WV_CacheLineSize - 3*sizeof(int32), byte]
-    backLock: Lock # Padding? - pthread_lock is 40 bytes on Linux, unknown on windows.
+    backLock {.align:WV_CacheLinePadding.}: Lock
     capacity: int32
     buffer: ptr UncheckedArray[T]
-    pad1: array[WV_CacheLineSize - sizeof(int32), byte]
-    front: Atomic[int32]
-    pad2: array[WV_CacheLineSize - sizeof(int32), byte]
-    back: Atomic[int32]
+    front {.align:WV_CacheLinePadding.}: Atomic[int32]
+    back {.align:WV_CacheLinePadding.}: Atomic[int32]
 
   # Private aliases
   Channel[T] = ChannelMpscBounded[T]

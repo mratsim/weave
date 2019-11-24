@@ -48,8 +48,7 @@ type
     # Parents directly enqueue special actions like shutting down.
     # So persistacks are in a global array
     # and we need to avoid cache line conflict between workers
-    pad: array[WV_CacheLineSize - N*sizeof(ptr T) - sizeof(pointer) - sizeof(int8), byte]
-    stack: array[N, ptr T]
+    stack{.align:WV_CacheLinePadding.}: array[N, ptr T]
     rawMem: ptr array[N, T]
     len*: int8
 

@@ -35,7 +35,7 @@ proc wv_alloc*(T: typedesc): ptr T {.inline.}=
   when defined(WV_useNimAlloc):
     createSharedU(T)
   else:
-    cast[ptr T](c_malloc(sizeof(T)))
+    cast[ptr T](c_malloc(csize_t sizeof(T)))
 
 proc wv_allocPtr*(T: typedesc[ptr], zero: static bool = false): T {.inline.}=
   ## Default allocator for the Picasso library
@@ -60,7 +60,7 @@ proc wv_alloc*(T: typedesc, len: SomeInteger): ptr UncheckedArray[T] {.inline.} 
   when defined(WV_useNimAlloc):
     cast[type result](createSharedU(T, len))
   else:
-    cast[type result](c_malloc(len * sizeof(T)))
+    cast[type result](c_malloc(csize_t len*sizeof(T)))
 
 proc wv_free*[T: ptr](p: T) {.inline.} =
   when defined(WV_useNimAlloc):

@@ -8,7 +8,8 @@
 import
   std/atomics,
   ../config,
-  ../instrumentation/contracts
+  ../instrumentation/contracts,
+  ../primitives/compiler_optimization_hints
 
 
 type
@@ -50,8 +51,7 @@ type
     ## - Messages will be delivered exactly once
     ## - Linearizability
   ChannelRaw = object
-    pad0: array[WV_CacheLineSize - sizeof(pointer), byte] # If used in a sequence of channels
-    buffer: Atomic[pointer]
+    buffer {.align:WV_CacheLinePadding.}: Atomic[pointer] # Ensure proper padding if used in sequence of channels
 
 # Internal type-erased implementation
 # ---------------------------------------------------------------
@@ -128,18 +128,18 @@ func isEmpty*[T](chan: var ChannelSpscSinglePtr[T]): bool {.inline.} =
 # Sanity checks
 # ------------------------------------------------------------------------------
 when isMainModule:
-  import strutils
+  import strutils, ../memory/allocs
 
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}
 
-  template sendLoop[T](chan: var Channel[T],
+  template sendLoop[T](chan: var ChannelSpscSinglePtr[T],
                        data: sink T,
                        body: untyped): untyped =
     while not chan.trySend(data):
       body
 
-  template recvLoop[T](chan: var Channel[T],
+  template recvLoop[T](chan: var ChannelSpscSinglePtr[T],
                        data: var T,
                        body: untyped): untyped =
     while not chan.tryRecv(data):
@@ -148,7 +148,7 @@ when isMainModule:
   type
     ThreadArgs = object
       ID: WorkerKind
-      chan: ptr Channel[ptr int]
+      chan: ptr ChannelSpscSinglePtr[ptr int]
 
     WorkerKind = enum
       Sender
@@ -198,7 +198,7 @@ when isMainModule:
     echo "Testing if 2 threads can send data"
     echo "-----------------------------------"
     var threads: array[2, Thread[ThreadArgs]]
-    let chan = wv_alloc(Channel[ptr int])
+    let chan = wv_alloc(ChannelSpscSinglePtr[ptr int])
     chan[].initialize()
 
     createThread(threads[0], thread_func, ThreadArgs(ID: Receiver, chan: chan))
