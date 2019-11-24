@@ -26,11 +26,14 @@ type
 
     # Accessed by all
     count{.align: WV_CacheLinePadding.}: Atomic[int]
-    # Consumer only
-    front{.align: WV_CacheLinePadding.}: T
     # Producers and consumer slow-path
     back{.align: WV_CacheLinePadding.}: Atomic[pointer] # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
     dummy: typeof(default(T)[]) # Deref the pointer type
+    # Consumer only
+    # ⚠️ Field to be kept at the end
+    #   so that it can be intrusive to consumers data structure
+    #   like a memory pool
+    front{.align: WV_CacheLinePadding.}: T
 
 template checkInvariants(): untyped =
   ascertain: not(chan.front.isNil)
