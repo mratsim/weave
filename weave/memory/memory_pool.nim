@@ -86,9 +86,9 @@ type
     # Freed blocks, can be allocated on the fast path
     free: ptr MemBlock
     # Number of blocks in use
-    used: int32
+    used: range[int32(0) .. high(int32)]
     # Arena owner
-    threadID: int32
+    threadID: Atomic[int32]
 
 const SizeofMetadata: int = (block:
     var size: int
@@ -103,19 +103,29 @@ const SizeofMetadata: int = (block:
   )
   ## Compile-time sizeof workaround for
   ## https://github.com/nim-lang/Nim/issues/12726
+  ## Not ideal but we split metadata in its own subtype
 
 type
   Arena = object
     meta {.align: WV_CacheLinePadding.}: Metadata
     # Intrusive queue
     prev, next: ptr Arena
+    allocator: ptr TLPoolAllocator
     # Raw memory
     blocks {.align: WV_MemBlockSize.}: array[(WV_MemArenaSize - SizeofMetadata) div WV_MemBlockSize, MemBlock]
 
   TLPoolAllocator = object
     ## Thread-local pool allocator
-    first, last: ptr Arena
-    numArenas: int32
+    ##
+    ## To properly manage exits, thread-local pool allocators
+    ## should be kept in an array by the root thread.
+    ## They will collect all free memory on exit and release
+    ## all the empty arenas.
+    ## However if a memory block escaped the exiting thread the corresponding
+    ## arena will not be reclaimed and the arena should be assigned to the root thread.
+    first {.align: WV_CacheLinePadding.}: ptr Arena
+    last: ptr Arena
+    numArenas: range[int32(0) .. high(int32)]
     threadID: int32
 
 # Heuristics
@@ -127,28 +137,19 @@ const
   MaxSlowFrees = 8'i8
     ## In the slow path, up to 8 pages can be considered for release at once.
 
-# Routines
+# Data structures
 # ----------------------------------------------------------------------------------
-# TODO: metrics
-
-iterator forward(head: ptr Arena): ptr Arena =
-  ## Doubly-linked list forward iterator
-  var cur = head
-  if cur != nil:
-    while true:
-      yield cur
-      cur = cur.next
-      if cur == head:
-        break
 
 iterator backward(tail: ptr Arena): ptr Arena =
   ## Doubly-linked list backward iterator
+  ## Not: we assume that the list is not circular
+  ## and terminates via a nil pointer
   var cur = tail
   if cur != nil:
     while true:
       yield cur
       cur = cur.prev
-      if cur == tail:
+      if cur.isNil:
         break
 
 func prepend(a, b: ptr MemBlock) =
@@ -158,6 +159,11 @@ func prepend(a, b: ptr MemBlock) =
 
   b.next.store(a, moRelaxed)
 
+func addToLocalFree(a: var Arena, b: ptr MemBlock) =
+  a.meta.localFree.prepend(b)
+  a.meta.localFree = b
+  a.meta.used -= 1
+
 func append(pool: var TLPoolAllocator, arena: ptr Arena) =
   preCondition: arena.next.isNil
 
@@ -166,24 +172,52 @@ func append(pool: var TLPoolAllocator, arena: ptr Arena) =
     ascertain: pool.last.isNil
     pool.first = arena
     pool.last = arena
-    return
+  else:
+    arena.prev = pool.last
+    pool.last.next = arena
+    pool.last = arena
 
-  arena.prev = pool.last
-  pool.last.next = arena
-  pool.last = arena
+  pool.numArenas += 1
 
+proc newArena(pool: var TLPoolAllocator): ptr Arena =
+  ## Reserve memory for a new Arena from the OS
+  ## and append it to the allocator
+  result = wv_allocAligned(Arena, WV_MemArenaSize)
 
-func collect(arena: var Arena) =
-  ## Collect garbage memory in the page
-  preCondition: arena.meta.free.isNil
-  arena.meta.free = arena.meta.localFree
-  arena.meta.localFree = nil
+  result.meta.threadFree.initialize()
+  result.meta.localFree = nil
+  result.meta.used = 0
+  result.meta.threadID.store pool.threadID, moRelaxed
 
-  var memBlock: ptr MemBlock
-  while arena.meta.threadFree.tryRecv(memBlock):
-    # TODO: batch receive
-    arena.meta.free.prepend(memBlock)
-    arena.meta.used -= 1
+  # Freelist
+  result.meta.free = result.blocks[0].addr
+  result.blocks[^1].next.store(nil, moRelaxed)
+  for i in 0 ..< result.blocks.len - 1:
+    result.blocks[i].next.store(result.blocks[i+1].addr, moRelaxed)
+
+  # Pool
+  result.prev = nil
+  result.next = nil
+  pool.append(result)
+
+func getArena(p: pointer): ptr Arena {.inline.} =
+  ## Find the arena that owns a memory block
+  static: doAssert WV_MemArenaSize.isPowerOfTwo()
+
+  let arenaAddr = cast[ByteAddress](p) and not(WV_MemArenaSize-1)
+  result = cast[ptr Arena](arenaAddr)
+
+  # Sanity check to ensure we're in an Arena
+  # TODO: LLVM ASAN, poisoning/unpoisoning?
+  postCondition: not result.isNil
+  postCondition: result.meta.used in 0 ..< result.blocks.len
+
+# Arena
+# ----------------------------------------------------------------------------------
+# TODO: metrics
+
+func isUnused(arena: ptr Arena): bool =
+  arena.meta.used - arena.meta.threadFree.peek() == 0
 
 func isMostlyUsed(arena: ptr Arena): bool =
   ## If more than 7/8 of an Arena is used
@@ -198,6 +232,33 @@ func isMostlyUsed(arena: ptr Arena): bool =
   # will give a lower bound
   result = arena.blocks.len - arena.meta.used + arena.meta.threadFree.peek() <= threshold
 
+func collect(arena: var Arena) =
+  ## Collect garbage memory in the page
+  preCondition: arena.meta.free.isNil
+  arena.meta.free = arena.meta.localFree
+  arena.meta.localFree = nil
+
+  var memBlock: ptr MemBlock
+  while arena.meta.threadFree.tryRecv(memBlock):
+    # TODO: batch receive
+    arena.meta.free.prepend(memBlock)
+    arena.meta.used -= 1
+
+func allocBlock(arena: var Arena): ptr MemBlock =
+  ## Allocate from a page
+  preCondition: not arena.meta.free.isNil
+
+  arena.meta.used += 1
+  result = arena.meta.free
+  # The following acts as prefetching for the block that we are returning as well
+  arena.meta.free = cast[ptr MemBlock](result.next.load(moRelaxed))
+
+  postCondition: arena.meta.used <= arena.blocks.len
+
+# Allocator
+# ----------------------------------------------------------------------------------
+# TODO: metrics
+
 func release(pool: var TLPoolAllocator, arena: ptr Arena) =
   ## Returns the memory of an arena to the OS
   if pool.first == arena: pool.first = arena.prev
@@ -205,6 +266,7 @@ func release(pool: var TLPoolAllocator, arena: ptr Arena) =
   if arena.prev != nil: arena.prev.next = arena.next
   if arena.next != nil: arena.next.prev = arena.prev
 
+  pool.numArenas -= 1
   wv_freeAligned(arena)
 
 func considerRelease(pool: var TLPoolAllocator, arena: ptr Arena) =
@@ -217,40 +279,6 @@ func considerRelease(pool: var TLPoolAllocator, arena: ptr Arena) =
     return
   # Other arenas are usable, return memory to the OS
   pool.release(arena)
-
-func isUnused(arena: ptr Arena): bool =
-  arena.meta.used - arena.meta.threadFree.peek() == 0
-
-func alloc(arena: var Arena): ptr MemBlock =
-  ## Allocate from a page
-  preCondition: not arena.meta.free.isNil
-
-  arena.meta.used += 1
-  result = arena.meta.free
-  # The following acts as prefetching for the block that we are returning as well
-  arena.meta.free = cast[ptr MemBlock](arena.meta.free.next.load(moRelaxed))
-
-proc newArena(pool: var TLPoolAllocator): ptr Arena =
-  ## Reserve memory for a new Arena from the OS
-  ## and append it to the allocator
-  result = wv_allocAligned(Arena, WV_MemArenaSize)
-
-  result.meta.threadFree.initialize()
-  result.meta.localFree = nil
-  result.meta.used = 0
-  result.meta.threadID = pool.threadID
-
-  # Freelist
-  result.meta.free = nil
-  for i in 0 ..< result.blocks.len:
-    let blk = result.blocks[i].addr
-    blk.next.store(result.meta.free, moRelaxed)
-    result.meta.free = blk
-
-  # Pool
-  result.prev = nil
-  result.next = nil
-  pool.append(result)
 
 proc allocSlow(pool: var TLPoolAllocator): ptr MemBlock =
   ## Slow path of allocation
@@ -278,12 +306,130 @@ proc allocSlow(pool: var TLPoolAllocator): ptr MemBlock =
         continue
       else:
         # 1.0.1 If not, let's use the arena
-        return arena[].alloc()
+        return arena[].allocBlock()
     # For optimization we might consider removing full arenas from the iteration list
 
   # All our arenas are full, we need a new one
   let freshArena = pool.newArena()
-  return freshArena[].alloc()
+  return freshArena[].allocBlock()
+
+# Public API
+# ----------------------------------------------------------------------------------
+
+proc borrow*(pool: var TLPoolAllocator, T: typedesc): ptr T =
+  ## Provides an unused memory block of size
+  ## WV_MemBlockSize (256 bytes)
+  ##
+  ## The object must be properly initialized by the caller.
+  ## This is thread-safe, the memory block can be recycled by any thread.
+  ##
+  ## If the underlying pool runs out-of-memory, it will reserve more from the OS.
+
+  # We try to allocate from the last arena as workload is LIFO-biaised
+  static: doAssert sizeof(T) <= WV_MemBlockSize,
+    $T & "is of size " & $sizeof(T) &
+    ", the maximum object size supported is " &
+    $WV_MemBlockSize & " bytes (WV_MemBlockSize)"
+
+  if pool.last.meta.free.isNil:
+    # Fallback to slow path
+    return cast[ptr T](pool.allocSlow())
+    # Fast-path
+    return cast[ptr T](pool.last.allocBlock())
+
+proc recycle*[T](myThreadID: int32, p: ptr T) =
+  ## Returns a memory block to its memory pool.
+  ##
+  ## This is thread-safe, any thread can call it.
+  ## It must indicates its ID.
+  ## A fast path is used if it's the ID of the borrowing thread,
+  ## otherwise a slow path will be used.
+  ##
+  ## If the thread owning the pool was exited before this
+  ## block was returned, the main thread should now
+  ## have ownership of the related arenas and can deallocate them.
+
+  # TODO: sink ptr T - parsing bug to raise
+  #   similar to https://github.com/nim-lang/Nim/issues/12091
+  preCondition: not p.isNil
+
+  let p = cast[ptr MemBlock](p)
+
+  # Find the owning arena
+  let arena = p.getArena()
+
+  if myThreadID == arena.threadID:
+    # thread-local free
+    arena.addToLocalFree(p)
+    if unlikely(arena.isUnused()):
+      # If an arena is unused, we can try releasing it immediately
+      arena.allocator.considerRelease(arena)
+  else:
+    # remote arena
+    let remoteRecycled = arena.meta.threadFree.trySend(p)
+    postCondition: remoteRecycled
+
+proc teardown*(pool: var TLPoolAllocator): bool =
+  ## Destroy all arenas owned by the allocator.
+  ## This is meant to be used before joining threads / thread teardown.
+  ##
+  ## Returns true if all arenas managed to be deallocated.
+  ##
+  ## If one or more arenas still have memory blocks in use
+  ## they are not deallocated and teardown returns false.
+  ##
+  ## The ``pool`` is kept in consistent state with regards to
+  ## its metadata. Another thread can ``takeover`` the pool resources
+  ## with the ``takeover`` function if teardown was unsuccessful.
+  for arena in pool.last.backward():
+    # Collect freed blocks by us and other threads
+    arena[].collect()
+    if arena.isUnused:
+      pool.release(arena)
+
+  result = pool.numArenas == 0
+  postCondition:
+    if result: pool.first.isNil and pool.last.isNil
+    else: not(pool.first.isNil and pool.last.isNil)
+
+proc takeover*(pool: var TLPoolAllocator, target: sink TLPoolAllocator) =
+  ## Take ownership of all the memory arenas managed by
+  ## the target pool allocator.
+  ## If all memory from an arena has been returned by the time.
+  ## We release the arena to the OS.
+  ##
+  ## This must be called when the target allocator original owning thread
+  ## has exited.
+  ##
+  ## The `target` allocator must not be reused.
+
+  for arena in target.last.backward():
+    # Collect all freed blocks, release the arena if we can
+    arena[].collect()
+    if arena.isUnused:
+      target.release(arena)
+    else:
+      # Take ownership. We can use relaxed atomics
+      # even if there is a race on threadID,
+      # the original owner doesn't exist so it will be done
+      # via channel
+      arena.allocator = pool.addr
+      arena.meta.threadID.store pool.threadID, moRelaxed
+
+  # Now we can batch append (should we enqueue instead?)
+  # As pool is "active" we assume that at least one arena is allocated
+  ascertain: pool.numArenas > 0
+  ascertain: target.first.prev.isNil
+  ascertain: target.last.next.isNil
+  ascertain: pool.first.prev.isNil
+  ascertain: pool.last.next.isNil
+
+  target.first.prev = pool.last
+  pool.last.next = target.first
+  pool.last = target.last
+  pool.numArenas += target.numArenas
+
+
 
 # Sanity checks
 # ----------------------------------------------------------------------------------

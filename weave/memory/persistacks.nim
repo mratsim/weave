@@ -79,6 +79,11 @@ func borrow*[N: static int8, T](ps: var Persistack[N, T]): ptr T {.inline.} =
   ## until it is recycled.
   ##
   ## The object must be properly initialized by the caller.
+  ##
+  ## ⚠️ The lender thread must be the one recycling the reference
+  ## It can be passed to any thread as long as it's returned
+  ## to the main thread via ``recycle`` or that thread is notified
+  ## so that it can reclaim the slot via ``nowAvailable``
   preCondition:
     ps.len > 0
 
@@ -87,6 +92,7 @@ func borrow*[N: static int8, T](ps: var Persistack[N, T]): ptr T {.inline.} =
 
 func recycle*[N: static int8, T](ps: var Persistack[N, T], reference: sink(ptr T)) {.inline.} =
   ## Returns a reference to the persistack.
+  ## ⚠️ The lender thread must be the one recycling the reference
   preCondition:
     ps.len < N
 
