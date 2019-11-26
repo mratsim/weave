@@ -28,13 +28,27 @@ proc init*(ctx: var TLContext) =
   ## Initialize the thread-local context of a worker (including the lead worker)
 
   myWorker().deque = newPrellDeque(Task)
-  myTodoBoxes().initialize()
   myWorker().initialize(maxID = workforce() - 1)
-  myThieves().initialize()
 
+  myTodoBoxes().initialize()
+  for i in 0 ..< myTodoBoxes().len:
+    myTodoBoxes().access(i).initialize()
+
+  myThieves().initialize()
   localCtx.stealCache.initialize()
   for i in 0 ..< localCtx.stealCache.len:
     localCtx.stealCache.access(i).victims.allocate(capacity = workforce())
+
+  debug: # TODO debugMem
+    let (tStart, tStop) = myTodoBoxes().reservedMemRange()
+    log("Worker %2d: tasks channels range       0x%.08x-0x%.08x\n",
+      myID(), tStart, tStop
+    )
+    log("Worker %2d: steal requests channel is  0x%.08x\n",
+      myID(), myThieves().addr)
+    let (sStart, sStop) = localCtx.stealCache.reservedMemRange()
+    log("Worker %2d: steal requests cache range 0x%.08x-0x%.08x\n",
+      myID(), sStart, sStop)
 
   ascertain: myTodoBoxes().len == WV_MaxConcurrentStealPerWorker
 

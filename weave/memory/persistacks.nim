@@ -113,6 +113,11 @@ func access*[N: static int8, T](ps: Persistack[N, T], index: SomeInteger): var T
     index < N
   ps.rawMem[index]
 
+func reservedMemRange*(ps: Persistack): (ByteAddress, ByteAddress) =
+  ## View the memory ranged allocated for the persistacks
+  result[0] = cast[ByteAddress](ps.rawMem[0].addr)
+  result[1] = cast[ByteAddress](ps.rawMem[][^1].addr) + sizeof(ps.T)
+
 # Sanity checks
 # ------------------------------------------------------------------------------
 

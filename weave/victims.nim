@@ -150,7 +150,7 @@ proc takeTasks(req: StealRequest): tuple[task: Task, loot: int32] =
 
 proc send(req: sink StealRequest, task: sink Task, numStolen: int32 = 1) {.inline.}=
   debug: log("Worker %2d: sending %d tasks (task.fn 0x%.08x) to Worker %2d\n",
-    myID(), numStolen, task.fn, req.thiefID)
+    myID(), numStolen, task.fn, req.thiefID, req.thiefAddr)
   let taskSent = req.thiefAddr[].trySend(task)
   when defined(WV_LastThief):
     myThefts().lastThief = req.thiefID
