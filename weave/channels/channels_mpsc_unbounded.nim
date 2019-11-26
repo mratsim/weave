@@ -220,9 +220,6 @@ when isMainModule:
       cast[Val](c_malloc(csize_t sizeof(ValObj)))
 
   proc valFree(val: Val) =
-    ## Note: it seems like freeing memory
-    ##       is confusing the allocators
-    ## The test pass if memory is not freed
     when defined(debugNimalloc):
       freeShared(val)
     else:
@@ -252,8 +249,7 @@ when isMainModule:
         let sender = WorkerKind(val.val div Padding)
         doAssert val.val == counts[sender] + ord(sender) * Padding, "Incorrect value: " & $val.val
         inc counts[sender]
-        # valFree(val) # Don't free memory for testing the queue, allocators break
-
+        valFree(val)
 
     Worker(Sender1..Sender15):
       for j in 0 ..< NumVals:

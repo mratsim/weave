@@ -30,7 +30,7 @@
 
 import
   ../channels/channels_mpsc_unbounded,
-  ../instrumentation/contracts,
+  ../instrumentation/[contracts, loggers],
   ../config,
   ./allocs,
   std/atomics
@@ -41,11 +41,22 @@ import
 const WV_MemArenaSize {.intdefine.} = 1 shl 15 # 2^15 = 32768 bytes = 128 * 256
 const WV_MemBlockSize {.intdefine.} = 256
 
+# Debug
+# ----------------------------------------------------------------------------------
+# TODO:
+# - LLVM Address Sanitizer and memory poisoning (https://clang.llvm.org/docs/AddressSanitizer.html)
+# - Valgrind with custom memory pool (http://valgrind.org/docs/manual/mc-manual.html#mc-manual.mempools)
+
 static: assert WV_MemArenaSize.isPowerOfTwo(), "WV_ArenaSize must be a power of 2"
 static: assert WV_MemArenaSize > 4096, "WV_ArenaSize must be greater than a OS page (4096 bytes)"
 
 static: assert WV_MemBlockSize.isPowerOfTwo(), "WV_MemBlockSize must be a power of 2"
 static: assert WV_MemBlockSize >= 256, "WV_MemBlockSize must be greater or equal to 256 bytes to hold tasks and channels."
+
+template debugMem(body: untyped) =
+  when defined(WV_debugMem):
+    {.noSideEffect.}:
+      body
 
 # Memory Pool types
 # ----------------------------------------------------------------------------------
@@ -86,7 +97,7 @@ type
     # Freed blocks, can be allocated on the fast path
     free: ptr MemBlock
     # Number of blocks in use
-    used: range[int32(0) .. high(int32)]
+    used: range[int32(0) .. high(int32)] # TODO narrow range
     # Arena owner
     threadID: Atomic[int32]
 
@@ -123,6 +134,11 @@ type
     ## all the empty arenas.
     ## However if a memory block escaped the exiting thread the corresponding
     ## arena will not be reclaimed and the arena should be assigned to the root thread.
+    ##
+    ## ⚠️ The pool allocator should be allocated
+    ##    on the heap instead of with {.threadvar.}
+    ##    if you need to disconnect its lifetime
+    ##    from its owning thread.
     first {.align: WV_CacheLinePadding.}: ptr Arena
     last: ptr Arena
     numArenas: range[int32(0) .. high(int32)]
@@ -152,20 +168,39 @@ iterator backward(tail: ptr Arena): ptr Arena =
       if cur.isNil:
         break
 
-func prepend(a, b: ptr MemBlock) =
-  preCondition: not a.isNil
+iterator items(head: ptr MemBlock): ptr MemBlock =
+  ## Singly-linked list iterator
+  preCondition: not head.isNil
+  var cur = head
+  while true:
+    yield cur
+    cur = cast[ptr MemBlock](cur.next.load(moRelaxed))
+    if cur.isNil:
+      break
+
+template addTo(a: var Arena, freeField: untyped{ident}, b: ptr MemBlock) =
   preCondition: not b.isNil
-  preCondition: b.next.load(moRelaxed).isNil
 
-  b.next.store(a, moRelaxed)
+  if not a.meta.`freeField`.isNil:
+    b.next.store(a.meta.`freeField`, moRelaxed)
+  else:
+    b.next.store(nil, moRelaxed)
 
-func addToLocalFree(a: var Arena, b: ptr MemBlock) =
-  a.meta.localFree.prepend(b)
-  a.meta.localFree = b
+  a.meta.`freeField` = b
   a.meta.used -= 1
+
+func addToLocalFree(a: var Arena, b: ptr MemBlock) {.inline.} =
+  addTo(a, localFree, b)
+
+func addToFree(a: var Arena, b: ptr MemBlock) {.inline.} =
+  addTo(a, free, b)
 
 func append(pool: var TLPoolAllocator, arena: ptr Arena) =
   preCondition: arena.next.isNil
+
+  debugMem:
+    log("Pool    0x%.08x - TID %d - append Arena 0x%.08x\n",
+      pool.addr, pool.threadID, arena)
 
   if pool.numArenas == 0:
     ascertain: pool.first.isNil
@@ -178,11 +213,17 @@ func append(pool: var TLPoolAllocator, arena: ptr Arena) =
     pool.last = arena
 
   pool.numArenas += 1
+  arena.allocator = pool.addr
 
 proc newArena(pool: var TLPoolAllocator): ptr Arena =
   ## Reserve memory for a new Arena from the OS
   ## and append it to the allocator
+
   result = wv_allocAligned(Arena, WV_MemArenaSize)
+
+  debugMem:
+    log("Pool    0x%.08x - TID %d - reserved Arena 0x%.08x\n",
+      pool.addr, pool.threadID, result)
 
   result.meta.threadFree.initialize()
   result.meta.localFree = nil
@@ -210,7 +251,8 @@ func getArena(p: pointer): ptr Arena {.inline.} =
   # Sanity check to ensure we're in an Arena
   # TODO: LLVM ASAN, poisoning/unpoisoning?
   postCondition: not result.isNil
-  postCondition: result.meta.used in 0 ..< result.blocks.len
+  postCondition: not result.allocator.isNil
+  postCondition: result.meta.used in 0 .. result.blocks.len
 
 # Arena
 # ----------------------------------------------------------------------------------
@@ -232,17 +274,33 @@ func isMostlyUsed(arena: ptr Arena): bool =
   # will give a lower bound
   result = arena.blocks.len - arena.meta.used + arena.meta.threadFree.peek() <= threshold
 
-func collect(arena: var Arena) =
+func collect(arena: var Arena, force: bool) =
   ## Collect garbage memory in the page
-  preCondition: arena.meta.free.isNil
-  arena.meta.free = arena.meta.localFree
-  arena.meta.localFree = nil
+  ## We only move localFree to free when it's O(1)
+  ## except on thread teardown
+
+  if not arena.meta.localFree.isNil:
+    if likely(arena.meta.free.isNil):
+      # Fast path
+      arena.meta.free = arena.meta.localFree
+      arena.meta.localFree = nil
+    elif force:
+      # Slow path: only on thread teardown
+      for memBlock in arena.meta.localFree:
+        arena.addToFree(memBlock)
+      arena.meta.localFree = nil
+      debugMem:
+        log("Arena   0x%.08x - TID %d - collecting localFree, slow path (reclaimed %d)\n",
+          arena.addr, arena.meta.threadID, arena.blocks.len - arena.meta.used)
 
   var memBlock: ptr MemBlock
   while arena.meta.threadFree.tryRecv(memBlock):
     # TODO: batch receive
-    arena.meta.free.prepend(memBlock)
-    arena.meta.used -= 1
+    arena.addToFree(memBlock)
+
+  debugMem:
+    log("Arena   0x%.08x - TID %d - collected garbage, reclaimed %d blocks (%d used)\n",
+      arena.addr, arena.meta.threadID, arena.blocks.len - arena.meta.used, arena.meta.used)
 
 func allocBlock(arena: var Arena): ptr MemBlock =
   ## Allocate from a page
@@ -253,7 +311,7 @@ func allocBlock(arena: var Arena): ptr MemBlock =
   # The following acts as prefetching for the block that we are returning as well
   arena.meta.free = cast[ptr MemBlock](result.next.load(moRelaxed))
 
-  postCondition: arena.meta.used <= arena.blocks.len
+  postCondition: arena.meta.used in 0 .. arena.blocks.len
 
 # Allocator
 # ----------------------------------------------------------------------------------
@@ -267,16 +325,27 @@ func release(pool: var TLPoolAllocator, arena: ptr Arena) =
   if arena.next != nil: arena.next.prev = arena.prev
 
   pool.numArenas -= 1
+
+  debugMem:
+    log("Pool    0x%.08x - TID %d - returning Arena 0x%.08x to the OS, %d arenas left\n",
+      pool.addr, pool.threadID, arena, pool.numArenas)
+
   wv_freeAligned(arena)
 
 func considerRelease(pool: var TLPoolAllocator, arena: ptr Arena) =
   ## Test if an arena memory should be released to the OS
+  debugMem:
+    log("Pool    0x%.08x - TID %d - considering Arena 0x%.08x for release, %d arenas in pool\n",
+      pool.addr, pool.threadID, arena, pool.numArenas)
+
   # We don't want to release and then reserve memory too often
   # for example if we just provided a new block and it's returned.
   # As a fast heuristic we check if the arena neighbors are fully used.
   if arena.prev.isMostlyUsed() and arena.next.isMostlyUsed():
-    # We probably have the only usable arena in the pool
-    return
+    if arena.prev != pool.first:
+      # We probably have the only usable arena in the pool
+      # we special case to allow the pool to return the second arena
+      return
   # Other arenas are usable, return memory to the OS
   pool.release(arena)
 
@@ -284,8 +353,12 @@ proc allocSlow(pool: var TLPoolAllocator): ptr MemBlock =
   ## Slow path of allocation
   ## Expensive pool maintenance goes there
   ## and will be amortized over many allocations
-  var slowFrees: int8
 
+  debugMem:
+    log("Pool    0x%.08x - TID %d - entering slow maintenance path (%d arenas in pool)\n",
+      pool.addr, pool.threadID, pool.numArenas)
+
+  var slowFrees: int8
   # When iterating to find a free block, we iterate in reverse.
   # Note that both mimalloc and snmalloc iterate forward
   #      even though snmalloc used to have a stack strategy:
@@ -296,7 +369,7 @@ proc allocSlow(pool: var TLPoolAllocator): ptr MemBlock =
   #      will outlive their children.
   for arena in pool.last.backward():
     # 0. Collect freed blocks by us and other threads
-    arena[].collect()
+    arena[].collect(force = false)
     if not arena.meta.free.isNil:
       # 1.0 If we now have free blocks
       if slowFrees < MaxSlowFrees and arena.isUnused:
@@ -316,6 +389,38 @@ proc allocSlow(pool: var TLPoolAllocator): ptr MemBlock =
 # Public API
 # ----------------------------------------------------------------------------------
 
+proc initialize*(pool: var TLPoolAllocator, threadID: int32) =
+  ## Initialize a thread-local memory pool
+  ## This automatically reserves one arena
+  ## of WV_MemArenaSize (default 32kB) that can
+  ## serve fixed size memory block for types
+  ## of size up to WV_MemBlockSize (default 256B)
+  ##
+  ## The memory-pool is thread-safe. Calling ``recycle``
+  ## will automatically handle deallocation from any thread.
+  ## A thread can have multiple allocators.
+  ##
+  ## An allocator can ``takeover`` the memory managed by
+  ## another allocator in the same thread or by a thread that exited.
+  ##
+  ## ⚠️ The pool allocator should be allocated
+  ##    on the heap instead of with {.threadvar.}
+  ##    if you need to disconnect its lifetime
+  ##    from its owning thread.
+
+  debugMem:
+    log("Pool    0x%.08x - TID %d - initializing\n",
+      pool.addr, threadID, pool.numArenas)
+
+  pool.threadID = threadID
+  discard pool.newArena()
+
+  postCondition: not pool.first.isNil
+  postCondition: not pool.last.isNil
+  postCondition: pool.numArenas == 1
+  postCondition: pool.first == pool.last
+  postCondition: pool.first.meta.threadID.load(moRelaxed) == pool.threadID
+
 proc borrow*(pool: var TLPoolAllocator, T: typedesc): ptr T =
   ## Provides an unused memory block of size
   ## WV_MemBlockSize (256 bytes)
@@ -334,8 +439,9 @@ proc borrow*(pool: var TLPoolAllocator, T: typedesc): ptr T =
   if pool.last.meta.free.isNil:
     # Fallback to slow path
     return cast[ptr T](pool.allocSlow())
+  else:
     # Fast-path
-    return cast[ptr T](pool.last.allocBlock())
+    return cast[ptr T](pool.last[].allocBlock())
 
 proc recycle*[T](myThreadID: int32, p: ptr T) =
   ## Returns a memory block to its memory pool.
@@ -358,12 +464,12 @@ proc recycle*[T](myThreadID: int32, p: ptr T) =
   # Find the owning arena
   let arena = p.getArena()
 
-  if myThreadID == arena.threadID:
+  if myThreadID == arena.meta.threadID.load(moRelaxed):
     # thread-local free
-    arena.addToLocalFree(p)
+    arena[].addToLocalFree(p)
     if unlikely(arena.isUnused()):
       # If an arena is unused, we can try releasing it immediately
-      arena.allocator.considerRelease(arena)
+      arena.allocator[].considerRelease(arena)
   else:
     # remote arena
     let remoteRecycled = arena.meta.threadFree.trySend(p)
@@ -381,13 +487,23 @@ proc teardown*(pool: var TLPoolAllocator): bool =
   ## The ``pool`` is kept in consistent state with regards to
   ## its metadata. Another thread can ``takeover`` the pool resources
   ## with the ``takeover`` function if teardown was unsuccessful.
+
+  debugMem:
+    log("Pool    0x%.08x - TID %d - teardown (%d arenas in pool)\n",
+      pool.addr, pool.threadID, pool.numArenas)
+
   for arena in pool.last.backward():
     # Collect freed blocks by us and other threads
-    arena[].collect()
+    arena[].collect(force = true)
     if arena.isUnused:
       pool.release(arena)
 
   result = pool.numArenas == 0
+
+  debugMem:
+    log("Pool    0x%.08x - TID %d - end teardown (%d arenas left)\n",
+      pool.addr, pool.numArenas)
+
   postCondition:
     if result: pool.first.isNil and pool.last.isNil
     else: not(pool.first.isNil and pool.last.isNil)
@@ -403,9 +519,13 @@ proc takeover*(pool: var TLPoolAllocator, target: sink TLPoolAllocator) =
   ##
   ## The `target` allocator must not be reused.
 
+  debugMem:
+    log("Pool    0x%.08x (%d arenas) - TID %d - taking over 0x%.08x (%d arenas, TID %d)\n",
+      pool.addr, pool.numArenas, pool.threadID, target.addr, target.numArenas)
+
   for arena in target.last.backward():
     # Collect all freed blocks, release the arena if we can
-    arena[].collect()
+    arena[].collect(force = false)
     if arena.isUnused:
       target.release(arena)
     else:
@@ -429,11 +549,223 @@ proc takeover*(pool: var TLPoolAllocator, target: sink TLPoolAllocator) =
   pool.last = target.last
   pool.numArenas += target.numArenas
 
-
-
-# Sanity checks
+# Sanity checks and bench
 # ----------------------------------------------------------------------------------
 
 assert sizeof(Arena) == WV_MemArenaSize,
   "The real arena size was " & $sizeof(Arena) &
   " but the asked WV_MemArenaSize was " & $WV_MemArenaSize
+
+when isMainModule:
+  import times, strformat, system/ansi_c, math
+
+  # Single-threaded
+  # ----------------------------------------------------------------------------------
+
+  const Iters = 250000
+
+  type MyObject = object
+    data: array[32, uint64] # 256 byte
+
+  proc benchSingleThreadedPool(NumAllocs: static int) =
+    var pointers: ref array[NumAllocs, ptr MyObject]
+    new pointers
+    let myID = 0'i32
+
+    let start = cpuTime()
+
+    var pool: TLPoolAllocator
+    pool.initialize(threadID = myID)
+
+    for i in 0 ..< Iters:
+      for j in 0 ..< NumAllocs:
+        pointers[j] = pool.borrow(MyObject)
+      # Deallocate in mixed order - note that the mempool
+      # is optimized for LIFO dealloc.
+      for j in countup(0, NumAllocs-1, 2):
+        myID.recycle(pointers[j])
+      for j in countup(1, NumAllocs-1, 2):
+        myID.recycle(pointers[j])
+
+    let stop = cpuTime()
+    echo &"Single-threaded: Pool   alloc for {NumAllocs} blocks: {stop-start:.4f} s"
+
+  proc benchSingleThreadedSystem(NumAllocs: static int) =
+    var pointers: ref array[NumAllocs, pointer]
+    new pointers
+    let myID = 0
+
+    let start = cpuTime()
+
+    for i in 0 ..< Iters:
+      for j in 0 ..< NumAllocs:
+        pointers[j] = c_malloc(csize_t sizeof(MyObject))
+      for j in countup(0, NumAllocs-1, 2):
+        c_free(pointers[j])
+      for j in countup(1, NumAllocs-1, 2):
+        c_free(pointers[j])
+
+    let stop = cpuTime()
+    echo &"Single-threaded: System alloc for {NumAllocs} blocks: {stop - start:.4f} s"
+
+  # benchSingleThreadedPool(100)
+  # benchSingleThreadedSystem(100)
+
+  # Multi-threaded
+  # ----------------------------------------------------------------------------------
+
+  when not compileOption("threads"):
+    {.error: "This requires --threads:on compilation flag".}
+
+  template sendLoop[T](chan: var ChannelMpscUnbounded[T],
+                       data: sink T,
+                       body: untyped): untyped =
+    while not chan.trySend(data):
+      body
+
+  template recvLoop[T](chan: var ChannelMpscUnbounded[T],
+                       data: var T,
+                       body: untyped): untyped =
+    while not chan.tryRecv(data):
+      body
+
+  const NumVals = 1000
+  const Padding = 10 * NumVals # Pad with a 0 so that iteration 10 of thread 3 is 3010 with 99 max iters
+
+  type
+    WorkerKind = enum
+      Receiver
+      Sender1
+      Sender2
+      Sender3
+      Sender4
+      Sender5
+      Sender6
+      Sender7
+      Sender8
+      Sender9
+      Sender10
+      Sender11
+      Sender12
+      Sender13
+      Sender14
+      Sender15
+
+    Val = ptr ValObj
+    ValObj = object
+      next: Atomic[pointer]
+      val: int
+
+    ThreadArgs = object
+      ID: WorkerKind
+      chan: ptr ChannelMpscUnbounded[Val]
+      pool: ptr TLPoolAllocator
+
+    AllocKind = enum
+      System
+      Nim
+      Pool
+
+  template genBench(Alloc: untyped): untyped =
+    proc `thread_func Alloc`(args: ThreadArgs) =
+      when Alloc == Pool:
+        let pool = args.pool
+        pool[].initialize(threadID = args.ID.int32)
+
+      template Worker(id: WorkerKind, body: untyped): untyped {.dirty.} =
+        if args.ID == id:
+          body
+
+      template Worker(id: Slice[WorkerKind], body: untyped): untyped {.dirty.} =
+        if args.ID in id:
+          body
+
+      # Worker RECEIVER:
+      # ---------
+      # <- chan
+      # <- chan
+      # <- chan
+      #
+      # Worker SENDER:
+      # ---------
+      # chan <- 42
+      # chan <- 53
+      # chan <- 64
+
+      template valAlloc(kind: static AllocKind): Val =
+        when kind == System:
+          cast[Val](c_malloc(csize_t sizeof(ValObj)))
+        elif kind == Nim:
+          createShared(ValObj)
+        else:
+          # workaround sizeof atomics
+          assert sizeof(ValObj) == 16
+          cast[Val](pool[].borrow(array[16, byte]))
+
+      template valFree(kind: static AllocKind, val: Val) =
+        when kind == System:
+          c_free(val)
+        elif kind == Nim:
+          freeShared(val)
+        else:
+          recycle(myThreadID = ord(Receiver), val)
+
+      Worker(Receiver):
+        var counts: array[Sender1..Sender15, int]
+        for j in 0 ..< 15 * NumVals:
+          var val: Val
+          args.chan[].recvLoop(val):
+            discard
+          # log("Receiver got: %d at address 0x%.08x\n", val.val, val)
+          let sender = WorkerKind(val.val div Padding)
+          doAssert val.val == counts[sender] + ord(sender) * Padding, "Incorrect value: " & $val.val
+          inc counts[sender]
+          valFree(Alloc, val)
+
+      Worker(Sender1..Sender15):
+        for j in 0 ..< NumVals:
+          let val = valAlloc(Alloc)
+          val.val = ord(args.ID) * Padding + j
+
+          # const pad = spaces(8)
+          # echo pad.repeat(ord(args.ID)), 'S', $ord(args.ID), ": ", val.val
+
+          args.chan[].sendLoop(val):
+            discard
+
+    proc `benchMultiThreaded Alloc`() =
+      var threads: array[WorkerKind, Thread[ThreadArgs]]
+      var pools: ptr array[WorkerKind, TLPoolAllocator]
+
+      let chan = createSharedU(ChannelMpscUnbounded[Val]) # CreateU is not zero-init
+      chan[].initialize()
+
+      pools = cast[typeof pools](createSharedU(TLPoolAllocator, pools[].len))
+
+      # Note we also measure thread creation/teardown overhead
+      # because doing otherwise is tricky
+      let start = epochTime()
+
+      createThread(threads[Receiver], `thread_func Alloc`,
+        ThreadArgs(ID: Receiver, chan: chan, pool: pools[Receiver].addr))
+      for sender in Sender1..Sender15:
+        createThread(threads[sender], `thread_func Alloc`,
+          ThreadArgs(ID: sender, chan: chan, pool: pools[sender].addr))
+
+      for worker in WorkerKind:
+        joinThread(threads[worker])
+
+      let stop = epochTime()
+
+      echo "Multi-threaded: ", $Alloc, " alloc: ", $round(stop-start, 4), " s"
+
+      freeShared(chan)
+      freeShared(pools)
+
+  # genBench(System)
+  # genBench(Nim)
+  genBench(Pool)
+
+  # benchMultiThreadedNim()
+  # benchMultiThreadedSystem()
+  benchMultiThreadedPool()
