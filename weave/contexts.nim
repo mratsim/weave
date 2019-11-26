@@ -11,7 +11,8 @@ import
   ./memory/[persistacks, intrusive_stacks],
   ./config,
   system/ansi_c,
-  ./instrumentation/[profilers, loggers]
+  ./instrumentation/[profilers, loggers, contracts],
+  ./primitives/barriers
 
 # Contexts
 # ----------------------------------------------------------------------------------

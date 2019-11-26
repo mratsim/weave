@@ -31,7 +31,7 @@ type
     # Consumer only - front is a dummy node
     front{.align: WV_CacheLinePadding.}: typeof(default(T)[])
 
-proc initialize*[T](chan: var ChannelMpscUnbounded[T]) =
+proc initialize*[T](chan: var ChannelMpscUnbounded[T]) {.inline.}=
   chan.front.next.store(nil, moRelaxed)
   chan.back.store(chan.front.addr, moRelaxed)
   chan.count.store(0, moRelaxed)

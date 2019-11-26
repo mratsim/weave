@@ -105,8 +105,11 @@ proc findVictimAndRelaySteal*(req: sink StealRequest) =
   #   and debugging that in a multithreading runtime
   #   would probably be very painful.
   let target = findVictim(req)
-  debugTermination: log("Worker %2d: relay steal request to %d from %d (Channel 0x%.08x)\n",
-    myID(), target, req.thiefID, globalCtx.com.thefts[req.thiefID].addr)
+  debugTermination: log("Worker %2d: relay steal request from %d to %d (Channel 0x%.08x)\n",
+    myID(), req.thiefID, target, globalCtx.com.thefts[target].addr)
+  # TODO there seem to be a livelock here with the new queue and 16+ workers.
+  #      activating the log above solves it.
+  # The runtime gets stuck in declineAll/trySteal
   target.relaySteal(req)
 
 # Stealing logic
