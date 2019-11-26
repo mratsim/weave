@@ -45,10 +45,7 @@ proc trySend*[T](chan: var ChannelMpscUnboundedBatch[T], src: sink T): bool {.in
   discard chan.count.fetchAdd(1, moRelaxed)
   src.next.store(nil, moRelaxed)
   fence(moRelease)
-
-  # Publish a new tail, it disconnected from the front
   let oldBack = chan.back.exchange(src, moRelaxed)
-  # Link together both lists
   cast[T](oldBack).next.store(src, moRelaxed) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
 
   return true
@@ -62,7 +59,7 @@ proc tryRecv*[T](chan: var ChannelMpscUnboundedBatch[T], dst: var T): bool =
   # log("Channel 0x%.08x tryRecv - first: 0x%.08x (%d), next: 0x%.08x (%d), last: 0x%.08x\n",
   #   chan.addr, first, first.val, next, if not next.isNil: next.val else: 0, chan.back)
 
-  let first = cast[T](chan.front.next.load(moAcquire))
+  let first = cast[T](chan.front.next.load(moRelaxed))
   if first.isNil:
     return false
   debug: log("Channel MPSC 0x%.08x: try receiving 0x%.08x\n", chan.addr, first)
