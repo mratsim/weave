@@ -76,6 +76,9 @@ func clear*(chan: var ChannelSpscSingleObject) {.inline.} =
     `=destroy`(chan.buffer)
     chan.full.store(moRelaxed) = false
 
+func isEmpty*[T](chan: var ChannelSpscSingleObject[T]): bool {.inline.} =
+  not chan.full.load(moAcquire)
+
 func tryRecv*[T](chan: var ChannelSpscSingleObject[T], dst: var T): bool {.inline.} =
   ## Try receiving the item buffered in the channel
   ## Returns true if successful (channel was not empty)

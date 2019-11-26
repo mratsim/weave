@@ -192,7 +192,7 @@ proc lastStealAttempt*(req: sink StealRequest) =
   else:
     req.state = Waiting
     debugTermination:
-      log("Worker %2d sends state passively WAITING to its parent worker %d\n", myID(), myWorker().parent)
+      log("Worker %2d: sends state passively WAITING to its parent worker %d\n", myID(), myWorker().parent)
     sendShare(req)
     ascertain: not myWorker().isWaiting
     myWorker().isWaiting = true

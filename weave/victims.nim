@@ -47,7 +47,7 @@ proc recv*(req: var StealRequest): bool {.inline.} =
     # and defer to the current worker (their parent)
     while result and req.state == Waiting:
       debugTermination:
-        log("Worker %2d receives state passively WAITING from its child worker %d\n",
+        log("Worker %2d: receives state passively WAITING from its child worker %d\n",
             myID(), req.thiefID)
 
       # Only children can forward a request where they sleep
@@ -149,6 +149,8 @@ proc takeTasks(req: StealRequest): tuple[task: Task, loot: int32] =
     result.loot = 1
 
 proc send(req: sink StealRequest, task: sink Task, numStolen: int32 = 1) {.inline.}=
+  debug: log("Worker %2d: sending %d tasks (task.fn 0x%.08x) to Worker %2d\n",
+    myID(), numStolen, task.fn, req.thiefID)
   let taskSent = req.thiefAddr[].trySend(task)
   when defined(WV_LastThief):
     myThefts().lastThief = req.thiefID
