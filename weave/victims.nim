@@ -197,9 +197,8 @@ proc dispatchTasks*(req: sink StealRequest) =
       # TODO LastVictim
       LazyFV:
         batchConvertLazyFlowvar(task)
-      debug: log("Worker %2d: preparing a task with function address %d\n", myID(), task.fn)
-      debug: log("Worker %2d: sent %d task%s to worker %d\n",
-                  myID(), loot, if loot > 1: "s" else: "", req.thiefID)
+      debug: log("Worker %2d: preparing %d task(s) for worker %2d with function address 0x%.08x\n",
+        myID(), loot, req.thiefID, task.fn)
       req.send(task, loot)
   else:
     ascertain: myWorker().deque.isEmpty()

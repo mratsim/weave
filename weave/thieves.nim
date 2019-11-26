@@ -90,7 +90,8 @@ proc findVictimAndSteal(req: sink StealRequest) =
   #   and debugging that in a multithreading runtime
   #   would probably be very painful.
   let target = findVictim(req)
-  debugTermination: log("Worker %2d: sending own steal request to %d\n", myID(), target)
+  debugTermination: log("Worker %2d: sending own steal request to %d (Channel 0x%.08x)\n",
+    myID(), target, globalCtx.com.thefts[target].addr)
   target.sendSteal(req)
 
 proc findVictimAndRelaySteal*(req: sink StealRequest) =
@@ -104,7 +105,8 @@ proc findVictimAndRelaySteal*(req: sink StealRequest) =
   #   and debugging that in a multithreading runtime
   #   would probably be very painful.
   let target = findVictim(req)
-  debugTermination: log("Worker %2d: relay steal request to %d from %d\n", myID(), target, req.thiefID)
+  debugTermination: log("Worker %2d: relay steal request to %d from %d (Channel 0x%.08x)\n",
+    myID(), target, req.thiefID, globalCtx.com.thefts[req.thiefID].addr)
   target.relaySteal(req)
 
 # Stealing logic
