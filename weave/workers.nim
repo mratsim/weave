@@ -44,7 +44,7 @@ proc recv*(task: var Task, isOutOfTasks: bool): bool =
       if result:
         myTodoBoxes().nowAvailable(i)
         localCtx.stealCache.nowAvailable(i)
-        debug: log("Worker %d received a task with function address %d\n", myID(), task.fn)
+        debug: log("Worker %2d: received a task with function address 0x%.08x\n", myID(), task.fn)
         break
 
   if not result:
@@ -68,7 +68,7 @@ proc recv*(task: var Task, isOutOfTasks: bool): bool =
     # Steal request fulfilled
     myThefts().outstanding -= 1
 
-    debug: log("Worker %d: %d theft(s) outstanding after receiving a task\n", myID(), myThefts().outstanding)
+    debug: log("Worker %2d: %d theft(s) outstanding after receiving a task\n", myID(), myThefts().outstanding)
     postCondition: myThefts().outstanding in 0 ..< WV_MaxConcurrentStealPerWorker
     postCondition: myThefts().dropped == 0
 
@@ -78,6 +78,7 @@ proc run*(task: Task) {.inline.} =
   # TODO - logic seems sketchy, why do we do this <-> task.
   let this = myTask()
   myTask() = task
+  debug: log("Worker %2d: running task.fn 0x%.08x\n", myID(), task.fn)
   task.fn(task.data.addr)
   myTask() = this
   metrics:

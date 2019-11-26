@@ -42,7 +42,7 @@ proc randomVictim(victims: SparseSet, workerID: WorkerID): WorkerID =
     return -1
 
   result = victims.randomPick(myThefts().rng)
-  # debug: log("Worker %d: rng %d, vict: %d\n", myID(), myThefts().rng, result)
+  # debug: log("Worker %2d: rng %d, vict: %d\n", myID(), myThefts().rng, result)
 
   postCondition: result in victims
   postCondition: result in 0 ..< workforce()
@@ -84,7 +84,7 @@ proc findVictim*(req: var StealRequest): WorkerID =
     result = req.thiefID
 
     debug:
-      log("Worker %d: relay thief {%d} -> no victim after %d tries (%u ones)\n",
+      log("Worker %2d: relay thief {%d} -> no victim after %d tries (%u ones)\n",
         myID(), req.thiefID, req.retry, req.victims.len
       )
 

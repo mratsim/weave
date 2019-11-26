@@ -108,27 +108,27 @@ proc workerMetrics*() =
 
     discard pthread_barrier_wait(globalCtx.barrier)
 
-    c_printf("Worker %d: %u steal requests sent\n", myID(), localCtx.counters.stealSent)
-    c_printf("Worker %d: %u steal requests handled\n", myID(), localCtx.counters.stealHandled)
-    c_printf("Worker %d: %u steal requests declined\n", myID(), localCtx.counters.stealDeclined)
-    c_printf("Worker %d: %u tasks executed\n", myID(), localCtx.counters.tasksExec)
-    c_printf("Worker %d: %u tasks sent\n", myID(), localCtx.counters.tasksSent)
-    c_printf("Worker %d: %u tasks split\n", myID(), localCtx.counters.tasksSplit)
+    c_printf("Worker %2d: %u steal requests sent\n", myID(), localCtx.counters.stealSent)
+    c_printf("Worker %2d: %u steal requests handled\n", myID(), localCtx.counters.stealHandled)
+    c_printf("Worker %2d: %u steal requests declined\n", myID(), localCtx.counters.stealDeclined)
+    c_printf("Worker %2d: %u tasks executed\n", myID(), localCtx.counters.tasksExec)
+    c_printf("Worker %2d: %u tasks sent\n", myID(), localCtx.counters.tasksSent)
+    c_printf("Worker %2d: %u tasks split\n", myID(), localCtx.counters.tasksSplit)
     when defined(StealBackoff):
-      c_printf("Worker %d: %u steal requests resent\n", myID(), localCtx.counters.stealResent)
+      c_printf("Worker %2d: %u steal requests resent\n", myID(), localCtx.counters.stealResent)
     StealAdaptative:
       ascertain: localCtx.counters.stealOne + localCtx.counters.stealHalf == localCtx.counters.stealSent
       if localCtx.counters.stealSent != 0:
-        c_printf("Worker %d: %.2f %% steal-one\n", myID(),
+        c_printf("Worker %2d: %.2f %% steal-one\n", myID(),
           localCtx.counters.stealOne.float64 / localCtx.counters.stealSent.float64 * 100)
-        c_printf("Worker %d: %.2f %% steal-half\n", myID(),
+        c_printf("Worker %2d: %.2f %% steal-half\n", myID(),
           localCtx.counters.stealHalf.float64 / localCtx.counters.stealSent.float64 * 100)
       else:
-        c_printf("Worker %d: %.2f %% steal-one\n", myID(), 0)
-        c_printf("Worker %d: %.2f %% steal-half\n", myID(), 0)
+        c_printf("Worker %2d: %.2f %% steal-one\n", myID(), 0)
+        c_printf("Worker %2d: %.2f %% steal-half\n", myID(), 0)
     LazyFV:
-      c_printf("Worker %d: %u futures converted\n", myID(), localCtx.counters.futuresConverted)
-    c_printf("Worker %d: random victim fast path (slow path): %3.0f %% (%3.0f %%)\n",
+      c_printf("Worker %2d: %u futures converted\n", myID(), localCtx.counters.futuresConverted)
+    c_printf("Worker %2d: random victim fast path (slow path): %3.0f %% (%3.0f %%)\n",
       myID(), localCtx.counters.randomVictimEarlyExits.float64 * 100 / localCtx.counters.randomVictimCalls.float64,
       100 - localCtx.counters.randomVictimEarlyExits.float64 * 100 / localCtx.counters.randomVictimCalls.float64
     )

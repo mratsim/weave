@@ -40,14 +40,14 @@ proc recv*(req: var StealRequest): bool {.inline.} =
 
     debug:
       if result:
-        log("Worker %d: receives request 0x%.08x from %d with %d potential victims. (Channel: 0x%.08x)\n",
+        log("Worker %2d: receives request 0x%.08x from %d with %d potential victims. (Channel: 0x%.08x)\n",
               myID(), cast[ByteAddress](req), req.thiefID, req.victims.len, myThieves().addr)
 
     # We treat specially the case where children fail to steal
     # and defer to the current worker (their parent)
     while result and req.state == Waiting:
       debugTermination:
-        log("Worker %d receives state passively WAITING from its child worker %d\n",
+        log("Worker %2d receives state passively WAITING from its child worker %d\n",
             myID(), req.thiefID)
 
       # Only children can forward a request where they sleep
@@ -75,7 +75,7 @@ proc declineOwn(req: sink StealRequest) =
   preCondition: req.victims.isEmpty()
 
   debugTermination:
-    log("Worker %d: received own request (req.state: %s, left: %d, right %d)\n", myID(), $req.state, myWorker().leftIsWaiting, myWorker().rightIsWaiting)
+    log("Worker %2d: received own request (req.state: %s, left: %d, right %d)\n", myID(), $req.state, myWorker().leftIsWaiting, myWorker().rightIsWaiting)
 
   if req.state == Stealing and myWorker().leftIsWaiting and myWorker().rightIsWaiting:
     when WV_MaxConcurrentStealPerWorker == 1:

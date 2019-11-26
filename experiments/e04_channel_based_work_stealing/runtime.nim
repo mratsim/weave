@@ -327,7 +327,7 @@ proc random_victim(victims: uint32, ID: int32): int32 {.inline.}=
 
   let idx = rand_r(seed) mod num_victims
   result = potential_victims[idx]
-  # log("Worker %d: rng %d, vict: %d\n", ID, rng, result)
+  # log("Worker %2d: rng %d, vict: %d\n", ID, rng, result)
   assert potential_victim(victims, result) != 0'u32
 
   assert(
@@ -426,7 +426,7 @@ proc RT_exit*() =
 
   partition_reset()
 
-  log("Worker %d: random_receiver fast path (slow path): %3.0f %% (%3.0f %%)\n",
+  log("Worker %2d: random_receiver fast path (slow path): %3.0f %% (%3.0f %%)\n",
     ID, random_receiver_early_exits.float64 * 100 / random_receiver_calls.float64,
     100 - random_receiver_early_exits.float64 * 100 / random_receiver_calls.float64
   )
@@ -509,7 +509,7 @@ template send_req(chan: Channel[StealRequest], req: sink StealRequest) =
   while not channel_send(chan, req, int32 sizeof(req)):
     inc nfail
     if nfail mod 3 == 0:
-      log("*** Worker %d: blocked on channel send\n", ID)
+      log("*** Worker %2d: blocked on channel send\n", ID)
       # raising an exception in a thread will probably crash, oh well ...
       raise newException(DeadThreadError, "Worker blocked! Check channel capacities!")
     if tasking_done():
@@ -528,7 +528,7 @@ proc recv_req(req: var StealRequest): bool {.inline.} =
       when defined(DebugTD):
         # Termination detection
         # TODO: add to compile-time options
-        log("Worker %d receives STATE_FAILED from worker %d\n", ID, req.ID)
+        log("Worker %2d receives STATE_FAILED from worker %d\n", ID, req.ID)
       assert(req.ID == tree.left_child or req.ID == tree.right_child)
       if req.ID == tree.left_child:
         assert not tree.left_subtree_is_idle
@@ -550,7 +550,7 @@ proc recv_task(task: var Task, idle: bool): bool {.inline.} =
       if result:
         channel_push(chan_tasks[ID][i])
         when defined(debug):
-          log("Worker %d: received a task with function address %d\n", ID, task.fn)
+          log("Worker %2d: received a task with function address 0x%.08x\n", ID, task.fn)
         break
 
   if not result:
@@ -602,7 +602,7 @@ proc detect_termination() {.inline.} =
   assert not quiescent
 
   when defined(DebugTD):
-    log(">>> Worker %d detects termination <<<\n", ID)
+    log(">>> Worker %2d detects termination <<<\n", ID)
   quiescent = true
 
 # Async actions : Side-effecting pseudo tasks
@@ -714,7 +714,7 @@ proc decline_steal_request(req: var StealRequest) =
           Worker:
             req.state = Failed
             when defined(DebugTD):
-              log("Worker %d sends STATE_FAILED to worker %d\n", ID, tree.parent)
+              log("Worker %2d sends STATE_FAILED to worker %d\n", ID, tree.parent)
             send_req_worker(tree.parent, req)
             assert not tree.waiting_for_tasks
             tree.waiting_for_tasks = true
@@ -733,7 +733,7 @@ proc decline_steal_request(req: var StealRequest) =
             lastStealRequest()
           else:
             when defined(DebugTD):
-              log("Worker %d drops steal request\n", ID)
+              log("Worker %2d drops steal request\n", ID)
             # The master can safely run this assertion as it is never
             # waiting for tasks from its parent (it has none).
             assert not tree.waiting_for_tasks
@@ -981,7 +981,7 @@ proc RT_barrier*() =
     return
 
   when defined(DebugTD):
-    log(">>> Worker %d enters barrier <<<\n", ID)
+    log(">>> Worker %2d enters barrier <<<\n", ID)
 
   assert is_root_task(get_current_task())
 
@@ -1046,7 +1046,7 @@ proc RT_barrier*() =
     assert quiescent
 
     when defined(DebugTD):
-      log(">>> Worker %d leaves barrier <<<\n", ID)
+      log(">>> Worker %2d leaves barrier <<<\n", ID)
 
     return
 
@@ -1152,7 +1152,7 @@ template push*(task: sink Task) =
   if quiescent:
     assert ID == MasterID
     when defined(DebugTD):
-      log(">>> Worker %d resumes execution after barrier <<<\n", ID)
+      log(">>> Worker %2d resumes execution after barrier <<<\n", ID)
     quiescent = false
 
   share_work()
