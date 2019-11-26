@@ -52,16 +52,16 @@ proc trySendImpl[T](chan: var ChannelMpscUnbounded[T], src: sink T, count: stati
   ## As the channel as unbounded capacity, this should never fail
   checkInvariants()
 
+  when count:
+    discard chan.count.fetchAdd(1, moRelaxed)
   src.next.store(nil, moRelaxed)
   fence(moRelease)
   let oldBack = chan.back.exchange(src, moRelaxed)
   cast[T](oldBack).next.store(src, moRelaxed) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
-  when count:
-    discard chan.count.fetchAdd(1, moRelaxed)
 
   return true
 
-proc trySend*[T](chan: var ChannelMpscUnbounded[T], src: sink T): bool =
+proc trySend*[T](chan: var ChannelMpscUnbounded[T], src: sink T): bool {.inline.}=
   # log("Channel 0x%.08x trySend - front: 0x%.08x (%d), second: 0x%.08x, back: 0x%.08x\n", chan.addr, chan.front, chan.front.val, chan.front.next, chan.back)
   chan.trySendImpl(src, count = true)
 
