@@ -10,7 +10,7 @@ type
     x.next is Atomic[pointer]
     # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
 
-  ChannelMpscUnbounded*[T: Enqueueable] = object
+  ChannelMpscUnboundedBatch*[T: Enqueueable] = object
     ## Lockless multi-producer single-consumer channel
     ##
     ## Properties:
@@ -28,113 +28,85 @@ type
     count{.align: WV_CacheLinePadding.}: Atomic[int]
     # Producers and consumer slow-path
     back{.align: WV_CacheLinePadding.}: Atomic[pointer] # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
-    dummy: typeof(default(T)[]) # Deref the pointer type
-    # Consumer only
-    # ⚠️ Field to be kept at the end
-    #   so that it can be intrusive to consumers data structure
-    #   like a memory pool
-    front{.align: WV_CacheLinePadding.}: T
+    # Consumer only - front is a dummy node
+    front{.align: WV_CacheLinePadding.}: typeof(default(T)[])
 
-template checkInvariants(): untyped =
-  ascertain: not(chan.front.isNil)
-  ascertain: not(chan.back.load(moRelaxed).isNil)
+proc initialize*[T](chan: var ChannelMpscUnboundedBatch[T]) {.inline.}=
+  chan.front.next.store(nil, moRelaxed)
+  chan.back.store(chan.front.addr, moRelaxed)
+  chan.count.store(0, moRelaxed)
 
-proc initialize*[T](chan: var ChannelMpscUnbounded[T]) =
-  # We keep a dummy node within the queue itself
-  # it doesn't need any dynamic allocation which simplify
-  # its use in an allocator
-  chan.dummy.reset()
-  chan.front = chan.dummy.addr
-  chan.back.store(chan.dummy.addr, moRelaxed)
-
-proc trySendImpl[T](chan: var ChannelMpscUnbounded[T], src: sink T, count: static bool): bool {.inline.}=
+proc trySend*[T](chan: var ChannelMpscUnboundedBatch[T], src: sink T): bool {.inline.}=
   ## Send an item to the back of the channel
   ## As the channel as unbounded capacity, this should never fail
-  checkInvariants()
 
+  debug: log("Channel MPSC 0x%.08x: sending       0x%.08x\n", chan.addr, src)
+
+  discard chan.count.fetchAdd(1, moRelaxed)
   src.next.store(nil, moRelaxed)
   fence(moRelease)
+
+  # Publish a new tail, it disconnected from the front
   let oldBack = chan.back.exchange(src, moRelaxed)
+  # Link together both lists
   cast[T](oldBack).next.store(src, moRelaxed) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
-  when count:
-    discard chan.count.fetchAdd(1, moRelaxed)
 
   return true
 
-proc trySend*[T](chan: var ChannelMpscUnbounded[T], src: sink T): bool =
-  # log("Channel 0x%.08x trySend - front: 0x%.08x (%d), second: 0x%.08x, back: 0x%.08x\n", chan.addr, chan.front, chan.front.val, chan.front.next, chan.back)
-  chan.trySendImpl(src, count = true)
-
-proc reenqueueDummy[T](chan: var ChannelMpscUnbounded[T]) =
-  # log("Channel 0x%.08x reenqueing dummy\n")
-  discard chan.trySendImpl(chan.dummy.addr, count = false)
-
-proc tryRecv*[T](chan: var ChannelMpscUnbounded[T], dst: var T): bool =
+proc tryRecv*[T](chan: var ChannelMpscUnboundedBatch[T], dst: var T): bool =
   ## Try receiving the next item buffered in the channel
   ## Returns true if successful (channel was not empty)
   ## This can fail spuriously on the last element if producer
   ## enqueues a new element while the consumer was dequeing it
-  assert not(chan.front.isNil)
-  assert not(chan.back.load(moRelaxed).isNil)
-
-  var first = chan.front
-  # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
-  var next = cast[T](first.next.load(moRelaxed))
 
   # log("Channel 0x%.08x tryRecv - first: 0x%.08x (%d), next: 0x%.08x (%d), last: 0x%.08x\n",
   #   chan.addr, first, first.val, next, if not next.isNil: next.val else: 0, chan.back)
 
-  if first == chan.dummy.addr:
-    # First node is the dummy
-    if next.isNil:
-      # Dummy has no next node
-      return false
-    # Overwrite the dummy, with the real first element
-    chan.front = next
-    first = next
-    next = cast[T](next.next.load(moRelaxed))
+  let first = cast[T](chan.front.next.load(moAcquire))
+  if first.isNil:
+    return false
+  debug: log("Channel MPSC 0x%.08x: try receiving 0x%.08x\n", chan.addr, first)
 
-  # Fast-path
-  if not next.isNil:
-    # second element exist, setup the queue, only consumer touches the front
-    chan.front = next                     # switch the front
-    prefetch(first.next.load(moRelaxed))
-    # Publish the changes
-    fence(moAcquire)
-    dst = first
-    discard chan.count.fetchSub(1, moRelaxed)
-    return true
-  # End fast-path
+  block fastPath:
+    let next = first.next.load(moRelaxed)
+    if not next.isNil:
+      # Not competing with producers
+      discard chan.count.fetchSub(1, moRelaxed)
+      chan.front.next.store(next, moRelaxed)
+      prefetch(first)
+      # Prevent reordering
+      fence(moAcquire)
+      dst = first
+      return true
 
-  # No second element, but we really need something to take
-  # the place of the first, have a look on the producer side
-  fence(moAcquire)
-  let last = chan.back.load(moRelaxed)
+  # Competing with producers at the back
+  var last = chan.back.load(moRelaxed)
   if first != last:
-    # A producer got ahead of us, spurious failure
+    # We lose the competition before even trying
     return false
 
-  # Reenqueue dummy, it is now in the second slot or later
-  chan.reenqueueDummy()
-  # Reload the second item
-  next = cast[T](first.next.load(moRelaxed))
-
-  if not next.isNil:
-    # second element exist, setup the queue, only consumer touches the front
-    chan.front = next                     # switch the front
-    prefetch(first.next.load(moRelaxed))
-    # Publish the changes
-    fence(moAcquire)
-    dst = first
+  chan.front.next.store(nil, moRelaxed)
+  if compareExchange(chan.back, last, chan.front.addr, moAcquireRelease):
+    # We won and replaced the last node with the channel front
     discard chan.count.fetchSub(1, moRelaxed)
+    dst = first
     return true
 
-  # No empty element?! There was a race in enqueueing
-  # and the new "next" still isn't published
-  # spurious failure
+  # We lost again but now we know that there is an extra node
+  let next2 = first.next.load(moRelaxed)
+  if not next2.isNil:
+    discard chan.count.fetchSub(1, moRelaxed)
+    chan.front.next.store(next2, moRelaxed)
+    prefetch(first)
+    # Prevent reordering
+    fence(moAcquire)
+    dst = first
+    return true
+
+  # We lost again
   return false
 
-func peek*(chan: var ChannelMpscUnbounded): int32 {.inline.} =
+func peek*(chan: var ChannelMpscUnboundedBatch): int32 {.inline.} =
   ## Estimates the number of items pending in the channel
   ## - If called by the consumer the true number might be more
   ##   due to producers adding items concurrently.
@@ -143,7 +115,10 @@ func peek*(chan: var ChannelMpscUnbounded): int32 {.inline.} =
   ##   the consumer removes them concurrently.
   ##
   ## This is a non-locking operation.
-  result = int32 chan.count.load(moRelaxed)
+  result = int32 chan.count.load(moAcquire)
+
+  # For the consumer it's always positive or zero
+  postCondition: result >= 0 # TODO somehow it can be -1
 
 # Sanity checks
 # ------------------------------------------------------------------------------
@@ -161,13 +136,13 @@ when isMainModule:
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}
 
-  template sendLoop[T](chan: var ChannelMpscUnbounded[T],
+  template sendLoop[T](chan: var ChannelMpscUnboundedBatch[T],
                        data: sink T,
                        body: untyped): untyped =
     while not chan.trySend(data):
       body
 
-  template recvLoop[T](chan: var ChannelMpscUnbounded[T],
+  template recvLoop[T](chan: var ChannelMpscUnboundedBatch[T],
                        data: var T,
                        body: untyped): untyped =
     while not chan.tryRecv(data):
@@ -202,7 +177,7 @@ when isMainModule:
 
     ThreadArgs = object
       ID: WorkerKind
-      chan: ptr ChannelMpscUnbounded[Val]
+      chan: ptr ChannelMpscUnboundedBatch[Val]
 
   template Worker(id: WorkerKind, body: untyped): untyped {.dirty.} =
     if args.ID == id:
@@ -267,7 +242,7 @@ when isMainModule:
     echo "Testing if 15 threads can send data to 1 consumer"
     echo "------------------------------------------------------------------------"
     var threads: array[WorkerKind, Thread[ThreadArgs]]
-    let chan = createSharedU(ChannelMpscUnbounded[Val]) # CreateU is not zero-init
+    let chan = createSharedU(ChannelMpscUnboundedBatch[Val]) # CreateU is not zero-init
     chan[].initialize()
 
     createThread(threads[Receiver], thread_func, ThreadArgs(ID: Receiver, chan: chan))
