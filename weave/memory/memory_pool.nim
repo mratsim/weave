@@ -259,7 +259,9 @@ func getArena(p: pointer): ptr Arena {.inline.} =
 # TODO: metrics
 
 func isUnused(arena: ptr Arena): bool =
-  arena.meta.used - arena.meta.threadFree.peek() == 0
+  let pending = arena.meta.threadFree.peek()
+  ascertain: pending in 0 .. arena.meta.used
+  return arena.meta.used - pending == 0
 
 func isMostlyUsed(arena: ptr Arena): bool =
   ## If more than 7/8 of an Arena is used
@@ -319,8 +321,8 @@ func allocBlock(arena: var Arena): ptr MemBlock =
 
 func release(pool: var TLPoolAllocator, arena: ptr Arena) =
   ## Returns the memory of an arena to the OS
-  if pool.first == arena: pool.first = arena.prev
-  if pool.last == arena: pool.last = arena.next
+  if pool.first == arena: pool.first = arena.next
+  if pool.last == arena: pool.last = arena.prev
   if arena.prev != nil: arena.prev.next = arena.next
   if arena.next != nil: arena.next.prev = arena.prev
 
@@ -342,9 +344,10 @@ func considerRelease(pool: var TLPoolAllocator, arena: ptr Arena) =
   # for example if we just provided a new block and it's returned.
   # As a fast heuristic we check if the arena neighbors are fully used.
   if arena.prev.isMostlyUsed() and arena.next.isMostlyUsed():
-    if arena.prev != pool.first:
+    if pool.numArenas != 2:
       # We probably have the only usable arena in the pool
-      # we special case to allow the pool to return the second arena
+      # we special case to allow the pool to release
+      # the first or last arena when only 2 are left.
       return
   # Other arenas are usable, return memory to the OS
   pool.release(arena)
@@ -762,10 +765,10 @@ when isMainModule:
       freeShared(chan)
       freeShared(pools)
 
-  # genBench(System)
-  # genBench(Nim)
+  genBench(System)
+  genBench(Nim)
   genBench(Pool)
 
-  # benchMultiThreadedNim()
-  # benchMultiThreadedSystem()
+  benchMultiThreadedNim()
+  benchMultiThreadedSystem()
   benchMultiThreadedPool()

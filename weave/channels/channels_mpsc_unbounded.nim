@@ -43,6 +43,7 @@ proc initialize*[T](chan: var ChannelMpscUnbounded[T]) =
   # We keep a dummy node within the queue itself
   # it doesn't need any dynamic allocation which simplify
   # its use in an allocator
+  chan.count.store(0, moRelaxed)
   chan.dummy.reset()
   chan.front = chan.dummy.addr
   chan.back.store(chan.dummy.addr, moRelaxed)
@@ -143,7 +144,10 @@ func peek*(chan: var ChannelMpscUnbounded): int32 {.inline.} =
   ##   the consumer removes them concurrently.
   ##
   ## This is a non-locking operation.
-  result = int32 chan.count.load(moRelaxed)
+  result = int32 chan.count.load(moAcquire)
+
+  # For the consumer it's always positive or zero
+  postCondition: result >= 0
 
 # Sanity checks
 # ------------------------------------------------------------------------------
