@@ -34,7 +34,6 @@ type
     ##
     ## Usage:
     ##   - Requires a pointer type
-    ##   - There is no need to zero-out the padding fields
     ##   - Only trivial objects can transit (no GC, can be copied and no custom destructor)
     ##   - The content of the channel is not destroyed upon channel destruction
     ##
@@ -50,8 +49,12 @@ type
     ## - Messages are guaranteed to be delivered
     ## - Messages will be delivered exactly once
     ## - Linearizability
+    ##
+    ## The channel has a next: Atomic[pointer] field to support
+    ## used in concurrent intrusive lists
   ChannelRaw = object
     buffer {.align:WV_CacheLinePadding.}: Atomic[pointer] # Ensure proper padding if used in sequence of channels
+    next*: Atomic[pointer] # Concurrent intrusive lists
 
 # Internal type-erased implementation
 # ---------------------------------------------------------------

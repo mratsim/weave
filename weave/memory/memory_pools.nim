@@ -29,7 +29,7 @@
 # On NUMA, we need to ensure the locality of the pages
 
 import
-  ../channels/[channels_mpsc_unbounded_batch, channels_mpsc_unbounded],
+  ../channels/channels_mpsc_unbounded_batch,
   ../instrumentation/[contracts, loggers],
   ../config,
   ./allocs,
@@ -38,8 +38,8 @@ import
 # Constants (move in config.nim)
 # ----------------------------------------------------------------------------------
 
-const WV_MemArenaSize {.intdefine.} = 1 shl 16 # 2^15 = 32768 bytes = 128 * 256
-const WV_MemBlockSize {.intdefine.} = 256
+const WV_MemArenaSize  {.intdefine.} = 1 shl 15 # 2^15 = 32768 bytes = 128 * 256
+const WV_MemBlockSize* {.intdefine.} = 256
 
 # Debug
 # ----------------------------------------------------------------------------------
@@ -121,6 +121,7 @@ type
     threadID: Atomic[int32]
 
   Arena = object
+    # TODO: Aligned arenas will create L1 64k aliasing conflicts
     meta {.align: WV_CacheLinePadding.}: Metadata
     # Intrusive queue
     prev, next: ptr Arena
@@ -128,7 +129,7 @@ type
     # Raw memory
     blocks {.align: WV_MemBlockSize.}: array[MaxBlocks, MemBlock]
 
-  TLPoolAllocator = object
+  TLPoolAllocator* = object
     ## Thread-local pool allocator
     ##
     ## To properly manage exits, thread-local pool allocators
@@ -353,11 +354,10 @@ func considerRelease(pool: var TLPoolAllocator, arena: ptr Arena) =
   # for example if we just provided a new block and it's returned.
   # As a fast heuristic we check if the arena neighbors are fully used.
   if arena.prev.isMostlyUsed() and arena.next.isMostlyUsed():
-    if pool.numArenas != 2:
-      # We probably have the only usable arena in the pool
-      # we special case to allow the pool to release
-      # the first or last arena when only 2 are left.
-      return
+    # We probably have the only usable arena in the pool
+    # Question? special case to allow the pool to release
+    #           the first or last arena when only 2 are left.
+    return
   # Other arenas are usable, return memory to the OS
   pool.release(arena)
 
@@ -443,10 +443,11 @@ proc borrow*(pool: var TLPoolAllocator, T: typedesc): ptr T =
   ## If the underlying pool runs out-of-memory, it will reserve more from the OS.
 
   # We try to allocate from the last arena as workload is LIFO-biaised
-  static: doAssert sizeof(T) <= WV_MemBlockSize,
-    $T & "is of size " & $sizeof(T) &
-    ", the maximum object size supported is " &
-    $WV_MemBlockSize & " bytes (WV_MemBlockSize)"
+  # TODO: sizeof Atomics - https://github.com/nim-lang/Nim/issues/12726
+  # static: doAssert sizeof(T) <= WV_MemBlockSize,
+  #   $T & "is of size " & $sizeof(T) &
+  #   ", the maximum object size supported is " &
+  #   $WV_MemBlockSize & " bytes (WV_MemBlockSize)"
 
   if pool.last.meta.free.isNil:
     # Fallback to slow path
@@ -578,6 +579,7 @@ assert sizeof(Arena) == WV_MemArenaSize,
 
 when isMainModule:
   import times, strformat, system/ansi_c, math, strutils
+  import ../channels/channels_mpsc_unbounded
 
   # Single-threaded
   # ----------------------------------------------------------------------------------
@@ -773,8 +775,8 @@ when isMainModule:
       freeShared(chan)
       freeShared(pools)
 
-  # benchSingleThreadedPool(100)
-  # benchSingleThreadedSystem(100)
+  benchSingleThreadedSystem(100)
+  benchSingleThreadedPool(100)
 
   # Note this is probably a worst case scenario for allocators
   # All producers run out of blocks and allocate some

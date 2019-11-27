@@ -27,7 +27,6 @@ type
     ##
     ## Usage:
     ##   - Must be heap-allocated
-    ##   - There is no need to zero-out the padding fields
     ##   - The content of the channel is not destroyed upon channel destruction
     ##
     ## Semantics:
@@ -42,8 +41,12 @@ type
     ## - Messages are guaranteed to be delivered
     ## - Messages will be delivered exactly once
     ## - Linearizability
+    ##
+    ## The channel has next: Atomic[pointer] field to support
+    ## used in concurrent intrusive lists
     buffer {.align:WV_CacheLinePadding.}: T # Ensure proper padding if used in sequence of channels
     full: Atomic[bool]
+    next*: Atomic[pointer] # Concurrent intrusive lists
 
 proc `=`[T](
     dest: var ChannelSpscSingleObject[T],
