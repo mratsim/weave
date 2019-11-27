@@ -158,7 +158,7 @@ const
   MostlyUsedRatio = 8
     ## Beyond 7/8 of its capacity an arena is considered mostly used.
   MaxSlowFrees = 8'i8
-    ## In the slow path, up to 8 pages can be considered for release at once.
+    ## In the slow path, up to 8 arenas can be considered for release at once.
 
 # Data structures
 # ----------------------------------------------------------------------------------
@@ -254,12 +254,12 @@ func getArena(p: pointer): ptr Arena {.inline.} =
 # We assume that "localFree" decrement "used" immediately
 # while threadFree are deferred
 
-func isUnused(arena: ptr Arena): bool =
+func isUnused(arena: ptr Arena): bool {.inline.} =
   let pending = arena.meta.threadFree.peek()
   ascertain: pending in 0 .. arena.meta.used
   return arena.meta.used - pending == 0
 
-func isMostlyUsed(arena: ptr Arena): bool =
+func isMostlyUsed(arena: ptr Arena): bool {.inline.} =
   ## If more than 7/8 of an Arena is used
   ## it is considered mostly used.
   ## A non-existing arena (nil) is also considered used
@@ -273,7 +273,7 @@ func isMostlyUsed(arena: ptr Arena): bool =
   result = arena.blocks.len - arena.meta.used + arena.meta.threadFree.peek() <= threshold
 
 func collect(arena: var Arena, force: bool) =
-  ## Collect garbage memory in the page
+  ## Collect garbage memory in the arena
   ## We only move localFree to free when it's O(1)
   ## except on thread teardown
 
@@ -316,8 +316,8 @@ func collect(arena: var Arena, force: bool) =
     log("Arena   0x%.08x - TID %d - collected garbage, reclaimed %d blocks (%d used)\n",
       arena.addr, arena.meta.threadID.load(moRelaxed), beforeCollect - arena.meta.used, arena.meta.used)
 
-func allocBlock(arena: var Arena): ptr MemBlock =
-  ## Allocate from a page
+func allocBlock(arena: var Arena): ptr MemBlock {.inline.} =
+  ## Allocate from an arena
   preCondition: not arena.meta.free.isNil
   preCondition: arena.meta.used < arena.blocks.len
 
@@ -347,7 +347,7 @@ func release(pool: var TLPoolAllocator, arena: ptr Arena) =
 
   wv_freeAligned(arena)
 
-func considerRelease(pool: var TLPoolAllocator, arena: ptr Arena) =
+func considerRelease(pool: var TLPoolAllocator, arena: ptr Arena) {.inline.} =
   ## Test if an arena memory should be released to the OS
   debugMem:
     log("Pool    0x%.08x - TID %d - considering Arena 0x%.08x for release, %d arenas in pool\n",
