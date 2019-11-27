@@ -40,7 +40,9 @@ proc inspectInfix(node: NimNode): NimNode =
       return node
     of nnkDotExpr:
       return quote do:
-        when `node` is pointer or `node` is ptr:
+        when `node` is pointer or
+             `node` is ptr or
+             `node` is (proc):
           toHex(cast[ByteAddress](`node`) and 0xffff_ffff)
         else:
           $(`node`)

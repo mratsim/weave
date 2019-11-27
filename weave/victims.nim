@@ -10,8 +10,9 @@ import
                sparsesets, prell_deques, flowvars],
   ./contexts, ./config,
   ./instrumentation/[contracts, profilers, loggers],
-  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded],
-  ./thieves, ./loop_splitting
+  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded, channels_lazy_flowvars],
+  ./thieves, ./loop_splitting,
+  ./memory/memory_pools
 
 # Victims - Adaptative task splitting
 # ----------------------------------------------------------------------------------
@@ -161,16 +162,14 @@ proc send(req: sink StealRequest, task: sink Task, numStolen: int32 = 1) {.inlin
   incCounter(tasksSent, numStolen)
 
 LazyFV:
-  import ./channels/channels_legacy
-
   proc convertLazyFlowvar(task: Task) {.inline.} =
     # Allocate the Lazy future on the heap to extend its lifetime
     var lfv: LazyFlowvar
     copyMem(lfv.addr, task.data.addr, sizeof(LazyFlowvar))
     if not lfv.hasChannel:
-      # lfv.allocChannel()
       lfv.hasChannel = true
-      lfv.lazyChan.chan = channel_alloc(int32 sizeof(lfv.lazyChan), 0, Spsc)
+      # TODO, support bigger than pointer size
+      lfv.lazy.chan = newChannelLazyFlowvar(myMemPool(), itemsize = sizeof(LazyChannel))
       incCounter(futuresConverted)
 
   proc batchConvertLazyFlowvar(task: Task) =

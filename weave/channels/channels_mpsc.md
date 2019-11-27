@@ -44,7 +44,7 @@ An alternative implementation using CAS is discussed here:
 - https://groups.google.com/forum/#!topic/comp.programming.threads/M_ecdRRlgvM
 
 It may be possible to use the required "count" atomic field for further optimization as other queues don't need it
-but the likelihood is low given that it's a contended variable by all threads accessign the data-structure
+but the likelihood is low given that it's a contended variable by all threads accessing the data-structure
 compared to "next" field.
 
 A non-intrusive approach would require some memory reclamation of the node which we don't want when implementing

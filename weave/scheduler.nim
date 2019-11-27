@@ -9,7 +9,7 @@ import
   ./instrumentation/[contracts, profilers, loggers],
   ./primitives/barriers,
   ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars, sparsesets],
-  ./channels/[channels_legacy, channels_spsc_single_ptr, channels_mpsc_unbounded],
+  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded, channels_lazy_flowvars],
   ./memory/[persistacks, intrusive_stacks, allocs],
   ./contexts, ./config,
   ./victims, ./loop_splitting,
@@ -203,11 +203,11 @@ EagerFV:
     fv.chan.tryRecv(parentResult)
 LazyFV:
   template isFutReady(): untyped =
-    if fv.lazyFV.hasChannel:
-      ascertain: not fv.lazyFV.lazy_chan.chan.isNil
-      fv.lazyFV.lazyChan.chan.tryRecv(parentResult)
+    if fv.lfv.hasChannel:
+      ascertain: not fv.lfv.lazy.chan.isNil
+      fv.lfv.lazy.chan[].tryRecv(parentResult)
     else:
-      fv.lazyFV.isReady
+      fv.lfv.isReady
 
 proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
   ## Eagerly complete an awaited FlowVar
@@ -276,15 +276,6 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
       profile(enq_deq_task):
         # The memory is reused but not zero-ed
         localCtx.taskCache.add(task)
-
-  LazyFV:
-    # Cleanup the lazy flowvar if allocated or copy directly into result
-    if not fv.lazyFV.hasChannel:
-      ascertain: fv.lazyFV.isReady
-      copyMem(parentResult.addr, fv.lazyFV.lazyChan.buf.addr, sizeof(parentResult))
-    else:
-      ascertain: not fv.lazyFV.lazyChan.chan.isNil
-      fv.lazyFV.lazyChan.chan.delete()
 
 proc schedule*(task: sink Task) =
   ## Add a new task to be scheduled in parallel

@@ -108,7 +108,7 @@ macro spawn*(funcCall: typed): untyped =
 
         let `data` = cast[ptr `futArgsTy`](param) # TODO - restrict
         let res = `fnCall`
-        `data`[0].setWith(res)
+        `data`[0].readyWith(res)
 
     # Create the task
     let freshIdent = ident($retType)
@@ -130,7 +130,7 @@ macro spawn*(funcCall: typed): untyped =
   # echo result.toStrLit
 
 proc sync*[T](fv: FlowVar[T]): T =
-  fv.forwardTo(result)
+  fv.forceComplete(result)
 
 when isMainModule:
   block: # Async without result
@@ -166,7 +166,7 @@ when isMainModule:
 
       init(Runtime)
 
-      let f = async_fib(40)
+      let f = async_fib(20)
 
       sync(Runtime)
       exit(Runtime)

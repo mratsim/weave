@@ -54,6 +54,8 @@ func tryRecv*[T](chan: var ChannelLazyFlowvar, dst: var T): bool {.inline.} =
   ## Returns true if successful (channel was not empty)
   ##
   ## ⚠ Use only in the consumer thread that reads from the channel.
+  preCondition: sizeof(T) == chan.itemsize.int
+
   let full = chan.full.load(moAcquire)
   if not full:
     return false
@@ -66,6 +68,8 @@ func trySend*[T](chan: var ChannelLazyFlowvar, src: sink T): bool {.inline.} =
   ## Reurns true if successful (channel was empty)
   ##
   ## ⚠ Use only in the producer thread that writes from the channel.
+  preCondition: sizeof(T) == chan.itemsize.int
+
   let full = chan.full.load(moAcquire)
   if full:
     return false

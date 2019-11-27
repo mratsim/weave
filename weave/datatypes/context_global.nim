@@ -8,7 +8,7 @@
 import
   ../channels/channels_mpsc_unbounded,
   ../channels/channels_spsc_single_ptr,
-  ../memory/persistacks,
+  ../memory/[persistacks, memory_pools],
   ../config,
   ../primitives/barriers,
   ./sync_types
@@ -42,5 +42,6 @@ type
     threadpool*: ptr UncheckedArray[Thread[WorkerID]]
     numWorkers*: int32
     barrier*: PthreadBarrier # TODO windows support
+    mempool*: ptr UncheckedArray[TlPoolAllocator]
 
     # TODO track workers per socket / NUMA domain

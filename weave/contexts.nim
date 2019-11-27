@@ -8,7 +8,7 @@
 import
   ./datatypes/[context_global, context_thread_local, sync_types],
   ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded],
-  ./memory/[persistacks, intrusive_stacks],
+  ./memory/[persistacks, intrusive_stacks, memory_pools],
   ./config,
   system/ansi_c,
   ./instrumentation/[profilers, loggers, contracts],
@@ -49,6 +49,9 @@ template myTodoBoxes*: Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSin
 
 template myThieves*: ChannelMpscUnbounded[StealRequest] =
   globalCtx.com.thefts[localCtx.worker.ID]
+
+template myMemPool*: TLPoolAllocator =
+  globalCtx.mempool[localCtx.worker.ID]
 
 template workforce*: int32 =
   globalCtx.numWorkers

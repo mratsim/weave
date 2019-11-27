@@ -6,25 +6,23 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../channels/[channels_spsc_single_ptr, channels_spsc_single_object],
-  ../memory/allocs,
+  ../channels/[channels_spsc_single_ptr, channels_spsc_single_object, channels_lazy_flowvars],
+  ../memory/[allocs, memory_pools],
   ../instrumentation/contracts,
-  ../config
-
-# TODO for the Flowvar we need critically need a caching scheme for the channels
-# we use the legacy channels in the mean time
-import ../channels/channels_legacy
+  ../config, ../contexts
 
 type
-  LazyChannel {.union.} = object
-    chan*: ChannelRaw
-    buf*: array[sizeof(ChannelRaw), byte]
+  LazyChannel* {.union.} = object
+    chan*: ptr ChannelLazyFlowvar
+    buf*: array[sizeof(pointer), byte] # for now only support pointers
 
-  LazyFlowvar* = ptr LazyFlowvarObj
-  LazyFlowvarObj = object
-    lazyChan*: LazyChannel
+  LazyFlowVar* = object
+    # No generics allowed at the moment
+    # has converting stack lazy futures to heap is done
+    # deep in the runtime with no access to type information.
     hasChannel*: bool
     isReady*: bool
+    lazy*: LazyChannel
 
   Flowvar*[T] = object
     ## A Flowvar is a simple channel
@@ -33,61 +31,61 @@ type
     # instead of having an extra atomic bool
     # They also use type-erasure to avoid having duplicate code
     # due to generic monomorphization.
+    #
+    # A lazy flowvar has optimization to allocate on the heap only when required
 
-    # when T is ptr:
-    #   chan: ptr ChannelSpscSinglePtr[T]
-    # else:
-    #   chan: ptr ChannelSpscSingleObject[T]
-    when not defined(WV_LazyFlowvar):
-      chan: ChannelLegacy[T]
+    when defined(WV_LazyFlowvar):
+      lfv: ptr LazyFlowVar # alloca allocated
+    elif T is ptr:
+      chan: ptr ChannelSpscSinglePtr[T]
     else:
-      lazyFV: LazyFlowvar
+      chan: ptr ChannelSpscSingleObject[T]
 
 EagerFV:
-  proc newFlowVar*(T: typedesc): Flowvar[T] {.inline.} =
-    # result.chan = wv_allocPtr(result.chan.typeof)
-    result.chan.initialize(int32 sizeof(T))
+  proc newFlowVar*(pool: TLPoolAllocator, T: typedesc): Flowvar[T] {.inline.} =
+    result.chan = pool.borrow(Flowvar[T])
+    result.chan.initialize()
 
-  proc setWith*[T](fv: Flowvar[T], childResult: T) {.inline.} =
+  proc readyWith*[T](fv: Flowvar[T], childResult: T) {.inline.} =
     ## Send the Flowvar result from the child thread processing the task
-    ## to it's parent thread.
-    discard fv.chan.trySend(childResult)
+    ## to its parent thread.
+    let resultSent = fv.chan.trySend(childResult)
+    postCondition: resultSent
 
-  proc forwardTo*[T](fv: Flowvar[T], parentResult: var T) {.inline.} =
+  proc forceComplete*[T](fv: Flowvar[T], parentResult: var T) {.inline.} =
     ## From the parent thread awaiting on the result, force its computation
     ## by eagerly processing only the child tasks spawned by the awaited task
     fv.forceFuture(parentResult)
-    fv.chan.channel_free() # This caches the channel
+    recycle(myID(), fv.chan)
 
 LazyFV:
   # Templates everywhere as we use alloca
   template newFlowVar*(T: typedesc): Flowvar[T] =
-    var fv = cast[Flowvar[T]](alloca(LazyFlowvarObj))
-    fv.lazyFV.lazyChan.chan = nil
-    fv.lazyFV.hasChannel = false
-    fv.lazyFv.isReady = false
+    var fv = cast[Flowvar[T]](alloca(LazyFlowVar))
+    fv.lfv.lazy.chan = nil
+    fv.lfv.hasChannel = false
+    fv.lfv.isReady = false
     fv
 
-  template setWith*[T](fv: Flowvar[T], childResult: T) =
-    if not fv.lazyFV.hasChannel:
-      # TODO: What if sizeof(res) > buffer.
-      #       The buffer is only the size of a pointer
-      ascertain: sizeof(childResult) <= sizeof(fv.lazyFV.lazyChan.buf)
-      copyMem(fv.lazyFV.lazyChan.buf.addr, childResult.unsafeAddr, sizeof(childResult))
-      fv.lazyFv.isReady = true
+  template readyWith*[T](fv: Flowvar[T], childResult: T) =
+    if not fv.lfv.hasChannel:
+      # TODO: buffer the size of T
+      static: doAssert sizeof(childResult) <= sizeof(fv.lfv.lazy.buf)
+      copyMem(fv.lfv.lazy.buf.addr, childResult.unsafeAddr, sizeof(childResult))
+      fv.lfv.isReady = true
     else:
-      ascertain: not fv.lazyFV.lazyChan.chan.isNil
-      discard fv.lazyFV.lazyChan.chan.trySend(childResult)
+      ascertain: not fv.lfv.lazy.chan.isNil
+      discard fv.lfv.lazy.chan[].trySend(childResult)
 
-  template forwardTo*[T](fv: Flowvar[T], parentResult: var T) =
+  template forceComplete*[T](fv: Flowvar[T], parentResult: var T) =
     fv.forceFuture(parentResult)
-    # No need if its stack alloc
-    # otherwise dealt with in forceFuture
+    # Reclaim memory
+    if not fv.lfv.hasChannel:
+      ascertain: fv.lfv.isReady
+      copyMem(parentResult.addr, fv.lfv.lazy.buf.addr, sizeof(parentResult))
+    else:
+      ascertain: not fv.lfv.lazy.chan.isNil
+      recycle(myID(), fv.lfv.lazy.chan)
 
-  proc allocChannel*(lfv: var LazyFlowvar) =
-    preCondition: not lfv.hasChannel
-    lfv.hasChannel = true
-    lfv.lazyChan.chan = channel_alloc(int32 sizeof(lfv.lazyChan), 0, Spsc)
-
-  proc delete*(chan: ChannelRaw) =
-    channel_free(chan)
+# TODO destructors for automatic management
+#      of the user-visible flowvars
