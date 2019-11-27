@@ -38,7 +38,7 @@ proc initialize*[T](chan: var ChannelMpscUnboundedBatch[T]) {.inline.}=
 
 proc trySend*[T](chan: var ChannelMpscUnboundedBatch[T], src: sink T): bool {.inline.}=
   ## Send an item to the back of the channel
-  ## As the channel as unbounded capacity, this should never fail
+  ## As the channel has unbounded capacity, this should never fail
 
   debug: log("Channel MPSC 0x%.08x: sending       0x%.08x\n", chan.addr, src)
 
@@ -47,6 +47,19 @@ proc trySend*[T](chan: var ChannelMpscUnboundedBatch[T], src: sink T): bool {.in
   fence(moRelease)
   let oldBack = chan.back.exchange(src, moRelaxed)
   cast[T](oldBack).next.store(src, moRelaxed) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
+
+  return true
+
+proc trySendBatch*[T](chan: var ChannelMpscUnboundedBatch[T], first, last: sink T, count: SomeInteger): bool {.inline.}=
+  ## Send a list of items to the back of the channel
+  ## They should be linked together by their next field
+  ## As the channel has unbounded capacity this should never fail
+
+  discard chan.count.fetchAdd(int(count), moRelaxed)
+  last.next.store(nil, moRelaxed)
+  fence(moRelease)
+  let oldBack = chan.back.exchange(last, moRelaxed)
+  cast[T](oldBack).next.store(first, moRelaxed) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
 
   return true
 
@@ -86,22 +99,25 @@ proc tryRecv*[T](chan: var ChannelMpscUnboundedBatch[T], dst: var T): bool =
     dst = first
     return true
 
-  # We lost but now we know that there is an extra node
-  cpuRelax() # Would be nice to not need this but it seems like
-  cpuRelax() # fibonacci or the memory pool test thrashes or livelock
-             # if consumer doesn't backoff
-  let next2 = first.next.load(moRelaxed)
-  if not next2.isNil:
-    prefetch(first)
-    discard chan.count.fetchSub(1, moRelaxed)
-    chan.front.next.store(next2, moRelaxed)
-    # Prevent reordering
-    fence(moAcquire)
-    dst = first
-    return true
+  # We lost but now we know that there is an extra node coming very soon
+  var next = first.next.load(moRelaxed)
+  while next.isNil:
+    # We spinlock, unfortunately there seems to be a livelock potential
+    # or contention issue if we don't use cpuRelax
+    # at least twice or just bail out if next is nil.
+    # Replace this spinlock by "if not next.isNil" and run the "memory pool" bench
+    # or fibonacci and the program will get stuck.
+    # The queue should probably be model checked or run through Relacy
+    cpuRelax()
+    next = first.next.load(moRelaxed)
 
-  # It wasn't linked yet to the list, bail out
-  return false
+  prefetch(first)
+  discard chan.count.fetchSub(1, moRelaxed)
+  chan.front.next.store(next, moRelaxed)
+  # Prevent reordering
+  fence(moAcquire)
+  dst = first
+  return true
 
 proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var T): int32 =
   ## Try receiving all items buffered in the channel
@@ -261,19 +277,6 @@ when isMainModule:
       c_free(val)
 
   proc thread_func_sender(args: ThreadArgs) =
-
-    # Worker RECEIVER:
-    # ---------
-    # <- chan
-    # <- chan
-    # <- chan
-    #
-    # Worker SENDER:
-    # ---------
-    # chan <- 42
-    # chan <- 53
-    # chan <- 64
-
     for j in 0 ..< NumVals:
       let val = valAlloc()
       val.val = ord(args.ID) * Padding + j
@@ -286,18 +289,6 @@ when isMainModule:
         discard
 
   proc thread_func_receiver(args: ThreadArgs) =
-
-    # Worker RECEIVER:
-    # ---------
-    # <- chan
-    # <- chan
-    # <- chan
-    #
-    # Worker SENDER:
-    # ---------
-    # chan <- 42
-    # chan <- 53
-    # chan <- 64
     var counts: array[Sender1..Sender15, int]
     for j in 0 ..< 15 * NumVals:
       var val: Val
@@ -332,18 +323,6 @@ when isMainModule:
     echo "Success"
 
   proc thread_func_receiver_batch(args: ThreadArgs) =
-
-    # Worker RECEIVER:
-    # ---------
-    # <- chan
-    # <- chan
-    # <- chan
-    #
-    # Worker SENDER:
-    # ---------
-    # chan <- 42
-    # chan <- 53
-    # chan <- 64
     var counts: array[Sender1..Sender15, int]
     var received = 0
     var batchID = 0
