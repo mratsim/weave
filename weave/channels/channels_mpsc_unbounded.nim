@@ -63,18 +63,11 @@ proc trySendImpl[T](chan: var ChannelMpscUnbounded[T], src: sink T, count: stati
   return true
 
 proc trySend*[T](chan: var ChannelMpscUnbounded[T], src: sink T): bool {.inline.}=
-  # log("Channel 0x%.08x trySend - front: 0x%.08x (%d), second: 0x%.08x, back: 0x%.08x\n", chan.addr, chan.front, chan.front.val, chan.front.next, chan.back)
   chan.trySendImpl(src, count = true)
 
 proc reenqueueDummy[T](chan: var ChannelMpscUnbounded[T]) =
   # log("Channel 0x%.08x reenqueing dummy\n")
   discard chan.trySendImpl(chan.dummy.addr, count = false)
-
-type RecvState = enum
-  Entry
-  SuccessfulExit
-  Race
-  FailedExit
 
 proc tryRecv*[T](chan: var ChannelMpscUnbounded[T], dst: var T): bool =
   ## Try receiving the next item buffered in the channel
@@ -83,38 +76,45 @@ proc tryRecv*[T](chan: var ChannelMpscUnbounded[T], dst: var T): bool =
   ## enqueues a new element while the consumer was dequeing it
   checkInvariants()
 
-  var state {.goto.} = Entry
-  var first: T
-    ## The item we are trying to dequeue
-  var next: T
-    ## The second item (after first)
+  var first = chan.front
+  var next = cast[T](first.next.load(moRelaxed)) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
 
-  case state
-  of Entry:
-    first = chan.front
-    next = cast[T](first.next.load(moRelaxed)) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
+  if first == chan.dummy.addr:
+    # First node is the dummy
+    if next.isNil:
+      # Dummy has no next node
+      return false
+    # Overwrite the dummy, with the real first element
+    chan.front = next
+    first = next
+    next = cast[T](next.next.load(moRelaxed))
 
-    # log("Channel 0x%.08x tryRecv - first: 0x%.08x, next: 0x%.08x, last: 0x%.08x\n",
-    #   chan.addr, first, next, chan.back)
-
-    if first == chan.dummy.addr:
-      # First node is the dummy
-      if next.isNil:
-        # Dummy has no next node
-        return false
-      # Overwrite the dummy, with the real first element
-      chan.front = next
-      first = next
-      next = cast[T](next.next.load(moRelaxed))
-
-    if not next.isNil:
-      # Fast-path
-      state = SuccessfulExit
-    else:
-      state = Race
-
+  # Fast-path
+  if not next.isNil:
+    # second element exist, setup the queue, only consumer touches the front
+    chan.front = next                     # switch the front
+    prefetch(first.next.load(moRelaxed))
+    # Publish the changes
+    fence(moAcquire)
+    dst = first
+    discard chan.count.fetchSub(1, moRelaxed)
+    return true
   # End fast-path
-  of SuccessfulExit:
+
+  # No second element, but we really need something to take
+  # the place of the first, have a look on the producer side
+  fence(moAcquire)
+  let last = chan.back.load(moRelaxed)
+  if first != last:
+    # A producer got ahead of us, spurious failure
+    return false
+
+  # Reenqueue dummy, it is now in the second slot or later
+  chan.reenqueueDummy()
+  # Reload the second item
+  next = cast[T](first.next.load(moRelaxed))
+
+  if not next.isNil:
     # second element exist, setup the queue, only consumer touches the front
     chan.front = next                     # switch the front
     prefetch(first.next.load(moRelaxed))
@@ -124,125 +124,10 @@ proc tryRecv*[T](chan: var ChannelMpscUnbounded[T], dst: var T): bool =
     discard chan.count.fetchSub(1, moRelaxed)
     return true
 
-  of Race:
-    # No second element, but we really need something to take
-    # the place of the first, have a look on the producer side
-    fence(moAcquire)
-    let last = chan.back.load(moRelaxed)
-    if first != last:
-      # A producer got ahead of us, spurious failure
-      state = FailedExit
-
-    # Reenqueue dummy, it is now in the second slot or later
-    chan.reenqueueDummy()
-    # Reload the second item
-    next = cast[T](first.next.load(moRelaxed))
-
-    if not next.isNil:
-      state = SuccessfulExit
-    else:
-      # Dummy was not published in time but it is in the queue
-      discard # fall through
-      # state = FailedExit
-
-  of FailedExit:
-    return false
-
-type RecvBatchState = enum
-  BatchEntry
-  BatchDummy
-  BatchDispatch
-  Batching
-  BatchRace
-
-template checkBatchPostConditions(): untyped =
-  postCondition:
-    if result > 0: bLast.next.load(moRelaxed) == chan.front
-    else: true
-  postCondition: not chan.front.isNil
-
-proc tryRecvBatch*[T](chan: var ChannelMpscUnbounded[T], bFirst, bLast: var T): int32 =
-  ## Try receiving all items buffered in the channel
-  ## Returns true if at least some items are dequeued.
-  ## There might be competition with producers for the last item
-  ##
-  ## Items are returned as a linked list
-  ## Returns the number of items received
-
-  checkInvariants()
-
-  var state {.goto.} = BatchEntry
-  var next: T
-    ## The current item evaluated
-  var front: T
-    ## The previous good item
-
-  case state
-  of BatchEntry:
-    bFirst = chan.front
-    front = chan.front
-    next = cast[T](front.next.load(moRelaxed)) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
-
-    # fall through
-  of BatchDispatch:
-    if front == chan.dummy.addr:
-      state = BatchDummy
-    elif next == nil:
-      state = BatchRace
-    else:
-      state = Batching
-
-  of BatchDummy: # front == dummy, next == node after
-    # We encountered a dummy node
-    if next.isNil:
-      # No more items, leave the dummy node at chan.front
-      if result > 0:
-        # If we receive some, we need to move pointers
-        discard chan.count.fetchSub(result, moRelaxed)
-      checkBatchPostConditions()
-      postCondition: result <= 126
-      return
-    else:
-      # More nodes after the dummy
-      chan.front = next
-      front = next
-      next = cast[T](next.next.load(moRelaxed))
-      state = BatchDispatch
-
-  of Batching: # next == normal
-    # We encountered a normal node
-    chan.front = next
-    fence(moAcquire)
-    result += 1
-    bLast = front
-    front = next
-    next = cast[T](front.next.load(moRelaxed))
-    state = BatchDispatch
-
-  of BatchRace: # next == nil so bLast == chan.back
-    # The queue always need at least an item
-    # we exit after ensuring its state
-
-    let last = chan.back.load(moAcquire)
-    if front != last:
-      # A producer got head of us and the channel back moved
-      checkBatchPostConditions()
-      postCondition: result <= 126
-      return
-
-    chan.reenqueueDummy()
-    next = cast[T](front.next.load(moRelaxed))
-
-    if not next.isNil:
-      # Advance one more
-      chan.front = next
-      fence(moAcquire)
-      result += 1
-      bLast = front
-      discard chan.count.fetchSub(result, moRelaxed)
-    checkBatchPostConditions()
-    postCondition: result <= 126
-    return
+  # No empty element?! There was a race in enqueueing
+  # and the new "next" still isn't published
+  # spurious failure
+  return false
 
 func peek*(chan: var ChannelMpscUnbounded): int32 {.inline.} =
   ## Estimates the number of items pending in the channel
@@ -254,6 +139,9 @@ func peek*(chan: var ChannelMpscUnbounded): int32 {.inline.} =
   ##
   ## This is a non-locking operation.
   result = int32 chan.count.load(moRelaxed)
+
+  # For the consumer it's always positive or zero
+  postCondition: result >= 0
 
 # Sanity checks
 # ------------------------------------------------------------------------------
@@ -360,6 +248,9 @@ when isMainModule:
         doAssert val.val == counts[sender] + ord(sender) * Padding, "Incorrect value: " & $val.val
         inc counts[sender]
         valFree(val)
+
+      for count in counts:
+        doAssert count == NumVals
 
     Worker(Sender1..Sender15):
       for j in 0 ..< NumVals:

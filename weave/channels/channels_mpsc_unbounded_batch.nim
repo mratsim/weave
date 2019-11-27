@@ -90,6 +90,9 @@ proc tryRecv*[T](chan: var ChannelMpscUnboundedBatch[T], dst: var T): bool =
     return true
 
   # We lost again but now we know that there is an extra node
+  cpuRelax() # Would be nice to not need this but it seems like
+  cpuRelax() # fibonacci or the memory pool test thrashes or livelock
+             # if consumer doesn't backoff
   let next2 = first.next.load(moRelaxed)
   if not next2.isNil:
     discard chan.count.fetchSub(1, moRelaxed)
@@ -222,6 +225,9 @@ when isMainModule:
         doAssert val.val == counts[sender] + ord(sender) * Padding, "Incorrect value: " & $val.val
         inc counts[sender]
         valFree(val)
+
+      for count in counts:
+        doAssert count == NumVals
 
     Worker(Sender1..Sender15):
       for j in 0 ..< NumVals:
