@@ -628,9 +628,6 @@ when isMainModule:
     let stop = cpuTime()
     echo &"Single-threaded: System alloc for {NumAllocs} blocks: {stop - start:.4f} s"
 
-  # benchSingleThreadedPool(100)
-  # benchSingleThreadedSystem(100)
-
   # Multi-threaded
   # ----------------------------------------------------------------------------------
 
@@ -648,9 +645,6 @@ when isMainModule:
                        body: untyped): untyped =
     while not chan.tryRecv(data):
       body
-
-  const NumVals = 1000000
-  const Padding = 10 * NumVals # Pad with a 0 so that iteration 10 of thread 3 is 3010 with 99 max iters
 
   type
     WorkerKind = enum
@@ -686,7 +680,10 @@ when isMainModule:
       Nim
       Pool
 
-  template genBench(Alloc: untyped): untyped =
+  template genBench(Alloc: untyped, NumVals: static int): untyped =
+    const Padding = 10 * NumVals # Pad with a 0 so that iteration 10 of thread 3 is 3010 with 99 max iters
+
+
     proc `thread_func Alloc`(args: ThreadArgs) =
       when Alloc == Pool:
         let pool = args.pool
@@ -776,11 +773,19 @@ when isMainModule:
       freeShared(chan)
       freeShared(pools)
 
-  # genBench(Nim)
+  # benchSingleThreadedPool(100)
+  # benchSingleThreadedSystem(100)
+
+  # Note this is probably a worst case scenario for allocators
+  # All producers run out of blocks and allocate some
+  # and the consumer needs to return them
+  # and then the producers have too much
+
+  # genBench(Nim, NumVals = 10000)
   # benchMultiThreadedNim()
 
-  genBench(System)
+  genBench(System, NumVals = 10000)
   benchMultiThreadedSystem()
 
-  genBench(Pool)
+  genBench(Pool, NumVals = 10000)
   benchMultiThreadedPool()
