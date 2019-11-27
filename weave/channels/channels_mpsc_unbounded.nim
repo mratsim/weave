@@ -46,6 +46,7 @@ proc initialize*[T](chan: var ChannelMpscUnbounded[T]) =
   chan.dummy.reset()
   chan.front = chan.dummy.addr
   chan.back.store(chan.dummy.addr, moRelaxed)
+  chan.count.store(0, moRelaxed)
 
 proc trySendImpl[T](chan: var ChannelMpscUnbounded[T], src: sink T, count: static bool): bool {.inline.}=
   ## Send an item to the back of the channel
@@ -93,8 +94,8 @@ proc tryRecv*[T](chan: var ChannelMpscUnbounded[T], dst: var T): bool =
     first = chan.front
     next = cast[T](first.next.load(moRelaxed)) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
 
-    # log("Channel 0x%.08x tryRecv - first: 0x%.08x (%d), next: 0x%.08x (%d), last: 0x%.08x\n",
-    #   chan.addr, first, first.val, next, if not next.isNil: next.val else: 0, chan.back)
+    # log("Channel 0x%.08x tryRecv - first: 0x%.08x, next: 0x%.08x, last: 0x%.08x\n",
+    #   chan.addr, first, next, chan.back)
 
     if first == chan.dummy.addr:
       # First node is the dummy
@@ -140,15 +141,114 @@ proc tryRecv*[T](chan: var ChannelMpscUnbounded[T], dst: var T): bool =
     if not next.isNil:
       state = SuccessfulExit
     else:
-      state = FailedExit
+      # Dummy was not published in time but it is in the queue
+      discard # fall through
+      # state = FailedExit
 
   of FailedExit:
     return false
 
-proc tryRecvBatch*[T](chan: var ChannelMpscUnbounded[T], bFirst, bLast: var T): bool =
+type RecvBatchState = enum
+  BatchEntry
+  BatchDummy
+  BatchDispatch
+  Batching
+  BatchRace
+
+template checkBatchPostConditions(): untyped =
+  postCondition:
+    if result > 0: bLast.next.load(moRelaxed) == chan.front
+    else: true
+  postCondition: not chan.front.isNil
+
+proc tryRecvBatch*[T](chan: var ChannelMpscUnbounded[T], bFirst, bLast: var T): int32 =
   ## Try receiving all items buffered in the channel
   ## Returns true if at least some items are dequeued.
   ## There might be competition with producers for the last item
+  ##
+  ## Items are returned as a linked list
+  ## Returns the number of items received
+
+  checkInvariants()
+
+  var state {.goto.} = BatchEntry
+  var next: T
+    ## The current item evaluated
+  var front: T
+    ## The previous good item
+
+  case state
+  of BatchEntry:
+    bFirst = chan.front
+    front = chan.front
+    next = chan.front
+
+    # fall through
+  of BatchDispatch:
+    if next == chan.dummy.addr:
+      state = BatchDummy
+    elif next == nil:
+      state = BatchRace
+    else:
+      state = Batching
+
+  of BatchDummy: # next == dummy
+    # We encountered a dummy node
+    let last = front                          # Save the last good node
+    front = next                              # Move front to dummy
+    next = cast[T](next.next.load(moRelaxed)) # Checkout the node after dummy
+    if next.isNil:
+      # No more items, leave the dummy node at chan.front
+      if result > 0:
+        # If we receive some, we need to move pointers
+        discard chan.count.fetchSub(result, moRelaxed)
+        chan.front = front
+        fence(moAcquire)
+        bLast = last
+      checkBatchPostConditions()
+      return
+    else:
+      # More nodes after the dummy
+      state = BatchDispatch
+
+  of Batching: # next == normal
+    # We encountered a normal node
+    bLast = front
+    front = next
+    fence(moAcquire)
+    result += 1
+    next = cast[T](next.next.load(moRelaxed))
+    state = BatchDispatch
+
+  of BatchRace: # next == nil so bLast == chan.back
+    # The queue always need at least an item
+    # we exit after ensuring its state
+
+    let last = chan.back.load(moAcquire)
+    if front != last:
+      # A producer got head of us and the channel back moved
+      chan.front = front
+      checkBatchPostConditions()
+      return
+
+    chan.reenqueueDummy()
+    next = cast[T](front.next.load(moRelaxed))
+
+    if not next.isNil:
+      # Advance one more
+      chan.front = next
+      fence(moAcquire)
+      bLast = front
+      result += 1
+      discard chan.count.fetchSub(result, moRelaxed)
+      checkBatchPostConditions()
+      return
+    else:
+      # Stay at the position
+      chan.front = front
+      discard chan.count.fetchSub(result, moRelaxed)
+      checkBatchPostConditions()
+      return
 
 func peek*(chan: var ChannelMpscUnbounded): int32 {.inline.} =
   ## Estimates the number of items pending in the channel

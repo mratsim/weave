@@ -178,23 +178,10 @@ iterator items(head: ptr MemBlock): ptr MemBlock =
     if cur.isNil:
       break
 
-template addTo(a: var Arena, freeField: untyped{ident}, b: ptr MemBlock) =
+func prepend(a, b: ptr MemBlock) {.inline.} =
   preCondition: not b.isNil
-  preCondition: a.meta.used > 0
-
-  if not a.meta.`freeField`.isNil:
-    b.next.store(a.meta.`freeField`, moRelaxed)
-  else:
-    b.next.store(nil, moRelaxed)
-
-  a.meta.`freeField` = b
-  a.meta.used -= 1
-
-func addToLocalFree(a: var Arena, b: ptr MemBlock) {.inline.} =
-  addTo(a, localFree, b)
-
-func addToFree(a: var Arena, b: ptr MemBlock) {.inline.} =
-  addTo(a, free, b)
+  preCondition: not a.isNil
+  b.next.store(a, moRelaxed)
 
 func append(pool: var TLPoolAllocator, arena: ptr Arena) =
   preCondition: arena.next.isNil
@@ -259,6 +246,9 @@ func getArena(p: pointer): ptr Arena {.inline.} =
 # ----------------------------------------------------------------------------------
 # TODO: metrics
 
+# We assume that "localFree" decrement "used" immediately
+# while threadFree are deferred
+
 func isUnused(arena: ptr Arena): bool =
   let pending = arena.meta.threadFree.peek()
   ascertain: pending in 0 .. arena.meta.used
@@ -288,18 +278,27 @@ func collect(arena: var Arena, force: bool) =
       arena.meta.free = arena.meta.localFree
       arena.meta.localFree = nil
     elif force:
-      # Slow path: only on thread teardown
+      # Very slow path: only on thread teardown
       for memBlock in arena.meta.localFree:
-        arena.addToFree(memBlock)
+        arena.meta.free.prepend(memBlock)
       arena.meta.localFree = nil
       debugMem:
         log("Arena   0x%.08x - TID %d - collecting localFree, slow path (reclaimed %d)\n",
           arena.addr, arena.meta.threadID, arena.blocks.len - arena.meta.used)
 
-  var memBlock: ptr MemBlock
-  while arena.meta.threadFree.tryRecv(memBlock):
-    # TODO: batch receive
-    arena.addToFree(memBlock)
+  var first, last: ptr MemBlock
+  let count = arena.meta.threadFree.tryRecvBatch(first, last)
+
+  debugMem:
+    log("Arena   0x%.08x - TID %d - collected garbage, batch threadFree %d blocks (%d used)\n",
+      arena.addr, arena.meta.threadID.load(moRelaxed), count, arena.meta.used)
+
+  if count > 0:
+    if arena.meta.free.isNil:
+      arena.meta.free = first
+    else:
+      arena.meta.free.prepend(last)
+    arena.meta.used -= count
 
   debugMem:
     log("Arena   0x%.08x - TID %d - collected garbage, reclaimed %d blocks (%d used)\n",
@@ -470,7 +469,12 @@ proc recycle*[T](myThreadID: int32, p: ptr T) =
 
   if myThreadID == arena.meta.threadID.load(moRelaxed):
     # thread-local free
-    arena[].addToLocalFree(p)
+    if arena.meta.localFree.isNil:
+      p.next.store(nil, moRelaxed)
+      arena.meta.localFree = p
+    else:
+      arena.meta.localFree.prepend(p)
+    arena.meta.used -= 1
     if unlikely(arena.isUnused()):
       # If an arena is unused, we can try releasing it immediately
       arena.allocator[].considerRelease(arena)
@@ -634,7 +638,7 @@ when isMainModule:
     while not chan.tryRecv(data):
       body
 
-  const NumVals = 1000000
+  const NumVals = 1000
   const Padding = 10 * NumVals # Pad with a 0 so that iteration 10 of thread 3 is 3010 with 99 max iters
 
   type
@@ -781,8 +785,8 @@ when isMainModule:
   # genBench(Nim)
   # benchMultiThreadedNim()
 
-  genBench(System)
-  benchMultiThreadedSystem()
+  # genBench(System)
+  # benchMultiThreadedSystem()
 
   genBench(Pool)
   benchMultiThreadedPool()
