@@ -49,12 +49,8 @@ type
     ## - Messages are guaranteed to be delivered
     ## - Messages will be delivered exactly once
     ## - Linearizability
-    ##
-    ## The channel has a next: Atomic[pointer] field to support
-    ## used in concurrent intrusive lists
   ChannelRaw = object
     buffer {.align:WV_CacheLinePadding.}: Atomic[pointer] # Ensure proper padding if used in sequence of channels
-    next*: Atomic[pointer] # Concurrent intrusive lists
 
 # Internal type-erased implementation
 # ---------------------------------------------------------------
