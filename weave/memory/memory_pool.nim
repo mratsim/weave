@@ -97,7 +97,7 @@ type
     # Freed blocks, can be allocated on the fast path
     free: ptr MemBlock
     # Number of blocks in use
-    used: range[int32(0) .. high(int32)] # TODO narrow range
+    used: range[0'i32 .. 126'i32] # (WV_MemArenaSize - SizeofMetadata) div WV_MemBlockSize
     # Arena owner
     threadID: Atomic[int32]
 
@@ -272,6 +272,8 @@ func collect(arena: var Arena, force: bool) =
   ## We only move localFree to free when it's O(1)
   ## except on thread teardown
 
+  let beforeCollect = arena.meta.used
+
   if not arena.meta.localFree.isNil:
     if likely(arena.meta.free.isNil):
       # Fast path
@@ -286,12 +288,16 @@ func collect(arena: var Arena, force: bool) =
         log("Arena   0x%.08x - TID %d - collecting localFree, slow path (reclaimed %d)\n",
           arena.addr, arena.meta.threadID, arena.blocks.len - arena.meta.used)
 
+  debugMem:
+    log("Arena   0x%.08x - TID %d - collect, threadFree.peek() %d blocks (%d used or pending)\n",
+      arena.addr, arena.meta.threadID.load(moRelaxed), arena.meta.threadFree.peek(), arena.meta.used)
+
   var first, last: ptr MemBlock
   let count = arena.meta.threadFree.tryRecvBatch(first, last)
 
   debugMem:
-    log("Arena   0x%.08x - TID %d - collected garbage, batch threadFree %d blocks (%d used)\n",
-      arena.addr, arena.meta.threadID.load(moRelaxed), count, arena.meta.used)
+    log("Arena   0x%.08x - TID %d - collect, batched threadFree %d blocks (%d blocks used)\n",
+      arena.addr, arena.meta.threadID.load(moRelaxed), count, arena.meta.used - count)
 
   if count > 0:
     if arena.meta.free.isNil:
@@ -302,7 +308,7 @@ func collect(arena: var Arena, force: bool) =
 
   debugMem:
     log("Arena   0x%.08x - TID %d - collected garbage, reclaimed %d blocks (%d used)\n",
-      arena.addr, arena.meta.threadID, arena.blocks.len - arena.meta.used, arena.meta.used)
+      arena.addr, arena.meta.threadID.load(moRelaxed), beforeCollect - arena.meta.used, arena.meta.used)
 
 func allocBlock(arena: var Arena): ptr MemBlock =
   ## Allocate from a page
@@ -565,7 +571,7 @@ assert sizeof(Arena) == WV_MemArenaSize,
   " but the asked WV_MemArenaSize was " & $WV_MemArenaSize
 
 when isMainModule:
-  import times, strformat, system/ansi_c, math
+  import times, strformat, system/ansi_c, math, strutils
   import ../primitives/barriers
 
   # Single-threaded
@@ -728,7 +734,7 @@ when isMainModule:
           var val: Val
           args.chan[].recvLoop(val):
             discard
-          # log("Receiver got: %d at address 0x%.08x\n", val.val, val)
+          log("Receiver got: %d at address 0x%.08x\n", val.val, val)
           let sender = WorkerKind(val.val div Padding)
           doAssert val.val == counts[sender] + ord(sender) * Padding, "Incorrect value: " & $val.val
           inc counts[sender]
@@ -739,8 +745,8 @@ when isMainModule:
           let val = valAlloc(Alloc)
           val.val = ord(args.ID) * Padding + j
 
-          # const pad = spaces(8)
-          # echo pad.repeat(ord(args.ID)), 'S', $ord(args.ID), ": ", val.val
+          const pad = spaces(8)
+          echo pad.repeat(ord(args.ID)), 'S', $ord(args.ID), ": ", val.val
 
           args.chan[].sendLoop(val):
             discard
