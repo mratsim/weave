@@ -29,7 +29,7 @@
 # On NUMA, we need to ensure the locality of the pages
 
 import
-  ../channels/channels_mpsc_unbounded,
+  ../channels/channels_mpsc_unbounded_batch,
   ../instrumentation/[contracts, loggers],
   ../config,
   ./allocs,
@@ -90,7 +90,7 @@ type
     # ⚠️ Consumer thread field must be at the end
     #    to prevent cache-line contention
     #    and save on space (no padding on the next field)
-    threadFree {.align: WV_CacheLinePadding.}: ChannelMpscUnbounded[ptr MemBlock]
+    threadFree {.align: WV_CacheLinePadding.}: ChannelMpscUnboundedBatch[ptr MemBlock]
     # Freed blocks, kept separately to deterministically trigger slow path
     # after an amortized amount of allocation
     localFree: ptr MemBlock
@@ -103,7 +103,7 @@ type
 
 const SizeofMetadata: int = (block:
     var size: int
-    size += 280                               # ChannelMpscUnbounded
+    size += 280                               # ChannelMpscUnboundedBatch
     size += sizeof(ptr MemBlock)              # localFree
     size += sizeof(ptr MemBlock)              # free
     size += sizeof(int32)                     # used
@@ -632,13 +632,13 @@ when isMainModule:
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}
 
-  template sendLoop[T](chan: var ChannelMpscUnbounded[T],
+  template sendLoop[T](chan: var ChannelMpscUnboundedBatch[T],
                        data: sink T,
                        body: untyped): untyped =
     while not chan.trySend(data):
       body
 
-  template recvLoop[T](chan: var ChannelMpscUnbounded[T],
+  template recvLoop[T](chan: var ChannelMpscUnboundedBatch[T],
                        data: var T,
                        body: untyped): untyped =
     while not chan.tryRecv(data):
@@ -673,7 +673,7 @@ when isMainModule:
 
     ThreadArgs = object
       ID: WorkerKind
-      chan: ptr ChannelMpscUnbounded[Val]
+      chan: ptr ChannelMpscUnboundedBatch[Val]
       pool: ptr TLPoolAllocator
       barrier: ptr PthreadBarrier
 
@@ -734,7 +734,7 @@ when isMainModule:
           var val: Val
           args.chan[].recvLoop(val):
             discard
-          log("Receiver got: %d at address 0x%.08x\n", val.val, val)
+          # log("Receiver got: %d at address 0x%.08x\n", val.val, val)
           let sender = WorkerKind(val.val div Padding)
           doAssert val.val == counts[sender] + ord(sender) * Padding, "Incorrect value: " & $val.val
           inc counts[sender]
@@ -745,8 +745,8 @@ when isMainModule:
           let val = valAlloc(Alloc)
           val.val = ord(args.ID) * Padding + j
 
-          const pad = spaces(8)
-          echo pad.repeat(ord(args.ID)), 'S', $ord(args.ID), ": ", val.val
+          # const pad = spaces(8)
+          # echo pad.repeat(ord(args.ID)), 'S', $ord(args.ID), ": ", val.val
 
           args.chan[].sendLoop(val):
             discard
@@ -760,7 +760,7 @@ when isMainModule:
 
       # discard pthread_barrier_init(barrier, nil, threads.len.int32)
 
-      let chan = createSharedU(ChannelMpscUnbounded[Val]) # CreateU is not zero-init
+      let chan = createSharedU(ChannelMpscUnboundedBatch[Val]) # CreateU is not zero-init
       chan[].initialize()
 
       pools = cast[typeof pools](createSharedU(TLPoolAllocator, pools[].len))
@@ -791,8 +791,8 @@ when isMainModule:
   # genBench(Nim)
   # benchMultiThreadedNim()
 
-  # genBench(System)
-  # benchMultiThreadedSystem()
+  genBench(System)
+  benchMultiThreadedSystem()
 
   genBench(Pool)
   benchMultiThreadedPool()

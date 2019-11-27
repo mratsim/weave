@@ -68,9 +68,9 @@ proc tryRecv*[T](chan: var ChannelMpscUnboundedBatch[T], dst: var T): bool =
     let next = first.next.load(moRelaxed)
     if not next.isNil:
       # Not competing with producers
+      prefetch(first)
       discard chan.count.fetchSub(1, moRelaxed)
       chan.front.next.store(next, moRelaxed)
-      prefetch(first)
       # Prevent reordering
       fence(moAcquire)
       dst = first
@@ -89,22 +89,76 @@ proc tryRecv*[T](chan: var ChannelMpscUnboundedBatch[T], dst: var T): bool =
     dst = first
     return true
 
-  # We lost again but now we know that there is an extra node
+  # We lost but now we know that there is an extra node
   cpuRelax() # Would be nice to not need this but it seems like
   cpuRelax() # fibonacci or the memory pool test thrashes or livelock
              # if consumer doesn't backoff
   let next2 = first.next.load(moRelaxed)
   if not next2.isNil:
+    prefetch(first)
     discard chan.count.fetchSub(1, moRelaxed)
     chan.front.next.store(next2, moRelaxed)
-    prefetch(first)
     # Prevent reordering
     fence(moAcquire)
     dst = first
     return true
 
-  # We lost again
+  # It wasn't linked yet to the list, bail out
   return false
+
+proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var T): int32 =
+  ## Try receiving all items buffered in the channel
+  ## Returns true if at least some items are dequeued.
+  ## There might be competition with producers for the last item
+  ##
+  ## Items are returned as a linked list
+  ## Returns the number of items received
+
+  result = 0
+
+  var front = cast[T](chan.front.next.load(moRelaxed))
+  bFirst = front
+  if front.isNil:
+    return
+
+  var next = cast[T](front.next.load(moRelaxed))
+  while not next.isNil:
+    result += 1
+    bLast = front
+    front = next
+    next = cast[T](next.next.load(moRelaxed))
+
+  # Competing with producers at the back
+  var last = chan.back.load(moRelaxed)
+  if front != last:
+    # We lose the competition, bail out
+    chan.front.next.store(front, moRelaxed)
+    discard chan.count.fetchSub(result, moRelaxed)
+    return
+
+  chan.front.next.store(nil, moRelaxed)
+  if compareExchange(chan.back, last, chan.front.addr, moAcquireRelease):
+    # We won and replaced the last node with the channel front
+    prefetch(front)
+    result += 1
+    discard chan.count.fetchSub(result, moRelaxed)
+    bLast = front
+    return
+
+  # We lost but now we know that there is an extra node
+  next = cast[T](front.next.load(moRelaxed))
+  if not next.isNil:
+    # Extra node after this one, no competition with producers
+    prefetch(front)
+    result += 1
+    discard chan.count.fetchSub(result, moRelaxed)
+    chan.front.next.store(next, moRelaxed)
+    fence(moAcquire)
+    bLast = front
+    return
+
+  # The last item wasn't linked to the list yet, bail out
+  discard chan.count.fetchSub(result, moRelaxed)
 
 func peek*(chan: var ChannelMpscUnboundedBatch): int32 {.inline.} =
   ## Estimates the number of items pending in the channel
@@ -123,7 +177,7 @@ func peek*(chan: var ChannelMpscUnboundedBatch): int32 {.inline.} =
 # Sanity checks
 # ------------------------------------------------------------------------------
 when isMainModule:
-  import strutils, system/ansi_c
+  import strutils, system/ansi_c, times
 
   # Data structure test
   # --------------------------------------------------------
@@ -200,7 +254,7 @@ when isMainModule:
     else:
       c_free(val)
 
-  proc thread_func(args: ThreadArgs) =
+  proc thread_func_sender(args: ThreadArgs) =
 
     # Worker RECEIVER:
     # ---------
@@ -213,33 +267,45 @@ when isMainModule:
     # chan <- 42
     # chan <- 53
     # chan <- 64
-    Worker(Receiver):
-      var counts: array[Sender1..Sender15, int]
-      for j in 0 ..< 15 * NumVals:
-        var val: Val
-        args.chan[].recvLoop(val):
-          # Busy loop, in prod we might want to yield the core/thread timeslice
-          discard
-        # log("Receiver got: %d at address 0x%.08x\n", val.val, val)
-        let sender = WorkerKind(val.val div Padding)
-        doAssert val.val == counts[sender] + ord(sender) * Padding, "Incorrect value: " & $val.val
-        inc counts[sender]
-        valFree(val)
 
-      for count in counts:
-        doAssert count == NumVals
+    for j in 0 ..< NumVals:
+      let val = valAlloc()
+      val.val = ord(args.ID) * Padding + j
 
-    Worker(Sender1..Sender15):
-      for j in 0 ..< NumVals:
-        let val = valAlloc()
-        val.val = ord(args.ID) * Padding + j
+      # const pad = spaces(8)
+      # echo pad.repeat(ord(args.ID)), 'S', $ord(args.ID), ": ", val.val, " (0x", toHex(cast[uint32](val)), ')'
 
-        # const pad = spaces(8)
-        # echo pad.repeat(ord(args.ID)), 'S', $ord(args.ID), ": ", val.val
+      args.chan[].sendLoop(val):
+        # Busy loop, in prod we might want to yield the core/thread timeslice
+        discard
 
-        args.chan[].sendLoop(val):
-          # Busy loop, in prod we might want to yield the core/thread timeslice
-          discard
+  proc thread_func_receiver(args: ThreadArgs) =
+
+    # Worker RECEIVER:
+    # ---------
+    # <- chan
+    # <- chan
+    # <- chan
+    #
+    # Worker SENDER:
+    # ---------
+    # chan <- 42
+    # chan <- 53
+    # chan <- 64
+    var counts: array[Sender1..Sender15, int]
+    for j in 0 ..< 15 * NumVals:
+      var val: Val
+      args.chan[].recvLoop(val):
+        # Busy loop, in prod we might want to yield the core/thread timeslice
+        discard
+      # log("Receiver got: %d at address 0x%.08x\n", val.val, val)
+      let sender = WorkerKind(val.val div Padding)
+      doAssert val.val == counts[sender] + ord(sender) * Padding, "Incorrect value: " & $val.val
+      inc counts[sender]
+      valFree(val)
+
+    for count in counts:
+      doAssert count == NumVals
 
   proc main() =
     echo "Testing if 15 threads can send data to 1 consumer"
@@ -248,9 +314,9 @@ when isMainModule:
     let chan = createSharedU(ChannelMpscUnboundedBatch[Val]) # CreateU is not zero-init
     chan[].initialize()
 
-    createThread(threads[Receiver], thread_func, ThreadArgs(ID: Receiver, chan: chan))
+    createThread(threads[Receiver], thread_func_receiver, ThreadArgs(ID: Receiver, chan: chan))
     for sender in Sender1..Sender15:
-      createThread(threads[sender], thread_func, ThreadArgs(ID: sender, chan: chan))
+      createThread(threads[sender], thread_func_sender, ThreadArgs(ID: sender, chan: chan))
 
     for worker in WorkerKind:
       joinThread(threads[worker])
@@ -259,4 +325,77 @@ when isMainModule:
     echo "------------------------------------------------------------------------"
     echo "Success"
 
+  proc thread_func_receiver_batch(args: ThreadArgs) =
+
+    # Worker RECEIVER:
+    # ---------
+    # <- chan
+    # <- chan
+    # <- chan
+    #
+    # Worker SENDER:
+    # ---------
+    # chan <- 42
+    # chan <- 53
+    # chan <- 64
+    var counts: array[Sender1..Sender15, int]
+    var received = 0
+    var batchID = 0
+    while received < 15 * NumVals:
+      var first, last: Val
+      let batchSize = args.chan[].tryRecvBatch(first, last)
+      batchID += 1
+      if batchSize == 0:
+        continue
+
+      var cur = first
+      var idx = 0
+      while idx < batchSize:
+        # log("Receiver got: %d at address 0x%.08x\n", cur.val, cur)
+        let sender = WorkerKind(cur.val div Padding)
+        doAssert cur.val == counts[sender] + ord(sender) * Padding, "Incorrect value: " & $cur.val
+        counts[sender] += 1
+        received += 1
+
+        idx += 1
+        if idx == batchSize:
+          doAssert cur == last
+
+        let old = cur
+        cur = cast[Val](cur.next.load(moRelaxed))
+        valFree(old)
+      # log("Receiver processed batch id %d of size %d (received total %d) \n", batchID, batchSize, received)
+
+    doAssert received == 15 * NumVals, "Received more than expected"
+    for count in counts:
+      doAssert count == NumVals
+
+  proc mainBatch() =
+    echo "Testing if 15 threads can send data to 1 consumer with batch receive"
+    echo "------------------------------------------------------------------------"
+    var threads: array[WorkerKind, Thread[ThreadArgs]]
+    let chan = createSharedU(ChannelMpscUnboundedBatch[Val]) # CreateU is not zero-init
+    chan[].initialize()
+
+    # log("Channel address 0x%.08x (dummy 0x%.08x)\n", chan, chan.front.addr)
+
+    createThread(threads[Receiver], thread_func_receiver_batch, ThreadArgs(ID: Receiver, chan: chan))
+    for sender in Sender1..Sender15:
+      createThread(threads[sender], thread_func_sender, ThreadArgs(ID: sender, chan: chan))
+
+    for worker in WorkerKind:
+      joinThread(threads[worker])
+
+    deallocShared(chan)
+    echo "------------------------------------------------------------------------"
+    echo "Success"
+
+  let startSingle = epochTime()
   main()
+  let stopSingle = epochTime()
+  let startBatch = epochTime()
+  mainBatch()
+  let stopBatch = epochTime()
+
+  echo "Receive single time elapsed: ", stopSingle-startSingle, " seconds"
+  echo "Receive batch time elapsed: ", stopBatch-startBatch, " seconds"
