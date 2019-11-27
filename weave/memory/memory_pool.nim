@@ -578,7 +578,6 @@ assert sizeof(Arena) == WV_MemArenaSize,
 
 when isMainModule:
   import times, strformat, system/ansi_c, math, strutils
-  import ../primitives/barriers
 
   # Single-threaded
   # ----------------------------------------------------------------------------------
@@ -681,7 +680,6 @@ when isMainModule:
       ID: WorkerKind
       chan: ptr ChannelMpscUnbounded[Val]
       pool: ptr TLPoolAllocator
-      barrier: ptr PthreadBarrier
 
     AllocKind = enum
       System
@@ -720,8 +718,6 @@ when isMainModule:
         else:
           recycle(myThreadID = ord(Receiver), val)
 
-      # discard pthread_barrier_wait(args.barrier[])
-
       Worker(Receiver):
         var counts: array[Sender1..Sender15, int]
         for j in 0 ..< 15 * NumVals:
@@ -737,10 +733,8 @@ when isMainModule:
           inc counts[sender]
           valFree(Alloc, val)
 
-
         for count in counts:
           doAssert count == NumVals
-
 
       Worker(Sender1..Sender15):
         for j in 0 ..< NumVals:
@@ -753,14 +747,9 @@ when isMainModule:
           args.chan[].sendLoop(val):
             discard
 
-      # discard pthread_barrier_wait(args.barrier[])
-
     proc `benchMultiThreaded Alloc`() =
       var threads: array[WorkerKind, Thread[ThreadArgs]]
       var pools: ptr array[WorkerKind, TLPoolAllocator]
-      var barrier: PthreadBarrier
-
-      # discard pthread_barrier_init(barrier, nil, threads.len.int32)
 
       let chan = createSharedU(ChannelMpscUnbounded[Val])
       chan[].initialize()
@@ -772,21 +761,18 @@ when isMainModule:
       let start = epochTime()
 
       createThread(threads[Receiver], `thread_func Alloc`,
-        ThreadArgs(ID: Receiver, chan: chan, pool: pools[Receiver].addr, barrier: barrier.addr))
+        ThreadArgs(ID: Receiver, chan: chan, pool: pools[Receiver].addr))
       for sender in Sender1..Sender15:
         createThread(threads[sender], `thread_func Alloc`,
-          ThreadArgs(ID: sender, chan: chan, pool: pools[sender].addr, barrier: barrier.addr))
+          ThreadArgs(ID: sender, chan: chan, pool: pools[sender].addr))
 
       for worker in WorkerKind:
-        # Without a barrier or a "echo"
-        # -d:danger gets stuck at joining threads
         joinThread(threads[worker])
 
       let stop = epochTime()
 
       echo "Multi-threaded: ", $Alloc, " alloc: ", $round(stop-start, 4), " s"
 
-      # discard pthread_barrier_destroy(barrier)
       freeShared(chan)
       freeShared(pools)
 
