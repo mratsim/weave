@@ -51,7 +51,7 @@ template myThieves*: ChannelMpscUnbounded[StealRequest] =
   globalCtx.com.thefts[localCtx.worker.ID]
 
 template myMemPool*: TLPoolAllocator =
-  globalCtx.mempool[localCtx.worker.ID]
+  globalCtx.mempools[localCtx.worker.ID]
 
 template workforce*: int32 =
   globalCtx.numWorkers

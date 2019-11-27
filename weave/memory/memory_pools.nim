@@ -38,7 +38,10 @@ import
 # Constants (move in config.nim)
 # ----------------------------------------------------------------------------------
 
-const WV_MemArenaSize  {.intdefine.} = 1 shl 15 # 2^15 = 32768 bytes = 128 * 256
+const WV_MemArenaSize  {.intdefine.} = 1 shl 14 # 2^14 = 16384 bytes = 64 * 256
+  ## The size of the arena has a strong influence on eager allocated flowvars.
+  ## Big arenas in particular will encounter the "64K aliasing problem"
+  ## as arenas are aligned by their size.
 const WV_MemBlockSize* {.intdefine.} = 256
 
 # Debug

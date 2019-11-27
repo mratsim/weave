@@ -9,8 +9,8 @@ import
   ./instrumentation/[contracts, profilers, loggers],
   ./primitives/barriers,
   ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars, sparsesets],
-  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded, channels_lazy_flowvars],
-  ./memory/[persistacks, intrusive_stacks, allocs],
+  ./channels/[channels_spsc_single_object, channels_spsc_single_ptr, channels_mpsc_unbounded, channels_lazy_flowvars],
+  ./memory/[persistacks, intrusive_stacks, allocs, memory_pools],
   ./contexts, ./config,
   ./victims, ./loop_splitting,
   ./thieves, ./workers,
@@ -26,6 +26,8 @@ import
 
 proc init*(ctx: var TLContext) =
   ## Initialize the thread-local context of a worker (including the lead worker)
+
+  myMemPool().initialize(myID())
 
   myWorker().deque = newPrellDeque(Task)
   myWorker().initialize(maxID = workforce() - 1)
@@ -176,6 +178,7 @@ proc threadLocalCleanup*() =
   # The task cache is full of tasks
   `=destroy`(localCtx.taskCache)
   delete(localCtx.stealCache)
+  discard myMemPool().teardown()
 
 proc worker_entry_fn*(id: WorkerID) =
   ## On the start of the threadpool workers will execute this
@@ -200,7 +203,7 @@ proc worker_entry_fn*(id: WorkerID) =
 
 EagerFV:
   template isFutReady(): untyped =
-    fv.chan.tryRecv(parentResult)
+    fv.chan[].tryRecv(parentResult)
 LazyFV:
   template isFutReady(): untyped =
     if fv.lfv.hasChannel:

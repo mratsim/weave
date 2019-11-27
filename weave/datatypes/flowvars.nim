@@ -42,14 +42,14 @@ type
       chan: ptr ChannelSpscSingleObject[T]
 
 EagerFV:
-  proc newFlowVar*(pool: TLPoolAllocator, T: typedesc): Flowvar[T] {.inline.} =
-    result.chan = pool.borrow(Flowvar[T])
-    result.chan.initialize()
+  proc newFlowVar*(pool: var TLPoolAllocator, T: typedesc): Flowvar[T] {.inline.} =
+    result.chan = pool.borrow(typeof result.chan[])
+    result.chan[].initialize()
 
   proc readyWith*[T](fv: Flowvar[T], childResult: T) {.inline.} =
     ## Send the Flowvar result from the child thread processing the task
     ## to its parent thread.
-    let resultSent = fv.chan.trySend(childResult)
+    let resultSent = fv.chan[].trySend(childResult)
     postCondition: resultSent
 
   proc forceComplete*[T](fv: Flowvar[T], parentResult: var T) {.inline.} =
@@ -60,7 +60,7 @@ EagerFV:
 
 LazyFV:
   # Templates everywhere as we use alloca
-  template newFlowVar*(T: typedesc): Flowvar[T] =
+  template newFlowVar*(pool: TLPoolAllocator, T: typedesc): Flowvar[T] =
     var fv = cast[Flowvar[T]](alloca(LazyFlowVar))
     fv.lfv.lazy.chan = nil
     fv.lfv.hasChannel = false

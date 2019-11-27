@@ -11,9 +11,6 @@ import
   ../instrumentation/[contracts, loggers],
   ../memory/memory_pools
 
-var threadID {.threadvar.}: int32
-  ## Duplicates myID() as a workaround for circular imports
-
 type
   ChannelLazyFlowvar* = object
     ## A type-erased SPSC channel for LazyFlowvar.

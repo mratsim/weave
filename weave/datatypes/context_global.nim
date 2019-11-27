@@ -42,6 +42,6 @@ type
     threadpool*: ptr UncheckedArray[Thread[WorkerID]]
     numWorkers*: int32
     barrier*: PthreadBarrier # TODO windows support
-    mempool*: ptr UncheckedArray[TlPoolAllocator]
+    mempools*: ptr UncheckedArray[TlPoolAllocator]
 
     # TODO track workers per socket / NUMA domain

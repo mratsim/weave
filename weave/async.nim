@@ -118,7 +118,7 @@ macro spawn*(funcCall: typed): untyped =
         task.parent = myTask()
         task.fn = `async_fn`
         task.has_future = true
-        let `fut` = newFlowvar(`freshIdent`)
+        let `fut` = newFlowvar(myMemPool(), `freshIdent`)
         cast[ptr `futArgsTy`](task.data.addr)[] = `futArgs`
         schedule(task)
 
@@ -166,7 +166,7 @@ when isMainModule:
 
       init(Runtime)
 
-      let f = async_fib(20)
+      let f = async_fib(40)
 
       sync(Runtime)
       exit(Runtime)
