@@ -225,17 +225,6 @@ when isMainModule:
 
   proc thread_func(args: ThreadArgs) =
 
-    # Worker RECEIVER:
-    # ---------
-    # <- chan
-    # <- chan
-    # <- chan
-    #
-    # Worker SENDER:
-    # ---------
-    # chan <- 42
-    # chan <- 53
-    # chan <- 64
     Worker(Receiver):
       var counts: array[Sender1..Sender15, int]
       for j in 0 ..< 15 * NumVals:

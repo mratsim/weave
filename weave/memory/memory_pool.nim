@@ -29,7 +29,7 @@
 # On NUMA, we need to ensure the locality of the pages
 
 import
-  ../channels/channels_mpsc_unbounded_batch,
+  ../channels/[channels_mpsc_unbounded_batch, channels_mpsc_unbounded],
   ../instrumentation/[contracts, loggers],
   ../config,
   ./allocs,
@@ -38,7 +38,7 @@ import
 # Constants (move in config.nim)
 # ----------------------------------------------------------------------------------
 
-const WV_MemArenaSize {.intdefine.} = 1 shl 15 # 2^15 = 32768 bytes = 128 * 256
+const WV_MemArenaSize {.intdefine.} = 1 shl 16 # 2^15 = 32768 bytes = 128 * 256
 const WV_MemBlockSize {.intdefine.} = 256
 
 # Debug
@@ -60,6 +60,25 @@ template debugMem(body: untyped) =
 
 # Memory Pool types
 # ----------------------------------------------------------------------------------
+
+const SizeofMetadata: int = (block:
+    var size: int
+    size += 272                               # ChannelMpscUnboundedBatch
+    size += sizeof(pointer)                   # localFree
+    size += sizeof(pointer)                   # free
+    size += sizeof(int32)                     # used
+    size += sizeof(int32)                     # threadID
+    size += sizeof(pointer)                   # prev
+    size += sizeof(pointer)                   # next
+    size += sizeof(pointer)                   # allocator
+    size.roundNextMultipleOf(WV_MemBlockSize) # alignment required
+  )
+  ## Compile-time sizeof workaround for
+  ## https://github.com/nim-lang/Nim/issues/12726
+  ## Not ideal: we split metadata in its own subtype
+  ## update this const
+
+const MaxBlocks = (WV_MemArenaSize - SizeofMetadata) div WV_MemBlockSize
 
 type
   MemBlock {.union.} = object
@@ -97,33 +116,17 @@ type
     # Freed blocks, can be allocated on the fast path
     free: ptr MemBlock
     # Number of blocks in use
-    used: range[0'i32 .. 126'i32] # (WV_MemArenaSize - SizeofMetadata) div WV_MemBlockSize
+    used: range[0'i32 .. int32 MaxBlocks] # (WV_MemArenaSize - SizeofMetadata) div WV_MemBlockSize
     # Arena owner
     threadID: Atomic[int32]
 
-const SizeofMetadata: int = (block:
-    var size: int
-    size += 280                               # ChannelMpscUnboundedBatch
-    size += sizeof(ptr MemBlock)              # localFree
-    size += sizeof(ptr MemBlock)              # free
-    size += sizeof(int32)                     # used
-    size += sizeof(int32)                     # threadID
-    size += sizeof(pointer)                   # prev
-    size += sizeof(pointer)                   # next
-    size.roundNextMultipleOf(WV_MemBlockSize) # alignment required
-  )
-  ## Compile-time sizeof workaround for
-  ## https://github.com/nim-lang/Nim/issues/12726
-  ## Not ideal but we split metadata in its own subtype
-
-type
   Arena = object
     meta {.align: WV_CacheLinePadding.}: Metadata
     # Intrusive queue
     prev, next: ptr Arena
     allocator: ptr TLPoolAllocator
     # Raw memory
-    blocks {.align: WV_MemBlockSize.}: array[(WV_MemArenaSize - SizeofMetadata) div WV_MemBlockSize, MemBlock]
+    blocks {.align: WV_MemBlockSize.}: array[MaxBlocks, MemBlock]
 
   TLPoolAllocator = object
     ## Thread-local pool allocator
@@ -161,20 +164,19 @@ iterator backward(tail: ptr Arena): ptr Arena =
   ## Not: we assume that the list is not circular
   ## and terminates via a nil pointer
   var cur = tail
-  if cur != nil:
-    while true:
-      yield cur
-      cur = cur.prev
-      if cur.isNil:
-        break
+  while not cur.isNil:
+    let prev = cur.prev # Arena can be deleted while iterating
+    yield cur
+    cur = prev
 
 iterator items(head: ptr MemBlock): ptr MemBlock =
   ## Singly-linked list iterator
   preCondition: not head.isNil
   var cur = head
   while true:
+    let next = cast[ptr MemBlock](cur.next.load(moRelaxed))
     yield cur
-    cur = cast[ptr MemBlock](cur.next.load(moRelaxed))
+    cur = next
     if cur.isNil:
       break
 
@@ -183,7 +185,7 @@ func prepend(a, b: ptr MemBlock) {.inline.} =
   preCondition: not a.isNil
   b.next.store(a, moRelaxed)
 
-func append(pool: var TLPoolAllocator, arena: ptr Arena) =
+func append(pool: var TLPoolAllocator, arena: ptr Arena) {.inline.} =
   preCondition: arena.next.isNil
 
   debugMem:
@@ -194,11 +196,10 @@ func append(pool: var TLPoolAllocator, arena: ptr Arena) =
     ascertain: pool.first.isNil
     ascertain: pool.last.isNil
     pool.first = arena
-    pool.last = arena
   else:
     arena.prev = pool.last
     pool.last.next = arena
-    pool.last = arena
+  pool.last = arena
 
   pool.numArenas += 1
   arena.allocator = pool.addr
@@ -262,7 +263,7 @@ func isMostlyUsed(arena: ptr Arena): bool =
   if arena.isNil:
     return true
 
-  const threshold = arena.blocks.len div 8
+  const threshold = (arena.blocks.len + 7) div 8
   # Peeking into a channel from a consumer thread
   # will give a lower bound
   result = arena.blocks.len - arena.meta.used + arena.meta.threadFree.peek() <= threshold
@@ -302,6 +303,7 @@ func collect(arena: var Arena, force: bool) =
   if count > 0:
     if arena.meta.free.isNil:
       arena.meta.free = first
+      last.next.store(nil, moRelaxed)
     else:
       arena.meta.free.prepend(last)
     arena.meta.used -= count
@@ -313,6 +315,7 @@ func collect(arena: var Arena, force: bool) =
 func allocBlock(arena: var Arena): ptr MemBlock =
   ## Allocate from a page
   preCondition: not arena.meta.free.isNil
+  preCondition: arena.meta.used < arena.blocks.len
 
   arena.meta.used += 1
   result = arena.meta.free
@@ -566,6 +569,9 @@ proc takeover*(pool: var TLPoolAllocator, target: sink TLPoolAllocator) =
 # Sanity checks and bench
 # ----------------------------------------------------------------------------------
 
+assert sizeof(ChannelMpscUnboundedBatch[ptr MemBlock]) == 272,
+  "MPSC channel size was " & $sizeof(ChannelMpscUnboundedBatch[ptr MemBlock])
+
 assert sizeof(Arena) == WV_MemArenaSize,
   "The real arena size was " & $sizeof(Arena) &
   " but the asked WV_MemArenaSize was " & $WV_MemArenaSize
@@ -632,19 +638,19 @@ when isMainModule:
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}
 
-  template sendLoop[T](chan: var ChannelMpscUnboundedBatch[T],
+  template sendLoop[T](chan: var ChannelMpscUnbounded[T],
                        data: sink T,
                        body: untyped): untyped =
     while not chan.trySend(data):
       body
 
-  template recvLoop[T](chan: var ChannelMpscUnboundedBatch[T],
+  template recvLoop[T](chan: var ChannelMpscUnbounded[T],
                        data: var T,
                        body: untyped): untyped =
     while not chan.tryRecv(data):
       body
 
-  const NumVals = 1000
+  const NumVals = 1000000
   const Padding = 10 * NumVals # Pad with a 0 so that iteration 10 of thread 3 is 3010 with 99 max iters
 
   type
@@ -673,7 +679,7 @@ when isMainModule:
 
     ThreadArgs = object
       ID: WorkerKind
-      chan: ptr ChannelMpscUnboundedBatch[Val]
+      chan: ptr ChannelMpscUnbounded[Val]
       pool: ptr TLPoolAllocator
       barrier: ptr PthreadBarrier
 
@@ -695,18 +701,6 @@ when isMainModule:
       template Worker(id: Slice[WorkerKind], body: untyped): untyped {.dirty.} =
         if args.ID in id:
           body
-
-      # Worker RECEIVER:
-      # ---------
-      # <- chan
-      # <- chan
-      # <- chan
-      #
-      # Worker SENDER:
-      # ---------
-      # chan <- 42
-      # chan <- 53
-      # chan <- 64
 
       template valAlloc(kind: static AllocKind): Val =
         when kind == System:
@@ -736,9 +730,17 @@ when isMainModule:
             discard
           # log("Receiver got: %d at address 0x%.08x\n", val.val, val)
           let sender = WorkerKind(val.val div Padding)
-          doAssert val.val == counts[sender] + ord(sender) * Padding, "Incorrect value: " & $val.val
+          let current = counts[sender] + ord(sender) * Padding
+          doAssert val.val == current,
+            "Incorrect value: " & $val.val &
+            ", sender counts was at " & $current
           inc counts[sender]
           valFree(Alloc, val)
+
+
+        for count in counts:
+          doAssert count == NumVals
+
 
       Worker(Sender1..Sender15):
         for j in 0 ..< NumVals:
@@ -760,7 +762,7 @@ when isMainModule:
 
       # discard pthread_barrier_init(barrier, nil, threads.len.int32)
 
-      let chan = createSharedU(ChannelMpscUnboundedBatch[Val]) # CreateU is not zero-init
+      let chan = createSharedU(ChannelMpscUnbounded[Val])
       chan[].initialize()
 
       pools = cast[typeof pools](createSharedU(TLPoolAllocator, pools[].len))

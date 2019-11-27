@@ -56,9 +56,6 @@ proc tryRecv*[T](chan: var ChannelMpscUnboundedBatch[T], dst: var T): bool =
   ## This can fail spuriously on the last element if producer
   ## enqueues a new element while the consumer was dequeing it
 
-  # log("Channel 0x%.08x tryRecv - first: 0x%.08x (%d), next: 0x%.08x (%d), last: 0x%.08x\n",
-  #   chan.addr, first, first.val, next, if not next.isNil: next.val else: 0, chan.back)
-
   let first = cast[T](chan.front.next.load(moRelaxed))
   if first.isNil:
     return false
@@ -113,6 +110,11 @@ proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var
   ##
   ## Items are returned as a linked list
   ## Returns the number of items received
+  ##
+  ## If no items are returned bFirst and bLast are undefined
+  ##
+  ## ⚠️ This leaks the next item
+  ##   nil or overwrite it for further use in linked lists
 
   result = 0
 
@@ -134,6 +136,7 @@ proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var
     # We lose the competition, bail out
     chan.front.next.store(front, moRelaxed)
     discard chan.count.fetchSub(result, moRelaxed)
+    postCondition: chan.count.load(moRelaxed) >= 0
     return
 
   chan.front.next.store(nil, moRelaxed)
@@ -143,6 +146,7 @@ proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var
     result += 1
     discard chan.count.fetchSub(result, moRelaxed)
     bLast = front
+    postCondition: chan.count.load(moRelaxed) >= 0
     return
 
   # We lost but now we know that there is an extra node
@@ -155,10 +159,12 @@ proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var
     chan.front.next.store(next, moRelaxed)
     fence(moAcquire)
     bLast = front
+    postCondition: chan.count.load(moRelaxed) >= 0
     return
 
   # The last item wasn't linked to the list yet, bail out
   discard chan.count.fetchSub(result, moRelaxed)
+  postCondition: chan.count.load(moRelaxed) >= 0
 
 func peek*(chan: var ChannelMpscUnboundedBatch): int32 {.inline.} =
   ## Estimates the number of items pending in the channel
