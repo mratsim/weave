@@ -427,6 +427,7 @@ proc initialize*(pool: var TLPoolAllocator, threadID: int32) =
     log("Pool    0x%.08x - TID %d - initializing\n",
       pool.addr, threadID, pool.numArenas)
 
+  zeroMem(pool.addr, sizeof(pool))
   pool.threadID = threadID
   discard pool.newArena()
 
