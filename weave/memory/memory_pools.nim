@@ -157,8 +157,8 @@ type
 const
   MostlyUsedRatio = 8
     ## Beyond 7/8 of its capacity an arena is considered mostly used.
-  MaxSlowFrees = 8'i8
-    ## In the slow path, up to 8 arenas can be considered for release at once.
+  MaxSlowFrees = 5'i8
+    ## In the slow path, up to 5 arenas can be considered for release at once.
 
 # Data structures
 # ----------------------------------------------------------------------------------
@@ -267,7 +267,7 @@ func isMostlyUsed(arena: ptr Arena): bool {.inline.} =
   if arena.isNil:
     return true
 
-  const threshold = (arena.blocks.len + 7) div 8
+  const threshold = (arena.blocks.len + (MostlyUsedRatio-1)) div MostlyUsedRatio
   # Peeking into a channel from a consumer thread
   # will give a lower bound
   result = arena.blocks.len - arena.meta.used + arena.meta.threadFree.peek() <= threshold
