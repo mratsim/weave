@@ -18,8 +18,6 @@ type
     task.parent is T
     # task has a "fn" field with the proc to run
     task.fn is proc (param: pointer) {.nimcall.}
-    # x has delete proc
-    delete(task)
 
     # TODO: checkout the liftLocal macro
     #       to reimplement closures and allow
@@ -94,7 +92,6 @@ func popFirst*[T](dq: var PrellDeque[T]): T {.inline.} =
   result = dq.head
   dq.head = dq.head.next
   dq.head.prev = nil
-  result.next = nil
 
   dq.pendingTasks -= 1
 

@@ -44,22 +44,23 @@ type
     ## The fields "prev" and "next" can be used
     ## for intrusive containers
     # We save memory by using int32 instead of int on select properties
+    # order field by size to optimize zero initialization (bottleneck on recursive algorithm)
+    fn*: proc (param: pointer) {.nimcall.}
     parent*: Task
     prev*: Task
     next*: Task
-    fn*: proc (param: pointer) {.nimcall.}
-    batch*: int32
-    when defined(WV_StealLastVictim):
-      victim*: int32
+    # List of futures required by the current task
+    futures*: pointer
     start*: int
     cur*: int
     stop*: int
     chunks*: int
     splitThreshold*: int # TODO: can probably be removed with the adaptative algorithm
+    batch*: int32
+    when defined(WV_StealLastVictim):
+      victim*: int32
     isLoop*: bool
     hasFuture*: bool
-    # List of futures required by the current task
-    futures: pointer
     # User data - including the FlowVar channel to send back result.
     data*: array[TaskDataSize, byte]
     # Ideally we can replace fn + data by a Nim closure.
@@ -83,15 +84,6 @@ type
     state*: WorkerState                           # State of the thief
     when StealStrategy == StealKind.adaptative:
       stealHalf*: bool                            # Thief wants half the tasks
-
-# StealableTask API
-proc allocate*(task: var Task) {.inline.} =
-  preCondition: task.isNil()
-  task = wv_allocPtr(Task, zero = true)
-
-proc delete*(task: Task) {.inline.} =
-  preCondition: not task.isNil()
-  wv_free(task)
 
 # Ensure unicity of a given steal request
 # -----------------------------------------------------------

@@ -69,10 +69,29 @@ template isRootTask*(task: Task): bool =
 # Task caching
 # ----------------------------------------------------------------------------------
 
-proc newTaskFromCache*(): Task {.inline.} =
+proc newTaskFromCache*(): Task =
   result = localCtx.taskCache.pop()
   if result.isNil:
-    allocate(result)
+    result = wv_allocPtr(Task, zero = false)
+  # Zeroing is expensive, it's 96 bytes
+
+  # result.fn = nil # Always overwritten
+  # result.parent = nil # Always overwritten
+  result.prev = nil
+  result.next = nil
+  result.futures = nil
+  result.start = 0
+  result.cur = 0
+  result.stop = 0
+  result.chunks = 0
+  result.splitThreshold = 0
+  result.batch = 0
+  result.isLoop = false
+  result.hasFuture = false
+
+proc delete*(task: Task) {.inline.} =
+  preCondition: not task.isNil()
+  wv_free(task)
 
 iterator items(t: Task): Task =
   var cur = t
