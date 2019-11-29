@@ -319,7 +319,7 @@ func stealHalf*[T](dq: var PrellDeque[T],
 # ---------------------------------------------------------------
 
 when isMainModule:
-  import unittest, ../memory/intrusive_stacks
+  import unittest, ../memory/lookaside_lists
 
   const
     N = 1000000 # Number of tasks to push/pop/steal
@@ -345,7 +345,7 @@ when isMainModule:
     if not task.isNil:
       wv_free(task)
 
-  proc newTask(stack: var IntrusiveStack[Task]): Task =
+  proc newTask(stack: var LookasideList[Task]): Task =
     if stack.isEmpty():
       allocate(result)
     else:
@@ -353,7 +353,7 @@ when isMainModule:
 
   suite "Testing PrellDeques":
     var deq: PrellDeque[Task]
-    var cache: IntrusiveStack[Task]
+    var cache: LookasideList[Task]
 
     test "Instantiation":
       deq = newPrellDeque(Task)
@@ -412,7 +412,7 @@ when isMainModule:
 
         # "Other thread"
         var deq2 = newPrellDeque(Task)
-        var cache2: IntrusiveStack[Task]
+        var cache2: LookasideList[Task]
         deq2.addListFirst(head, tail, numStolen)
         check:
           not deq2.isEmpty

@@ -8,7 +8,7 @@
 import
   ./datatypes/[context_global, context_thread_local, sync_types],
   ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded],
-  ./memory/[persistacks, intrusive_stacks, memory_pools],
+  ./memory/[persistacks, lookaside_lists, memory_pools],
   ./config,
   system/ansi_c,
   ./instrumentation/[profilers, loggers, contracts],

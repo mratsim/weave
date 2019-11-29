@@ -13,7 +13,7 @@ import
   ./contexts, ./config,
   ./datatypes/[sync_types, prell_deques],
   ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded],
-  ./memory/[persistacks, intrusive_stacks, allocs, memory_pools],
+  ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
   ./scheduler, ./signals, ./workers, ./thieves, ./victims,
   # Low-level primitives
   ./primitives/[affinity, barriers]
