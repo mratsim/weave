@@ -49,18 +49,15 @@ type
     # Stack pointer
     top: T
     # Mempool doesn't provide the proper free yet
-    # freeFn*: proc(threadID: int32, t: T) {.nimcall, gcsafe.}
-    # threadID*: int32
-    # # Adaptative freeing
-    # count: int32
-    # recentIn: int32
-    # recentOut: int32
-    # recentCacheMisses: int32
-    # recycleHalf: bool
-    # # "closure" - This points to the proc + env currently registered in the allocator
-    # #             It is nil-ed on destruction of the lookaside list.
-    # #
-    # registeredAt: ptr tuple[onHeartbeat: proc(env: pointer) {.nimcall.}, env: pointer]
+    freeFn*: proc(threadID: int32, t: T) {.nimcall, gcsafe.}
+    threadID*: int32
+    # Adaptative freeing
+    count: int32
+    recentAsk: int32
+    # "closure" - This points to the proc + env currently registered in the allocator
+    #             It is nil-ed on destruction of the lookaside list.
+    #
+    registeredAt: ptr tuple[onHeartbeat: proc(env: pointer) {.nimcall.}, env: pointer]
 
 func initialize*[T](lal: var LookAsideList[T], tID: int32, freeFn: proc(threadID: int32, t: T) {.nimcall, gcsafe.}) =
   ## We assume the lookaside lists is zero-init when the thread-local context is allocated
@@ -76,45 +73,35 @@ func add*[T](lal: var LookAsideList[T], elem: sink T) {.inline.} =
   elem.next = lal.top
   lal.top = elem
 
-  # lal.recentIn += 1
-  # lal.count += 1
+  lal.count += 1
 
 proc popImpl[T](lal: var LookAsideList[T]): T {.inline.} =
   result = lal.top
   lal.top = lal.top.next
   # result.next = nil - we assume it is being zero-ed
 
-  # lal.count -= 1
+  lal.count -= 1
 
 func pop*[T](lal: var LookAsideList[T]): T {.inline.} =
+  lal.recentAsk += 1
   if lal.isEmpty:
-    # lal.recentCacheMisses += 1
     return nil
 
   result = lal.popImpl()
 
-  # lal.recentOut += 1
+# proc delete*[T](lal: var LookAsideList[T]) {.gcsafe.}=
+#   if not lal.registeredAt.isNil:
+#     lal.registeredAt.onHeartBeat = nil
+#     lal.registeredAt.env = nil
 
-proc delete*[T](lal: var LookAsideList[T]) {.gcsafe.}=
-  if not lal.registeredAt.isNil:
-    lal.registeredAt.onHeartBeat = nil
-    lal.registeredAt.env = nil
+#   while (let elem = lal.pop(); not elem.isNil):
+#     lal.freeFn(lal.threadID, elem)
 
-  while (let elem = lal.pop(); not elem.isNil):
-    lal.freeFn(lal.threadID, elem)
-
-proc evict[T](lal: ptr LookAsideList[T]) =
-  ## Evict objects according to the current policy
-  if not lal.recycleHalf:
+proc evict[T](lal: ptr LookAsideList[T]) {.inline.}=
+  ## Evict half of the objects (exponential decay)
+  let half = lal.count shr 1
+  while lal.count > half: # this handle the "1" task edge case (half = 0)
     lal.freeFn(lal.threadID, lal[].popImpl())
-  else:
-    let half = lal.count shr 1
-    while lal.count > half: # this handle the "1" task edge case (half = 0)
-      lal.freeFn(lal.threadID, lal[].popImpl())
-
-  lal.recentIn = 0
-  lal.recentOut = 0
-  lal.recentCacheMisses = 0
 
 proc cacheMaintenanceEx[T](lal: ptr LookAsideList[T]) =
   ## Expensive memory maintenance,
@@ -130,26 +117,28 @@ proc cacheMaintenanceEx[T](lal: ptr LookAsideList[T]) =
   ##       As this deallocates, we could have an avalanche effect with many
   ##       deallocations triggering other heartbeats in cascade.
 
+  # TODO: read papers on buffer size and throughput
+  #       Note that the more counters, the more expensive add/pop are
+  #       Targeting exponential growth/decay seems a good simple start.
+  #       We grow/decay by factor 2 but should we use something more fancy
+  #       like 1.5 or the golden ratio?
+  #  - http://www.mit.edu/~modiano/papers/CV_C_116.pdf
+  #  - http://gdrro.lip6.fr/sites/default/files/slides_COS2017_prahbu.pdf
+  #  - https://link.springer.com/article/10.1023/A:1010837416603
+  #  - https://groups.google.com/forum/#!msg/comp.lang.c++.moderated/asH_VojWKJw/Lo51JEmLVboJ
+
   # On destruction, the lookaside list destroys its pointer
   if lal.isNil: return
 
-  # If we have no more objects or had a cache miss maybe we were too aggressive
-  if lal.recentCacheMisses > 0 or lal.top.isNil:
-    lal.recentIn = 0
-    lal.recentOut = 0
-    lal.recycleHalf = false
+  # We want the buffer to be big enough to absorb random "jitter".
+  # An exponential growth may have nice properties on random buffer miss (see papers)
+  if 2*lal.count <= lal.recentAsk:
+    lal.recentAsk = 0
     return
 
-  # If we allocated no objects, continue decaying the pool at the previous rate
-  if lal.recentOut == 0:
-    lal.evict()
-    return
-
-  # Otherwise we take the ratio of in/out and if it's bigger than 2,
-  # we trigger exponential decay
-  let ratio = lal.recentIn.float32 / lal.recentOut.float32
-  lal.recycleHalf = ratio > 2.0f
+  # Otherwise trigger exponential decay
   lal.evict()
+  lal.recentAsk = 0
 
 proc setCacheMaintenanceEx*[T](hook: var tuple[onHeartbeat: proc(env: pointer){.nimcall.}, env: pointer],
                  lal: var LookAsideList[T]) {.inline.} =
