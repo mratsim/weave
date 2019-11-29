@@ -6,9 +6,9 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./datatypes/[context_global, context_thread_local, sync_types],
+  ./datatypes/[context_global, context_thread_local, sync_types, prell_deques],
   ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded],
-  ./memory/[persistacks, lookaside_lists, memory_pools],
+  ./memory/[persistacks, lookaside_lists, memory_pools, allocs],
   ./config,
   system/ansi_c,
   ./instrumentation/[profilers, loggers, contracts],
@@ -31,15 +31,6 @@ profile_extern_decl(send_recv_req)
 profile_extern_decl(send_recv_task)
 profile_extern_decl(enq_deq_task)
 profile_extern_decl(idle)
-
-# Task caching
-# ----------------------------------------------------------------------------------
-
-proc newTaskFromCache*(): Task {.inline.} =
-  if localCtx.taskCache.isEmpty():
-    allocate(result)
-  else:
-    result = localCtx.taskCache.pop()
 
 # Aliases
 # ----------------------------------------------------------------------------------
@@ -74,6 +65,27 @@ template myMetrics*: untyped =
 
 template isRootTask*(task: Task): bool =
   task.parent.isNil
+
+# Task caching
+# ----------------------------------------------------------------------------------
+
+proc newTaskFromCache*(): Task {.inline.} =
+  if localCtx.taskCache.isEmpty():
+    allocate(result)
+  else:
+    result = localCtx.taskCache.pop()
+
+iterator items(t: Task): Task =
+  var cur = t
+  while not cur.isNil:
+    let next = cur.next
+    yield cur
+    cur = next
+
+proc flushAndDispose*(dq: var PrellDeque) =
+  let leftovers = flush(dq)
+  for task in items(leftovers):
+    wv_free(task)
 
 # Dynamic Scopes
 # ----------------------------------------------------------------------------------

@@ -70,7 +70,7 @@ type
 
     head, tail: T
     pendingTasks*: range[0'i32 .. high(int32)]
-    # numSteals: int
+    # TODO: intrusive dummy
 
 # Basic routines
 # ---------------------------------------------------------------
@@ -116,6 +116,19 @@ proc newPrellDeque*[T: StealableTask](typ: typedesc[T]): PrellDeque[T] {.noinit.
   result.pendingTasks = 0
   # result.numSteals = 0
 
+proc initialize*[T: StealableTask](dq: var PrellDeque[T]) {.inline.} =
+  ## This requires a dummy to be flexible in terms of memory management backend
+  # TODO: intrusive dummy
+  mixin allocate
+  var dummy: T
+  allocate(dummy)
+  dummy.fn = cast[proc (param: pointer){.nimcall.}](ByteAddress 0xCAFE)
+
+  dq.head = dummy
+  dq.tail = dummy
+  dq.pendingTasks = 0
+  # result.numSteals = 0
+
 proc delete*[T: StealableTask](dq: var PrellDeque[T]) =
   # TODO: should be a destructor, blocked by https://github.com/nim-lang/Nim/issues/12620
   #       assuming destructors work fine with {.threadvar.} (apparently C++ has trouble)
@@ -128,6 +141,12 @@ proc delete*[T: StealableTask](dq: var PrellDeque[T]) =
   postCondition: dq.isEmpty
   # Free dummy node
   delete(dq.head)
+
+proc flush*[T: StealableTask](dq: var PrellDeque[T]): T {.inline.} =
+  ## This returns all the StealableTasks left in the deque
+  ## including the dummy node and resets the dequeue.
+  result = dq.head
+  zeroMem(dq.addr, sizeof(dq))
 
 # Batch routines
 # ---------------------------------------------------------------
@@ -319,11 +338,11 @@ func stealHalf*[T](dq: var PrellDeque[T],
 # ---------------------------------------------------------------
 
 when isMainModule:
-  import unittest, ../memory/lookaside_lists
+  import unittest, ../memory/[lookaside_lists, memory_pools, allocs]
 
   const
     N = 1000000 # Number of tasks to push/pop/steal
-    M = 100     # Max number of tasks to steal in one swoo
+    M = 100     # Max number of tasks to steal in one swoop
     TaskDataSize = 192 - 96
 
   type
@@ -337,26 +356,39 @@ when isMainModule:
     Data = object
       a, b: int32
 
-  proc allocate(task: var Task) =
-    preCondition: task.isNil
-    task = wv_allocPtr(Task)
+  # Memory management
+  # -------------------------------
 
-  proc delete(task: sink Task) =
-    if not task.isNil:
-      wv_free(task)
+  var pool: TLPoolAllocator
 
-  proc newTask(stack: var LookasideList[Task]): Task =
-    if stack.isEmpty():
-      allocate(result)
-    else:
-      result = stack.pop()
+  pool.initialize(threadID = 0)
+
+  proc newTask(cache: var LookAsideList[Task]): Task =
+    result = cache.pop()
+    if result.isNil:
+      result = pool.borrow(deref(Task))
+    zeroMem(result, sizeof(deref(Task)))
+
+  iterator items(t: Task): Task =
+    var cur = t
+    while not cur.isNil:
+      let next = cur.next
+      yield cur
+      cur = next
+
+  proc recycleAll(taskList: sink Task) =
+    for task in taskList:
+      recycle(myThreadID = 0'i32, task)
 
   suite "Testing PrellDeques":
     var deq: PrellDeque[Task]
-    var cache: LookasideList[Task]
+    var cache: LookAsideList[Task]
+    cache.threadID = 0
+    cache.freeFn = recycle
+    pool.hook.setHeartbeat(cache)
 
     test "Instantiation":
-      deq = newPrellDeque(Task)
+      deq.initialize(dummy = cache.newTask())
 
       check:
         deq.isEmpty()
@@ -398,7 +430,7 @@ when isMainModule:
         deq.addFirst(task)
 
       check:
-        cache.isEmpty()
+        # cache.isEmpty() # not exported
         not deq.isEmpty()
         deq.pendingTasks == N
 
@@ -411,8 +443,12 @@ when isMainModule:
           1 <= numStolen and numStolen <= M
 
         # "Other thread"
-        var deq2 = newPrellDeque(Task)
-        var cache2: LookasideList[Task]
+        var deq2: PrellDeque[Task]
+        deq2.initialize(cache.newTask())
+        var cache2: LookAsideList[Task]
+        cache2.threadID = 1
+        cache2.freeFn = recycle
+
         deq2.addListFirst(head, tail, numStolen)
         check:
           not deq2.isEmpty
@@ -439,7 +475,8 @@ when isMainModule:
           deq2.isEmpty()
           deq2.pendingTasks == 0
 
-        `=destroy`(deq2)
+        let leftovers = delete(deq2)
+        recycleAll(leftovers)
         `=destroy`(cache2)
 
         # while loop increment
@@ -450,5 +487,6 @@ when isMainModule:
         deq.isEmpty()
         deq.pendingTasks == 0
 
-      `=destroy`(deq)
+      let leftovers = delete(deq)
+      recycleAll(leftovers)
       `=destroy`(cache)

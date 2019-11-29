@@ -217,6 +217,7 @@ proc schedulingLoop() =
       localCtx.taskCache.add(task)
 
 proc threadLocalCleanup*() =
+  # myWorker().deque.flushAndDispose()
   myWorker().deque.delete()
 
   for i in 0 ..< WV_MaxConcurrentStealPerWorker:
