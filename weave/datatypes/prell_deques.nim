@@ -325,11 +325,11 @@ when isMainModule:
   proc newTask(cache: var LookAsideList[Task]): Task =
     result = cache.pop()
     if result.isNil:
-      result = wv_allocPtr(Task)
+      result = pool.borrow(deref(Task))
     zeroMem(result, sizeof(deref(Task)))
 
   proc delete(task: Task) =
-    wv_free(task)
+    recycle(myThreadID = 0'i32, task)
 
   iterator items(t: Task): Task =
     var cur = t
@@ -408,8 +408,8 @@ when isMainModule:
         var deq2: PrellDeque[Task]
         deq2.initialize()
         var cache2: LookAsideList[Task]
-        # cache2.threadID = 1
-        # cache2.freeFn = recycle
+        cache2.threadID = 1
+        cache2.freeFn = recycle
 
         deq2.addListFirst(head, tail, numStolen)
         check:
@@ -437,9 +437,9 @@ when isMainModule:
           deq2.isEmpty()
           deq2.pendingTasks == 0
 
-        # let leftovers = delete(deq2)
-        # recycleAll(leftovers)
-        # delete(cache2)
+        let leftovers = flush(deq2)
+        recycleAll(leftovers)
+        delete(cache2)
 
         # while loop increment
         i += numStolen
@@ -449,6 +449,6 @@ when isMainModule:
         deq.isEmpty()
         deq.pendingTasks == 0
 
-      # let leftovers = delete(deq)
-      # recycleAll(leftovers)
-      # delete(cache)
+      let leftovers = flush(deq)
+      recycleAll(leftovers)
+      delete(cache)

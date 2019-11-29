@@ -150,6 +150,17 @@ type
     last: ptr Arena
     numArenas: range[int32(0) .. high(int32)]
     threadID: int32
+    # After a deterministic amount of fast allocations we can trigger
+    # expensive maintenance operations to amortize them.
+    # Cache strategies building on top of this memory pool
+    # can hook into the allocation heartbeat provided by this memory pool
+    # to trigger their own maintenance at the same time.
+    # ⚠️ Environment should be thread-local.
+    #
+    # Heartbeat is on "allocation" so massive deallocations will not have
+    # an avalanche effect
+    # hook*: tuple[onHeartbeat: proc(env: pointer) {.nimcall, gcsafe.}, env: pointer]
+
 
 # Heuristics
 # ----------------------------------------------------------------------------------
@@ -157,7 +168,7 @@ type
 const
   MostlyUsedRatio = 8
     ## Beyond 7/8 of its capacity an arena is considered mostly used.
-  MaxSlowFrees = 5'i8
+  MaxSlowFrees = 8'i8
     ## In the slow path, up to 5 arenas can be considered for release at once.
 
 # Data structures
@@ -260,8 +271,9 @@ func isUnused(arena: ptr Arena): bool {.inline.} =
   return arena.meta.used - pending == 0
 
 func isMostlyUsed(arena: ptr Arena): bool {.inline.} =
-  ## If more than 7/8 of an Arena is used
+  ## If more than (MostlyUsedRatio-1)/(MostlyUsedRatio) of an Arena is used
   ## it is considered mostly used.
+  ## Default is 7/8
   ## A non-existing arena (nil) is also considered used
   ## (for the head or tail arenas)
   if arena.isNil:
@@ -373,6 +385,10 @@ proc allocSlow(pool: var TLPoolAllocator): ptr MemBlock =
     log("Pool    0x%.08x - TID %d - entering slow maintenance path (%d arenas in pool)\n",
       pool.addr, pool.threadID, pool.numArenas)
 
+  # # Maintenance hooks by higher-level caching strategies
+  # if not pool.hook.onHeartbeat.isNil:
+  #   pool.hook.onHeartbeat(pool.hook.env)
+
   var slowFrees: int8
   # When iterating to find a free block, we iterate in reverse.
   # Note that both mimalloc and snmalloc iterate forward
@@ -396,6 +412,13 @@ proc allocSlow(pool: var TLPoolAllocator): ptr MemBlock =
         # 1.0.1 If not, let's use the arena
         return arena[].allocBlock()
     # For optimization we might consider removing full arenas from the iteration list
+    slowFrees += 1
+    if slowFrees == MaxSlowFrees:
+      # TODO: This is a hack to not spend too much time looking for a free arena
+      #       we may need a separate "full" list, however that causes issue with multithreading
+      #       and signaling that the list is not free anymore.
+      #       Alternatively use a doubly-linked ring and rotate the starting point
+      break
 
   # All our arenas are full, we need a new one
   let freshArena = pool.newArena()
@@ -460,7 +483,7 @@ proc borrow*(pool: var TLPoolAllocator, T: typedesc): ptr T =
     # Fast-path
     return cast[ptr T](pool.last[].allocBlock())
 
-proc recycle*[T](myThreadID: int32, p: ptr T) =
+proc recycle*[T](myThreadID: int32, p: ptr T) {.gcsafe.} =
   ## Returns a memory block to its memory pool.
   ##
   ## This is thread-safe, any thread can call it.

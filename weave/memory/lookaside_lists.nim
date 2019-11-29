@@ -89,19 +89,13 @@ func pop*[T](lal: var LookAsideList[T]): T {.inline.} =
 
   result = lal.popImpl()
 
-# proc delete*[T](lal: var LookAsideList[T]) {.gcsafe.}=
-#   if not lal.registeredAt.isNil:
-#     lal.registeredAt.onHeartBeat = nil
-#     lal.registeredAt.env = nil
+proc delete*[T](lal: var LookAsideList[T]) {.gcsafe.} =
+  if not lal.registeredAt.isNil:
+    lal.registeredAt.onHeartBeat = nil
+    lal.registeredAt.env = nil
 
-#   while (let elem = lal.pop(); not elem.isNil):
-#     lal.freeFn(lal.threadID, elem)
-
-proc evict[T](lal: ptr LookAsideList[T]) {.inline.}=
-  ## Evict half of the objects (exponential decay)
-  let half = lal.count shr 1
-  while lal.count > half: # this handle the "1" task edge case (half = 0)
-    lal.freeFn(lal.threadID, lal[].popImpl())
+  while (let elem = lal.pop(); not elem.isNil):
+    lal.freeFn(lal.threadID, elem)
 
 proc cacheMaintenanceEx[T](lal: ptr LookAsideList[T]) =
   ## Expensive memory maintenance,
@@ -137,7 +131,10 @@ proc cacheMaintenanceEx[T](lal: ptr LookAsideList[T]) =
     return
 
   # Otherwise trigger exponential decay
-  lal.evict()
+  let half = lal.count shr 1
+  while lal.count > half: # this handle the "1" task edge case (half = 0)
+    lal.freeFn(lal.threadID, lal[].popImpl())
+
   lal.recentAsk = 0
 
 proc setCacheMaintenanceEx*[T](hook: var tuple[onHeartbeat: proc(env: pointer){.nimcall.}, env: pointer],
@@ -154,7 +151,7 @@ proc setCacheMaintenanceEx*[T](hook: var tuple[onHeartbeat: proc(env: pointer){.
 when isMainModule:
   import allocs
 
-  proc customFree[T](threadID: int32, p: T) =
+  proc customFree[T](threadID: int32, p: T) {.gcsafe.}=
     wv_free(p)
 
   type
@@ -183,4 +180,4 @@ when isMainModule:
 
   echo x.repr
 
-  # Nim will run destructors
+  delete(x)

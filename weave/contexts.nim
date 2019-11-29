@@ -72,7 +72,7 @@ template isRootTask*(task: Task): bool =
 proc newTaskFromCache*(): Task =
   result = localCtx.taskCache.pop()
   if result.isNil:
-    result = wv_allocPtr(Task, zero = false)
+    result = myMemPool().borrow(deref(Task))
   # Zeroing is expensive, it's 96 bytes
 
   # result.fn = nil # Always overwritten
@@ -91,7 +91,7 @@ proc newTaskFromCache*(): Task =
 
 proc delete*(task: Task) {.inline.} =
   preCondition: not task.isNil()
-  wv_free(task)
+  recycle(myID(), task)
 
 iterator items(t: Task): Task =
   var cur = t
@@ -103,7 +103,7 @@ iterator items(t: Task): Task =
 proc flushAndDispose*(dq: var PrellDeque) =
   let leftovers = flush(dq)
   for task in items(leftovers):
-    wv_free(task)
+    recycle(myID(), task)
 
 # Dynamic Scopes
 # ----------------------------------------------------------------------------------

@@ -78,6 +78,8 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
 
   # The mempool is initialized in worker_entry_fn
   # as the main thread needs it for the root task
+  ctx.taskCache.initialize(tID = myID(), freeFn = memory_pools.recycle)
+  # myMemPool.hook.setCacheMaintenanceEx(ctx.taskCache)
 
   # Worker
   # -----------------------------------------------------------
