@@ -69,9 +69,6 @@ type
     head: T
     tail: typeof(default(T)[])
 
-template checkInvariants(): untyped =
-  ascertain: dq.tail == dq.dummy.addr
-
 # Basic routines
 # ---------------------------------------------------------------
 
@@ -109,25 +106,12 @@ proc initialize*[T: StealableTask](dq: var PrellDeque[T]) {.inline.} =
   dq.pendingTasks = 0
   # result.numSteals = 0
 
-  checkInvariants()
-
-proc delete*[T: StealableTask](dq: var PrellDeque[T]) =
-  # TODO: should be a destructor, blocked by https://github.com/nim-lang/Nim/issues/12620
-  #       assuming destructors work fine with {.threadvar.} (apparently C++ has trouble)
-  mixin delete
-  checkInvariants()
-
-  # Free all remaining tasks
-  while (let task = dq.popFirst(); not task.isNil):
-    delete(task)
-  postCondition: dq.pendingTasks == 0
-  postCondition: dq.isEmpty
-  # only dummy node is left
-
 proc flush*[T: StealableTask](dq: var PrellDeque[T]): T {.inline.} =
   ## This returns all the StealableTasks left in the deque
   ## including the dummy node and resets the dequeue.
-  checkInvariants()
+  if dq.pendingTasks == 0:
+    ascertain: dq.head == dq.tail.addr
+    return nil
   result = dq.head
   dq.tail.prev.next = nil # unlink dummy
   zeroMem(dq.addr, sizeof(dq))
@@ -140,7 +124,6 @@ func addListFirst[T](dq: var PrellDeque[T], head, tail: sink T, len: int32) =
   preCondition: not head.isNil and not tail.isNil
   preCondition: len > 0
   preCondition: tail.next.isNil
-  checkInvariants()
 
   # Link tail with deque head
   tail.next = dq.head
@@ -149,12 +132,10 @@ func addListFirst[T](dq: var PrellDeque[T], head, tail: sink T, len: int32) =
   # Update state of the deque
   dq.head = head
   dq.pendingTasks += len
-  checkInvariants()
 
 func addListFirst*[T](dq: var PrellDeque[T], head: sink T, len: int32) =
   preCondition: not head.isNil
   preCondition: len > 0
-  checkInvariants()
 
   var tail = head
   when compileOption("boundChecks"):
@@ -167,14 +148,12 @@ func addListFirst*[T](dq: var PrellDeque[T], head: sink T, len: int32) =
   when compileOption("boundChecks"):
     postCondition: index == len
   dq.addListFirst(head, tail, len)
-  checkInvariants()
 
 # Task-specific routines
 # ---------------------------------------------------------------
 
 func popFirstIfChild*[T](dq: var PrellDeque[T], parentTask: T): T {.inline.} =
   preCondition: not parentTask.isNil
-  checkInvariants()
 
   if dq.isEmpty():
     return nil
@@ -189,14 +168,12 @@ func popFirstIfChild*[T](dq: var PrellDeque[T], parentTask: T): T {.inline.} =
   result.next = nil
 
   dq.pendingTasks -= 1
-  checkInvariants()
 
 # Work-stealing routines
 # ---------------------------------------------------------------
 
 func steal*[T](dq: var PrellDeque[T]): T =
   # Steal a task from the end of the deque
-  checkInvariants()
   if dq.isEmpty():
     return nil
 
@@ -218,8 +195,6 @@ func steal*[T](dq: var PrellDeque[T]): T =
   dq.pendingTasks -= 1
   # dq.numSteals += 1
 
-  checkInvariants()
-
 template multistealImpl[T](
           dq: var PrellDeque[T],
           stolenHead: var T,
@@ -236,8 +211,6 @@ template multistealImpl[T](
   ##   - Steal up to N tasks, also update the "tail" param
   ##   - Steal half tasks
   ##   - Steal half tasks, also update the "tail" param
-  checkInvariants()
-
   if dq.isEmpty():
     return
 
@@ -266,8 +239,6 @@ template multistealImpl[T](
 
   dq.pendingTasks -= numStolen
   # dq.numSteals += 1
-
-  checkInvariants()
 
 func stealMany*[T](dq: var PrellDeque[T],
                   maxSteals: int32, # should be range[1'i32 .. high(int32)]
