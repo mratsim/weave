@@ -61,8 +61,8 @@ type
 
 func initialize*[T](lal: var LookAsideList[T], tID: int32, freeFn: proc(threadID: int32, t: T) {.nimcall, gcsafe.}) =
   ## We assume the lookaside lists is zero-init when the thread-local context is allocated
-  # lal.freeFn = freeFn
-  # lal.threadID = tID
+  lal.freeFn = freeFn
+  lal.threadID = tID
 
 func isEmpty(lal: LookAsideList): bool {.inline.} =
   result = lal.top.isNil

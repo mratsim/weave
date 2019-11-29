@@ -159,8 +159,7 @@ type
     #
     # Heartbeat is on "allocation" so massive deallocations will not have
     # an avalanche effect
-    # hook*: tuple[onHeartbeat: proc(env: pointer) {.nimcall, gcsafe.}, env: pointer]
-
+    hook*: tuple[onHeartbeat: proc(env: pointer) {.nimcall, gcsafe.}, env: pointer]
 
 # Heuristics
 # ----------------------------------------------------------------------------------
@@ -376,7 +375,7 @@ func considerRelease(pool: var TLPoolAllocator, arena: ptr Arena) {.inline.} =
   # Other arenas are usable, return memory to the OS
   pool.release(arena)
 
-proc allocSlow(pool: var TLPoolAllocator): ptr MemBlock =
+proc allocEx(pool: var TLPoolAllocator): ptr MemBlock =
   ## Slow path of allocation
   ## Expensive pool maintenance goes there
   ## and will be amortized over many allocations
@@ -385,9 +384,9 @@ proc allocSlow(pool: var TLPoolAllocator): ptr MemBlock =
     log("Pool    0x%.08x - TID %d - entering slow maintenance path (%d arenas in pool)\n",
       pool.addr, pool.threadID, pool.numArenas)
 
-  # # Maintenance hooks by higher-level caching strategies
-  # if not pool.hook.onHeartbeat.isNil:
-  #   pool.hook.onHeartbeat(pool.hook.env)
+  # Maintenance hooks by higher-level caching strategies
+  if not pool.hook.onHeartbeat.isNil:
+    pool.hook.onHeartbeat(pool.hook.env)
 
   var slowFrees: int8
   # When iterating to find a free block, we iterate in reverse.
@@ -477,8 +476,8 @@ proc borrow*(pool: var TLPoolAllocator, T: typedesc): ptr T =
   #   $WV_MemBlockSize & " bytes (WV_MemBlockSize)"
 
   if pool.last.meta.free.isNil:
-    # Fallback to slow path
-    return cast[ptr T](pool.allocSlow())
+    # Fallback to expensive slow path
+    return cast[ptr T](pool.allocEx())
   else:
     # Fast-path
     return cast[ptr T](pool.last[].allocBlock())
