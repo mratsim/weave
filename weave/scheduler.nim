@@ -234,7 +234,7 @@ proc threadLocalCleanup*() {.gcsafe.} =
   # but those are on the stack as well and auto-destroyed
 
   # The task cache is full of tasks
-  `=destroy`(localCtx.taskCache)
+  delete(localCtx.taskCache)
   delete(localCtx.stealCache)
   discard myMemPool().teardown()
 
