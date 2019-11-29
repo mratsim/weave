@@ -5,7 +5,7 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-import ../instrumentation/contracts
+import ../instrumentation/[contracts, loggers]
 
 type
   StealableTask* = concept task, var mutTask, type T
@@ -18,8 +18,6 @@ type
     task.parent is T
     # task has a "fn" field with the proc to run
     task.fn is proc (param: pointer) {.nimcall.}
-    # var x has allocate proc
-    allocate(mutTask)
     # x has delete proc
     delete(task)
 
@@ -67,17 +65,19 @@ type
     ##
     ## The main drawback is the need to poll the communication channel, introducing latency,
     ## and requiring a backoff mechanism.
-
-    head, tail: T
     pendingTasks*: range[0'i32 .. high(int32)]
-    # TODO: intrusive dummy
+    head: T
+    tail: typeof(default(T)[])
+
+template checkInvariants(): untyped =
+  ascertain: dq.tail == dq.dummy.addr
 
 # Basic routines
 # ---------------------------------------------------------------
 
 func isEmpty*(dq: PrellDeque): bool {.inline.} =
   # when empty dq.head == dq.tail == dummy node
-  (dq.head == dq.tail) and (dq.pendingTasks == 0)
+  (dq.head == dq.tail.unsafeAddr) and (dq.pendingTasks == 0)
 
 func addFirst*[T](dq: var PrellDeque[T], task: sink T) {.inline.} =
   ## Prepend a task to the beginning of the deque
@@ -104,48 +104,32 @@ func popFirst*[T](dq: var PrellDeque[T]): T {.inline.} =
 # Creation / Destruction
 # ---------------------------------------------------------------
 
-proc newPrellDeque*[T: StealableTask](typ: typedesc[T]): PrellDeque[T] {.noinit.} =
-  mixin allocate
-
-  var dummy: T
-  allocate(dummy)
-  dummy.fn = cast[proc (param: pointer){.nimcall.}](ByteAddress 0xCAFE)
-
-  result.head = dummy
-  result.tail = dummy
-  result.pendingTasks = 0
-  # result.numSteals = 0
-
 proc initialize*[T: StealableTask](dq: var PrellDeque[T]) {.inline.} =
-  ## This requires a dummy to be flexible in terms of memory management backend
-  # TODO: intrusive dummy
-  mixin allocate
-  var dummy: T
-  allocate(dummy)
-  dummy.fn = cast[proc (param: pointer){.nimcall.}](ByteAddress 0xCAFE)
-
-  dq.head = dummy
-  dq.tail = dummy
+  dq.head = dq.tail.addr
   dq.pendingTasks = 0
   # result.numSteals = 0
+
+  checkInvariants()
 
 proc delete*[T: StealableTask](dq: var PrellDeque[T]) =
   # TODO: should be a destructor, blocked by https://github.com/nim-lang/Nim/issues/12620
   #       assuming destructors work fine with {.threadvar.} (apparently C++ has trouble)
   mixin delete
+  checkInvariants()
 
   # Free all remaining tasks
   while (let task = dq.popFirst(); not task.isNil):
     delete(task)
   postCondition: dq.pendingTasks == 0
   postCondition: dq.isEmpty
-  # Free dummy node
-  delete(dq.head)
+  # only dummy node is left
 
 proc flush*[T: StealableTask](dq: var PrellDeque[T]): T {.inline.} =
   ## This returns all the StealableTasks left in the deque
   ## including the dummy node and resets the dequeue.
+  checkInvariants()
   result = dq.head
+  dq.tail.prev.next = nil # unlink dummy
   zeroMem(dq.addr, sizeof(dq))
 
 # Batch routines
@@ -156,6 +140,7 @@ func addListFirst[T](dq: var PrellDeque[T], head, tail: sink T, len: int32) =
   preCondition: not head.isNil and not tail.isNil
   preCondition: len > 0
   preCondition: tail.next.isNil
+  checkInvariants()
 
   # Link tail with deque head
   tail.next = dq.head
@@ -164,10 +149,12 @@ func addListFirst[T](dq: var PrellDeque[T], head, tail: sink T, len: int32) =
   # Update state of the deque
   dq.head = head
   dq.pendingTasks += len
+  checkInvariants()
 
 func addListFirst*[T](dq: var PrellDeque[T], head: sink T, len: int32) =
   preCondition: not head.isNil
   preCondition: len > 0
+  checkInvariants()
 
   var tail = head
   when compileOption("boundChecks"):
@@ -180,12 +167,14 @@ func addListFirst*[T](dq: var PrellDeque[T], head: sink T, len: int32) =
   when compileOption("boundChecks"):
     postCondition: index == len
   dq.addListFirst(head, tail, len)
+  checkInvariants()
 
 # Task-specific routines
 # ---------------------------------------------------------------
 
 func popFirstIfChild*[T](dq: var PrellDeque[T], parentTask: T): T {.inline.} =
   preCondition: not parentTask.isNil
+  checkInvariants()
 
   if dq.isEmpty():
     return nil
@@ -200,21 +189,19 @@ func popFirstIfChild*[T](dq: var PrellDeque[T], parentTask: T): T {.inline.} =
   result.next = nil
 
   dq.pendingTasks -= 1
+  checkInvariants()
 
 # Work-stealing routines
 # ---------------------------------------------------------------
 
 func steal*[T](dq: var PrellDeque[T]): T =
   # Steal a task from the end of the deque
+  checkInvariants()
   if dq.isEmpty():
     return nil
 
-  # Should be the dummy
-  result = dq.tail
-  preCondition: result.fn == cast[proc (param: pointer){.nimcall.}](0xCAFE)
-
   # Steal the true task
-  result = result.prev
+  result = dq.tail.prev
   result.next = nil
   # Update dummy reference to previous task
   dq.tail.prev = result.prev
@@ -224,12 +211,14 @@ func steal*[T](dq: var PrellDeque[T]): T =
   if dq.tail.prev.isNil:
     # Stealing last task of the deque
     # ascertain: dq.head == result # Concept are buggy with repr, TODO
-    dq.head = dq.tail # isEmpty() condition
+    dq.head = dq.tail.addr # isEmpty() condition
   else:
-    dq.tail.prev.next = dq.tail # last task points to dummy
+    dq.tail.prev.next = dq.tail.addr # last task points to dummy
 
   dq.pendingTasks -= 1
   # dq.numSteals += 1
+
+  checkInvariants()
 
 template multistealImpl[T](
           dq: var PrellDeque[T],
@@ -247,6 +236,7 @@ template multistealImpl[T](
   ##   - Steal up to N tasks, also update the "tail" param
   ##   - Steal half tasks
   ##   - Steal half tasks, also update the "tail" param
+  checkInvariants()
 
   if dq.isEmpty():
     return
@@ -256,8 +246,7 @@ template multistealImpl[T](
   if numStolen == 0: numStolen = 1
   maxStmt # <-- 1st statement "if numStolen > max: numStolen = max" injected here
 
-  stolenHead = dq.tail # dummy node
-  preCondition: stolenHead.fn == cast[proc (param: pointer){.nimcall.}](0xCAFE)
+  stolenHead = dq.tail.addr # dummy node
 
   tailAssignStmt   # <-- 2nd statement "tail = dummy.prev" injected here
 
@@ -266,17 +255,19 @@ template multistealImpl[T](
     stolenHead = stolenHead.prev
 
   dq.tail.prev.next = nil       # Detach the true tail from the dummy
-  dq.tail.prev = stolenHead.prev    # Update the node the dummy points to
-  stolenHead.prev = nil             # Detach the stolenHead head from the deque
+  dq.tail.prev = stolenHead.prev     # Update the node the dummy points to
+  stolenHead.prev = nil              # Detach the stolenHead head from the deque
   if dq.tail.prev.isNil:
     # Stealing the last task of the deque
     ascertain: dq.head == stolenHead
-    dq.head = dq.tail           # isEmpty() condition
+    dq.head = dq.tail.addr           # isEmpty() condition
   else:
-    dq.tail.prev.next = dq.tail # last task points to dummy
+    dq.tail.prev.next = dq.tail.addr # last task points to dummy
 
   dq.pendingTasks -= numStolen
   # dq.numSteals += 1
+
+  checkInvariants()
 
 func stealMany*[T](dq: var PrellDeque[T],
                   maxSteals: int32, # should be range[1'i32 .. high(int32)]
@@ -366,8 +357,11 @@ when isMainModule:
   proc newTask(cache: var LookAsideList[Task]): Task =
     result = cache.pop()
     if result.isNil:
-      result = pool.borrow(deref(Task))
+      result = wv_allocPtr(Task)
     zeroMem(result, sizeof(deref(Task)))
+
+  proc delete(task: Task) =
+    wv_free(task)
 
   iterator items(t: Task): Task =
     var cur = t
@@ -383,12 +377,12 @@ when isMainModule:
   suite "Testing PrellDeques":
     var deq: PrellDeque[Task]
     var cache: LookAsideList[Task]
-    cache.threadID = 0
-    cache.freeFn = recycle
-    pool.hook.setHeartbeat(cache)
+    # cache.threadID = 0
+    # cache.freeFn = recycle
+    # pool.hook.setHeartbeat(cache)
 
     test "Instantiation":
-      deq.initialize(dummy = cache.newTask())
+      deq.initialize()
 
       check:
         deq.isEmpty()
@@ -444,10 +438,10 @@ when isMainModule:
 
         # "Other thread"
         var deq2: PrellDeque[Task]
-        deq2.initialize(cache.newTask())
+        deq2.initialize()
         var cache2: LookAsideList[Task]
-        cache2.threadID = 1
-        cache2.freeFn = recycle
+        # cache2.threadID = 1
+        # cache2.freeFn = recycle
 
         deq2.addListFirst(head, tail, numStolen)
         check:
@@ -475,9 +469,9 @@ when isMainModule:
           deq2.isEmpty()
           deq2.pendingTasks == 0
 
-        let leftovers = delete(deq2)
-        recycleAll(leftovers)
-        `=destroy`(cache2)
+        # let leftovers = delete(deq2)
+        # recycleAll(leftovers)
+        # delete(cache2)
 
         # while loop increment
         i += numStolen
@@ -487,6 +481,6 @@ when isMainModule:
         deq.isEmpty()
         deq.pendingTasks == 0
 
-      let leftovers = delete(deq)
-      recycleAll(leftovers)
-      `=destroy`(cache)
+      # let leftovers = delete(deq)
+      # recycleAll(leftovers)
+      # delete(cache)

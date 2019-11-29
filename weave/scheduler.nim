@@ -79,7 +79,7 @@ proc init*(ctx: var TLContext) =
 
   # Worker
   # -----------------------------------------------------------
-  myWorker().deque = newPrellDeque(Task)
+  myWorker().deque.initialize()
   myWorker().initialize(maxID = workforce() - 1)
 
   myTodoBoxes().initialize()

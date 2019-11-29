@@ -44,7 +44,7 @@ type
     ## The fields "prev" and "next" can be used
     ## for intrusive containers
     # We save memory by using int32 instead of int on select properties
-    parent*{.align: WV_CacheLinePadding.}: Task
+    parent*: Task
     prev*: Task
     next*: Task
     fn*: proc (param: pointer) {.nimcall.}
