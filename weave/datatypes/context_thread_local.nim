@@ -71,7 +71,7 @@ type
     ## Thread-Local context
     worker*: Worker
     thefts*: Thefts
-    taskCache*: LookasideList[Task]
+    taskCache*: LookAsideList[Task]
     stealCache*: Persistack[WV_MaxConcurrentStealPerWorker, deref(StealRequest)]
     # Leader thread only - Whole runtime is quiescent
     runtimeIsQuiescent*: bool

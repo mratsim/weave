@@ -27,8 +27,58 @@ import
 proc init*(ctx: var TLContext) =
   ## Initialize the thread-local context of a worker (including the lead worker)
 
+  # Memory
+  # -----------------------------------------------------------
+
+  # Caching description:
+  #
+  # Thread-local objects, with a lifetime equal to the thread lifetime
+  # are allocated directly with no caching.
+  #
+  # Short-lived synchronization objects are allocated depending on their characteristics
+  #
+  # - Steal requests:
+  #   are bounded, exchanged between threads but by design
+  #   a thread knows when its steal request is unused:
+  #   - either it received a corresponding task
+  #   - or the steal request was return
+  #
+  #   So caching is done via a ``Persistack``, a simple stack
+  #   that can either recycle an object or be notified that object is unused.
+  #   I.e. even after lending an object its reference persists in the stack.
+  #
+  # - Task channels:
+  #   Similarly, everytime a steal request is created
+  #   a channel to receive the task must be with the exact same lifetime.
+  #   A persistack is used as well.
+  #
+  # - Flowvars / Futures:
+  #   are unbounded, visible to users.
+  #   In the usual case the thread that allocated them, collect them,
+  #   if the flowvar is awaited in the proc that spawned it.
+  #   A flowvar may be stolen by another thread if it is returned (not tested at the moment).
+  #   Tree and recursive algorithms might spawn a huge number of flowvars initially.
+  #
+  #   Caching is done via a ``thread-safe memory pool``.
+  #   If WV_LazyFlowvar, they are allocated on the stack until we have
+  #   to extend their lifetime beyond the task stack.
+  #
+  # - Tasks:
+  #   are unbounded and either exchanged between threads in case of imbalance
+  #   or stay within their threads.
+  #   Tree and recursive algorithms might create a huge number of tasks initially.
+  #
+  #   Caching is done via a ``look-aside list`` that cooperate with the memory pool
+  #   to adaptatively store/release tasks to it.
+  #
+  # Note that the memory pool for flowvars and tasks is able to release memory back to the OS
+  # The memory pool provides a deterministic heartbeat, every ~N allocations (N depending on the arena size)
+  # expensive pool maintenance is done and amortized.
+  # The lookaside list hooks in into this heartbeat for its own adaptative processing
   myMemPool().initialize(myID())
 
+  # Worker
+  # -----------------------------------------------------------
   myWorker().deque = newPrellDeque(Task)
   myWorker().initialize(maxID = workforce() - 1)
 
@@ -36,11 +86,19 @@ proc init*(ctx: var TLContext) =
   for i in 0 ..< myTodoBoxes().len:
     myTodoBoxes().access(i).initialize()
 
+  ascertain: myTodoBoxes().len == WV_MaxConcurrentStealPerWorker
+
+  # Thieves
+  # -----------------------------------------------------------
   myThieves().initialize()
   localCtx.stealCache.initialize()
   for i in 0 ..< localCtx.stealCache.len:
     localCtx.stealCache.access(i).victims.allocate(capacity = workforce())
 
+  myThefts().rng.seed(myID())
+
+  # Debug
+  # -----------------------------------------------------------
   debug: # TODO debugMem
     let (tStart, tStop) = myTodoBoxes().reservedMemRange()
     log("Worker %2d: tasks channels range       0x%.08x-0x%.08x\n",
@@ -52,12 +110,8 @@ proc init*(ctx: var TLContext) =
     log("Worker %2d: steal requests cache range 0x%.08x-0x%.08x\n",
       myID(), sStart, sStop)
 
-  ascertain: myTodoBoxes().len == WV_MaxConcurrentStealPerWorker
-
-  # Workers seed their RNG with their myID()
-  myThefts().rng.seed(myID())
-
   # Thread-Local Profiling
+  # -----------------------------------------------------------
   profile_init(run_task)
   profile_init(enq_deq_task)
   profile_init(send_recv_task)
