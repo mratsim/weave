@@ -70,10 +70,9 @@ template isRootTask*(task: Task): bool =
 # ----------------------------------------------------------------------------------
 
 proc newTaskFromCache*(): Task {.inline.} =
-  if localCtx.taskCache.isEmpty():
+  result = localCtx.taskCache.pop()
+  if result.isNil:
     allocate(result)
-  else:
-    result = localCtx.taskCache.pop()
 
 iterator items(t: Task): Task =
   var cur = t

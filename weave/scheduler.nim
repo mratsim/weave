@@ -24,7 +24,7 @@ import
 # Local context
 # ----------------------------------------------------------------------------------
 
-proc init*(ctx: var TLContext) =
+proc init*(ctx: var TLContext) {.gcsafe.} =
   ## Initialize the thread-local context of a worker (including the lead worker)
 
   # Memory
@@ -75,7 +75,9 @@ proc init*(ctx: var TLContext) =
   # The memory pool provides a deterministic heartbeat, every ~N allocations (N depending on the arena size)
   # expensive pool maintenance is done and amortized.
   # The lookaside list hooks in into this heartbeat for its own adaptative processing
-  myMemPool().initialize(myID())
+
+  # The mempool is initialized in worker_entry_fn
+  # as the main thread needs it for the root task
 
   # Worker
   # -----------------------------------------------------------
@@ -216,7 +218,7 @@ proc schedulingLoop() =
       # The memory is reused but not zero-ed
       localCtx.taskCache.add(task)
 
-proc threadLocalCleanup*() =
+proc threadLocalCleanup*() {.gcsafe.} =
   myWorker().deque.flushAndDispose()
 
   for i in 0 ..< WV_MaxConcurrentStealPerWorker:
@@ -234,13 +236,14 @@ proc threadLocalCleanup*() =
   delete(localCtx.stealCache)
   discard myMemPool().teardown()
 
-proc worker_entry_fn*(id: WorkerID) =
+proc worker_entry_fn*(id: WorkerID) {.gcsafe.} =
   ## On the start of the threadpool workers will execute this
   ## until they receive a termination signal
   # We assume that thread_local variables start all at their binary zero value
   preCondition: localCtx == default(TLContext)
 
   myID() = id # If this crashes, you need --tlsemulation:off
+  myMemPool().initialize(myID())
   localCtx.init()
   discard pthread_barrier_wait(globalCtx.barrier)
 

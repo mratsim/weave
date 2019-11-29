@@ -67,7 +67,7 @@ func initialize*[T](lal: var LookAsideList[T], tID: int32, freeFn: proc(threadID
   # lal.freeFn = freeFn
   # lal.threadID = tID
 
-func isEmpty*(lal: LookAsideList): bool {.inline.} =
+func isEmpty(lal: LookAsideList): bool {.inline.} =
   result = lal.top.isNil
 
 func add*[T](lal: var LookAsideList[T], elem: sink T) {.inline.} =

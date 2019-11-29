@@ -112,7 +112,7 @@ type
     # ⚠️ Consumer thread field must be at the end
     #    to prevent cache-line contention
     #    and save on space (no padding on the next field)
-    threadFree {.align: WV_CacheLinePadding.}: ChannelMpscUnboundedBatch[ptr MemBlock]
+    remoteFree {.align: WV_CacheLinePadding.}: ChannelMpscUnboundedBatch[ptr MemBlock]
     # Freed blocks, kept separately to deterministically trigger slow path
     # after an amortized amount of allocation
     localFree: ptr MemBlock
@@ -218,7 +218,7 @@ proc newArena(pool: var TLPoolAllocator): ptr Arena =
     log("Pool    0x%.08x - TID %d - reserved Arena 0x%.08x\n",
       pool.addr, pool.threadID, result)
 
-  result.meta.threadFree.initialize()
+  result.meta.remoteFree.initialize()
   result.meta.localFree = nil
   result.meta.used = 0
   result.meta.threadID.store pool.threadID, moRelaxed
@@ -252,10 +252,10 @@ func getArena(p: pointer): ptr Arena {.inline.} =
 # TODO: metrics
 
 # We assume that "localFree" decrement "used" immediately
-# while threadFree are deferred
+# while remoteFree are deferred
 
 func isUnused(arena: ptr Arena): bool {.inline.} =
-  let pending = arena.meta.threadFree.peek()
+  let pending = arena.meta.remoteFree.peek()
   ascertain: pending in 0 .. arena.meta.used
   return arena.meta.used - pending == 0
 
@@ -270,7 +270,7 @@ func isMostlyUsed(arena: ptr Arena): bool {.inline.} =
   const threshold = (arena.blocks.len + (MostlyUsedRatio-1)) div MostlyUsedRatio
   # Peeking into a channel from a consumer thread
   # will give a lower bound
-  result = arena.blocks.len - arena.meta.used + arena.meta.threadFree.peek() <= threshold
+  result = arena.blocks.len - arena.meta.used + arena.meta.remoteFree.peek() <= threshold
 
 func collect(arena: var Arena, force: bool) =
   ## Collect garbage memory in the arena
@@ -294,14 +294,14 @@ func collect(arena: var Arena, force: bool) =
           arena.addr, arena.meta.threadID, arena.blocks.len - arena.meta.used)
 
   debugMem:
-    log("Arena   0x%.08x - TID %d - collect, threadFree.peek() %d blocks (%d used or pending)\n",
-      arena.addr, arena.meta.threadID.load(moRelaxed), arena.meta.threadFree.peek(), arena.meta.used)
+    log("Arena   0x%.08x - TID %d - collect, remoteFree.peek() %d blocks (%d used or pending)\n",
+      arena.addr, arena.meta.threadID.load(moRelaxed), arena.meta.remoteFree.peek(), arena.meta.used)
 
   var first, last: ptr MemBlock
-  let count = arena.meta.threadFree.tryRecvBatch(first, last)
+  let count = arena.meta.remoteFree.tryRecvBatch(first, last)
 
   debugMem:
-    log("Arena   0x%.08x - TID %d - collect, batched threadFree %d blocks (%d blocks used)\n",
+    log("Arena   0x%.08x - TID %d - collect, batched remoteFree %d blocks (%d blocks used)\n",
       arena.addr, arena.meta.threadID.load(moRelaxed), count, arena.meta.used - count)
 
   if count > 0:
@@ -494,7 +494,7 @@ proc recycle*[T](myThreadID: int32, p: ptr T) =
       arena.allocator[].considerRelease(arena)
   else:
     # remote arena
-    let remoteRecycled = arena.meta.threadFree.trySend(p)
+    let remoteRecycled = arena.meta.remoteFree.trySend(p)
     postCondition: remoteRecycled
 
 proc teardown*(pool: var TLPoolAllocator): bool =
