@@ -114,8 +114,7 @@ proc cacheMaintenanceEx[T](lal: ptr LookAsideList[T]) =
   # TODO: read papers on buffer size and throughput
   #       Note that the more counters, the more expensive add/pop are
   #       Targeting exponential growth/decay seems a good simple start.
-  #       We grow/decay by factor 2 but should we use something more fancy
-  #       like 1.5 or the golden ratio?
+  #       WHich ratio? 1.5, 2, the golden ratio?
   #  - http://www.mit.edu/~modiano/papers/CV_C_116.pdf
   #  - http://gdrro.lip6.fr/sites/default/files/slides_COS2017_prahbu.pdf
   #  - https://link.springer.com/article/10.1023/A:1010837416603
@@ -125,8 +124,10 @@ proc cacheMaintenanceEx[T](lal: ptr LookAsideList[T]) =
   if lal.isNil: return
 
   # We want the buffer to be big enough to absorb random "jitter".
-  # An exponential growth may have nice properties on random buffer miss (see papers)
-  if 2*lal.count <= lal.recentAsk:
+  # An exponential growth/decay may have nice properties on random buffer miss (see papers)
+  # If we have 3x more than what the buffer was asked for we divided the size by 2
+  # so we keep 1.5x-3x required items in the buffer if we are flooded.
+  if 3*lal.count <= lal.recentAsk:
     lal.recentAsk = 0
     return
 
