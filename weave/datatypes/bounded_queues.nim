@@ -34,7 +34,7 @@ type
 
 func len*(q: BoundedQueue): int {.inline.} =
   result = q.back - q.front
-  if result < 0:
+  while result < 0:
     # Case when front in [Capacity, 2*Capacity)
     # and tail in [0, Capacity) range
     # for example for a queue of capacity 7 that rolled twice:
