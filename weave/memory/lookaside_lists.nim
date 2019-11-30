@@ -50,10 +50,10 @@ type
     top: T
     # Mempool doesn't provide the proper free yet
     freeFn*: proc(threadID: int32, t: T) {.nimcall, gcsafe.}
-    threadID*: int32
+    threadID*: int32 # TODO, memory pool abstraction leaking
     # Adaptative freeing
-    count: int32
-    recentAsk: int32
+    count: int
+    recentAsk: int
     # "closure" - This points to the proc + env currently registered in the allocator
     #             It is nil-ed on destruction of the lookaside list.
     #
@@ -124,7 +124,7 @@ proc cacheMaintenanceEx[T](lal: ptr LookAsideList[T]) =
   if lal.isNil: return
 
   # We want the buffer to be big enough to absorb random "jitter".
-  # An exponential growth/decay may have nice properties on random buffer miss (see papers)
+  # An exponential growth/decay may have nice properties on random buffer misses (see papers)
   # If we have 3x more than what the buffer was asked for we divided the size by 2
   # so we keep 1.5x-3x required items in the buffer if we are flooded.
   if 3*lal.count <= lal.recentAsk:
@@ -133,7 +133,7 @@ proc cacheMaintenanceEx[T](lal: ptr LookAsideList[T]) =
 
   # Otherwise trigger exponential decay
   let half = lal.count shr 1
-  while lal.count > half: # this handle the "1" task edge case (half = 0)
+  while lal.count > half: # this handles the "1" task edge case (half = 0)
     lal.freeFn(lal.threadID, lal[].popImpl())
 
   lal.recentAsk = 0

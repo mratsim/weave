@@ -55,9 +55,6 @@ From https://github.com/mratsim/weave/blob/a8f42d302e3d68f397374e9b14e964f647cb9
 > The memory pool provides a deterministic heartbeat, every ~N allocations (N depending on the arena size)
 > expensive pool maintenance is done and amortized.
 > The lookaside list hooks in into this heartbeat for its own adaptative processing
->
-> The mempool is initialized in worker_entry_fn
-> as the main thread needs it for the root task
 
 ## In-depth description for the memory pool and lookaside buffer
 ### Scalable memory management and solving the cactus stack problem
@@ -118,8 +115,7 @@ From PR https://github.com/mratsim/weave/pull/24
 >
 >   * Freed blocks are not added directly to the usable freelist, they are kept separately, this ensures that the usable freelist is emptied regularly. When it is emptied is a good time to start expensive memory maintenance that should be amortized on many allocations like releasing one or more arenas to the system allocator. This regular expensive maintenance is called the heartbeat and will be important later.
 >
->   * The remote free list is implemented as a MPSC channel. Mimalloc does not have proper boundaries for cross-thread synchronization, remote threads and local threads are synchronizing by atomic compare-and-swap loops. Snmalloc does use a MPSC queue for synchronizing but to benefit from batching which is much easier to implement on the producer size, remote allocators are put into buckets of a temporal radix tree and freed blocks are batched send towards the head of those buckets. This requires extra round-trip for a single freed block to attain its ultimate destination and require implementing a temporal radix tree, making allocator implementation and maintenance too complex for my taste. Instead I use a novel MPSC lockless queue that supports batching on the consumer side (and the producer side as it's easy). Messages are send directly to their end destination, minimizing latency.
->
+>   * The remote free list is implemented as a MPSC channel. Mimalloc does not have proper boundaries for cross-thread synchronization, remote threads and local threads are synchronizing by atomic compare-and-swap loops. We want message passing everywhere ;). Snmalloc does use a MPSC queue for synchronizing but to benefit from batching which is much easier to implement on the producer size, remote allocators are put into buckets of a temporal radix tree and freed blocks are batched send towards the head of those buckets. This requires extra round-trip for a single freed block to attain its ultimate destination and require implementing a temporal radix tree, making allocator implementation and maintenance too complex for my taste. Instead I use a novel MPSC lockless queue that supports batching on the consumer side (and the producer side as it's easy). Messages are send directly to their end destination, minimizing latency.
 >
 > The memory pools act in general like a LIFO allocator as child tasks as resolved before their parent. It's basically a thread-local cactus stack. Unlike TBB, there is no depth-limitation so it maintains the busy-leaves property of work-stealing, it is theoretically unbounded memory growth (unlike work-first / parent-stealing runtimes like Cilk) but unlike previous research we are heap-allocated.
 >
@@ -130,20 +126,22 @@ From PR https://github.com/mratsim/weave/pull/24
 > Unfortunately, this didn't work out very well for tasks, both fibonacci(40) spiked from less than 200ms (lazy futures)/400ms (eager futures) to 2s/2.3s compared with just storing tasks in an always growing never-releasing stack. Why? Because it was stressing the memory pool with the "slow" multithreaded path due to the tasks being so small that they were regularly stolen and released in other thread.
 >
 > So a new solution was devised: the lookaside buffers / lookaside lists.
-> They extend the original intrusive stack by supporting task eviction, this helps 2 use-case:
+> They extend the original intrusive stack by supporting task eviction, this helps 2 use-cases:
 >
->   * long-running processes with some spike in tasks, but that need the memory elsewhere otherwise
+>   * long-running processes with some spike in tasks, but that need the memory elsewhere otherwise.
 >
->   * producer-consumer scenario to avoid one side with depleted caches and another with unbounded cache growth
+>   * producer-consumer scenario to avoid one side with depleted caches and another with unbounded cache growth.
 >
 >
 > Now the main question is when to do task eviction? We want to amortize cost and we want an adaptative solution to the recent workload. Also the less metadata/counters we need to increment/decrement on the fast path the better as recursive workload like tree search may spawn billions of tasks at once which may means billions of increment.
-> For task eviction, the lookaside buffer hooks into the memory pool heartbeat, when it is time to do amortized expensive memory maintenance, the memory pool has a callback field that triggers also task eviction in the lookaside buffer depending on the current buffer size and the recent requests.
-> Not that it is important for the heartbeat to be triggered on memory allocations as task evictions deallocate and would otherwise lead to an avalanche effect.
+> For task eviction, the lookaside buffer hooks into the memory pool heartbeat. When it is time to do amortized expensive memory maintenance, the memory pool has a callback field that triggers also task eviction in the lookaside buffer depending on the current buffer size and the recent volume of requests.
+> Note that it is important for the heartbeat to be triggered on memory allocations as task evictions deallocate and would otherwise lead to an avalanche effect.
+>
 > ## How does it perform
 >
 > Very well on the speed side, actually the only change that had a noticeable impact (7%) on performance was properly zero-ing the task data structure.
-> Further comparisons against the original implementation for long-running producer-consumer workload is needed on both CPU and memory consumption front.
+> Further comparisons against the original implementation for long-running producer-consumer workloads are needed on both CPU and memory consumption front.
+>
 > ## What's next?
 >
 >   * The `recycle` that allows freeing a memory block to the memory pool requires a threadID argument.
