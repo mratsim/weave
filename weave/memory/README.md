@@ -70,9 +70,9 @@ From PR https://github.com/mratsim/weave/pull/24
 >
 > Notoriously, both Go and Rust had troubles to handle them and used OS primitives instead:
 >
->     * https://mail.mozilla.org/pipermail/rust-dev/2013-November/006314.html
+>   * https://mail.mozilla.org/pipermail/rust-dev/2013-November/006314.html
 >
->     * https://docs.google.com/document/d/1wAaf1rYoM4S4gtnPh0zOlGzWtrZFQ5suE8qr2sD8uWQ/pub
+>   * https://docs.google.com/document/d/1wAaf1rYoM4S4gtnPh0zOlGzWtrZFQ5suE8qr2sD8uWQ/pub
 >
 >
 > Cilk handling of cactus stacks makes Cilk function have a different calling convention and
@@ -80,27 +80,27 @@ From PR https://github.com/mratsim/weave/pull/24
 >
 > And in research:
 >
->     * https://pdos.csail.mit.edu/~sbw/papers/pact183a-lee.pdf requires a fork of the Linux kernel
+>   * https://pdos.csail.mit.edu/~sbw/papers/pact183a-lee.pdf requires a fork of the Linux kernel
 >
->     * http://chaoran.me/assets/pdf/ws-spaa16.pdf uses a techniques similar to fibers which is practical and very fast however requires specific handling of all possible calling convention and register saving/restore combinations from Linux/MacOS/Windows (cdecl, fastcall, stdcall) and CPU Arch (X86, ARM, MIPS, Risc, ...) significantly increasing maintenance burden. Note however that any coroutine library should already provide the related primitives.
+>   * http://chaoran.me/assets/pdf/ws-spaa16.pdf uses a techniques similar to fibers which is practical and very fast however requires specific handling of all possible calling convention and register saving/restore combinations from Linux/MacOS/Windows (cdecl, fastcall, stdcall) and CPU Arch (X86, ARM, MIPS, Risc, ...) significantly increasing maintenance burden. Note however that any coroutine library should already provide the related primitives.
 >
 >
 > ## The changes
 >
 > So this PR introduces 2 keys memory management data structure:
 >
->     * a threadsafe memory pool inspired by the latest [Mimalloc](https://github.com/microsoft/mimalloc) and [Snmalloc](https://github.com/microsoft/snmalloc) research.
+>   * a threadsafe memory pool inspired by the latest [Mimalloc](https://github.com/microsoft/mimalloc) and [Snmalloc](https://github.com/microsoft/snmalloc) research.
 >
->     * a lookaside buffer to specially handle tasks and scale to several tens of billions of tasks created in a couple of milliseconds.
+>   * a lookaside buffer to specially handle tasks and scale to several tens of billions of tasks created in a couple of milliseconds.
 >
 >
 > While before this PR, the runtime could handle this load:
 >
->     * It did not return cached tasks at all to the OS
+>   * It did not return cached tasks at all to the OS
 >
->     * The size of the channels/futures cache was hardcoded
+>   * The size of the channels/futures cache was hardcoded
 >
->     * An imbalance due to tasks being produced by one thread (a for-loop for example) and always freed in another would lead to always depleted caches on the producer end and always full caches in the consumer threads, which would be worst case cache utilization.
+>   * An imbalance due to tasks being produced by one thread (a for-loop for example) and always freed in another would lead to always depleted caches on the producer end and always full caches in the consumer threads, which would be worst case cache utilization.
 >
 >
 > ## How does that work
@@ -116,9 +116,9 @@ From PR https://github.com/mratsim/weave/pull/24
 >
 > Similar to Mimalloc extreme freelist sharding, freelists are not managed at the thread-local allocator level but at the arena level, each arenas keep track of its own freelists: one for usable free blocks, one for deferred free block, one for blocks freed by remote threads.
 >
->     * Freed blocks are not added directly to the usable freelist, they are kept separately, this ensures that the usable freelist is emptied regularly. When it is emptied is a good time to start expensive memory maintenance that should be amortized on many allocations like releasing one or more arenas to the system allocator. This regular expensive maintenance is called the heartbeat and will be important later.
+>   * Freed blocks are not added directly to the usable freelist, they are kept separately, this ensures that the usable freelist is emptied regularly. When it is emptied is a good time to start expensive memory maintenance that should be amortized on many allocations like releasing one or more arenas to the system allocator. This regular expensive maintenance is called the heartbeat and will be important later.
 >
->     * The remote free list is implemented as a MPSC channel. Mimalloc does not have proper boundaries for cross-thread synchronization, remote threads and local threads are synchronizing by atomic compare-and-swap loops. Snmalloc does use a MPSC queue for synchronizing but to benefit from batching which is much easier to implement on the producer size, remote allocators are put into buckets of a temporal radix tree and freed blocks are batched send towards the head of those buckets. This requires extra round-trip for a single freed block to attain its ultimate destination and require implementing a temporal radix tree, making allocator implementation and maintenance too complex for my taste. Instead I use a novel MPSC lockless queue that supports batching on the consumer side (and the producer side as it's easy). Messages are send directly to their end destination, minimizing latency.
+>   * The remote free list is implemented as a MPSC channel. Mimalloc does not have proper boundaries for cross-thread synchronization, remote threads and local threads are synchronizing by atomic compare-and-swap loops. Snmalloc does use a MPSC queue for synchronizing but to benefit from batching which is much easier to implement on the producer size, remote allocators are put into buckets of a temporal radix tree and freed blocks are batched send towards the head of those buckets. This requires extra round-trip for a single freed block to attain its ultimate destination and require implementing a temporal radix tree, making allocator implementation and maintenance too complex for my taste. Instead I use a novel MPSC lockless queue that supports batching on the consumer side (and the producer side as it's easy). Messages are send directly to their end destination, minimizing latency.
 >
 >
 > The memory pools act in general like a LIFO allocator as child tasks as resolved before their parent. It's basically a thread-local cactus stack. Unlike TBB, there is no depth-limitation so it maintains the busy-leaves property of work-stealing, it is theoretically unbounded memory growth (unlike work-first / parent-stealing runtimes like Cilk) but unlike previous research we are heap-allocated.
@@ -132,9 +132,9 @@ From PR https://github.com/mratsim/weave/pull/24
 > So a new solution was devised: the lookaside buffers / lookaside lists.
 > They extend the original intrusive stack by supporting task eviction, this helps 2 use-case:
 >
->     * long-running processes with some spike in tasks, but that need the memory elsewhere otherwise
+>   * long-running processes with some spike in tasks, but that need the memory elsewhere otherwise
 >
->     * producer-consumer scenario to avoid one side with depleted caches and another with unbounded cache growth
+>   * producer-consumer scenario to avoid one side with depleted caches and another with unbounded cache growth
 >
 >
 > Now the main question is when to do task eviction? We want to amortize cost and we want an adaptative solution to the recent workload. Also the less metadata/counters we need to increment/decrement on the fast path the better as recursive workload like tree search may spawn billions of tasks at once which may means billions of increment.
@@ -146,8 +146,8 @@ From PR https://github.com/mratsim/weave/pull/24
 > Further comparisons against the original implementation for long-running producer-consumer workload is needed on both CPU and memory consumption front.
 > ## What's next?
 >
->     * The `recycle` that allows freeing a memory block to the memory pool requires a threadID argument.
+>   * The `recycle` that allows freeing a memory block to the memory pool requires a threadID argument.
 >       This could use pthread_self or assembly or windows API to get a thread ID instead as this requirements leaks into the rest of the codebase.
 >
->     * The memory pool can be tuned some more, like adding a "full arenas" list to avoid scanning them repeatedly. This however makes remote frees more complex as remote threads now needs to notify that the page isn't full anymore.
+>   * The memory pool can be tuned some more, like adding a "full arenas" list to avoid scanning them repeatedly. This however makes remote frees more complex as remote threads now needs to notify that the page isn't full anymore.
 >       Given the current already very good performance and low-overhead of the memory subsytem, it's of lower priority.
