@@ -605,7 +605,6 @@ assert sizeof(Arena) == WV_MemArenaSize,
 
 when isMainModule:
   import times, strformat, system/ansi_c, math, strutils
-  import ../channels/channels_mpsc_unbounded
 
   # Single-threaded
   # ----------------------------------------------------------------------------------
@@ -662,13 +661,13 @@ when isMainModule:
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}
 
-  template sendLoop[T](chan: var ChannelMpscUnbounded[T],
+  template sendLoop[T](chan: var ChannelMpscUnboundedBatch[T],
                        data: sink T,
                        body: untyped): untyped =
     while not chan.trySend(data):
       body
 
-  template recvLoop[T](chan: var ChannelMpscUnbounded[T],
+  template recvLoop[T](chan: var ChannelMpscUnboundedBatch[T],
                        data: var T,
                        body: untyped): untyped =
     while not chan.tryRecv(data):
@@ -700,7 +699,7 @@ when isMainModule:
 
     ThreadArgs = object
       ID: WorkerKind
-      chan: ptr ChannelMpscUnbounded[Val]
+      chan: ptr ChannelMpscUnboundedBatch[Val]
       pool: ptr TLPoolAllocator
 
     AllocKind = enum
@@ -776,7 +775,7 @@ when isMainModule:
       var threads: array[WorkerKind, Thread[ThreadArgs]]
       var pools: ptr array[WorkerKind, TLPoolAllocator]
 
-      let chan = createSharedU(ChannelMpscUnbounded[Val])
+      let chan = createSharedU(ChannelMpscUnboundedBatch[Val])
       chan[].initialize()
 
       pools = cast[typeof pools](createSharedU(TLPoolAllocator, pools[].len))

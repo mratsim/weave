@@ -15,10 +15,14 @@ type
     ##
     ## Properties:
     ## - Lockless
-    ## - Lock-free (?): Progress guarantees to determine
+    ## - Wait-free for producers
+    ## - Consumer can be blocked by producers when they swap
+    ##   the tail, the tail can grow but the consumer sees it as nil
+    ##   until it's published all at once.
     ## - Unbounded
     ## - Intrusive List based
     ## - Keep an approximate count on enqueued
+    ## - Support batching on both the producers and consumer side
 
     # TODO: pass this through Relacy and Valgrind/Helgrind
     #       to make sure there are no bugs
@@ -31,6 +35,20 @@ type
     # Consumer only - front is a dummy node
     front{.align: WV_CacheLinePadding.}: typeof(default(T)[])
 
+# Debugging
+# --------------------------------------------------------------
+
+# Insert the following lines in the relevant places
+
+# Send:
+# debug: log("Channel MPSC 0x%.08x: sending       0x%.08x\n", chan.addr, src)
+
+# Recv:
+# debug: log("Channel MPSC 0x%.08x: try receiving 0x%.08x\n", chan.addr, first)
+
+# Implementation
+# --------------------------------------------------------------
+
 proc initialize*[T](chan: var ChannelMpscUnboundedBatch[T]) {.inline.}=
   chan.front.next.store(nil, moRelaxed)
   chan.back.store(chan.front.addr, moRelaxed)
@@ -40,12 +58,12 @@ proc trySend*[T](chan: var ChannelMpscUnboundedBatch[T], src: sink T): bool {.in
   ## Send an item to the back of the channel
   ## As the channel has unbounded capacity, this should never fail
 
-  debug: log("Channel MPSC 0x%.08x: sending       0x%.08x\n", chan.addr, src)
-
   discard chan.count.fetchAdd(1, moRelaxed)
   src.next.store(nil, moRelaxed)
   fence(moRelease)
   let oldBack = chan.back.exchange(src, moRelaxed)
+  # Consumer can be blocked here, it doesn't see the (potentially growing) end of the queue
+  # until the next instruction.
   cast[T](oldBack).next.store(src, moRelaxed) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
 
   return true
@@ -59,6 +77,8 @@ proc trySendBatch*[T](chan: var ChannelMpscUnboundedBatch[T], first, last: sink 
   last.next.store(nil, moRelaxed)
   fence(moRelease)
   let oldBack = chan.back.exchange(last, moRelaxed)
+  # Consumer can be blocked here, it doesn't see the (potentially growing) end of the queue
+  # until the next instruction.
   cast[T](oldBack).next.store(first, moRelaxed) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
 
   return true
@@ -72,19 +92,19 @@ proc tryRecv*[T](chan: var ChannelMpscUnboundedBatch[T], dst: var T): bool =
   let first = cast[T](chan.front.next.load(moRelaxed))
   if first.isNil:
     return false
-  debug: log("Channel MPSC 0x%.08x: try receiving 0x%.08x\n", chan.addr, first)
 
-  block fastPath:
+  # fast path
+  block:
     let next = first.next.load(moRelaxed)
     if not next.isNil:
       # Not competing with producers
       prefetch(first)
       discard chan.count.fetchSub(1, moRelaxed)
       chan.front.next.store(next, moRelaxed)
-      # Prevent reordering
       fence(moAcquire)
       dst = first
       return true
+  # End fast-path
 
   # Competing with producers at the back
   var last = chan.back.load(moRelaxed)
@@ -107,14 +127,13 @@ proc tryRecv*[T](chan: var ChannelMpscUnboundedBatch[T], dst: var T): bool =
     # at least twice or just bail out if next is nil.
     # Replace this spinlock by "if not next.isNil" and run the "memory pool" bench
     # or fibonacci and the program will get stuck.
-    # The queue should probably be model checked or run through Relacy
+    # The queue should probably be model checked and/or run through Relacy
     cpuRelax()
     next = first.next.load(moRelaxed)
 
   prefetch(first)
   discard chan.count.fetchSub(1, moRelaxed)
   chan.front.next.store(next, moRelaxed)
-  # Prevent reordering
   fence(moAcquire)
   dst = first
   return true
@@ -139,6 +158,7 @@ proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var
   if front.isNil:
     return
 
+  # Fast-forward to the end of the channel
   var next = cast[T](front.next.load(moRelaxed))
   while not next.isNil:
     result += 1
@@ -166,6 +186,9 @@ proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var
     return
 
   # We lost but now we know that there is an extra node
+  # We don't spinlock unlike the single receive case
+  # we assume that consumer has plenty of work to do with the
+  # already retrived batch
   next = cast[T](front.next.load(moRelaxed))
   if not next.isNil:
     # Extra node after this one, no competition with producers

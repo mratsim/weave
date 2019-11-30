@@ -9,7 +9,7 @@ import
   ./datatypes/[sparsesets, sync_types, context_thread_local],
   ./contexts, ./targets,
   ./instrumentation/[contracts, profilers, loggers],
-  ./channels/channels_mpsc_unbounded,
+  ./channels/channels_mpsc_unbounded_batch,
   ./memory/persistacks,
   ./config, ./signals,
   std/atomics

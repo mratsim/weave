@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../channels/channels_mpsc_unbounded,
+  ../channels/channels_mpsc_unbounded_batch,
   ../channels/channels_spsc_single_ptr,
   ../memory/[persistacks, memory_pools],
   ../config,
@@ -34,7 +34,7 @@ type
     #   and a known max number of workers
 
     # Theft channels is bounded to "NumWorkers * WV_MaxConcurrentStealPerWorker"
-    thefts*: ptr UncheckedArray[ChannelMpscUnbounded[StealRequest]]
+    thefts*: ptr UncheckedArray[ChannelMpscUnboundedBatch[StealRequest]]
     tasks*: ptr UncheckedArray[Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]]]
 
   GlobalContext* = object

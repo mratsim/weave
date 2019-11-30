@@ -7,7 +7,7 @@
 
 import
   ./datatypes/[context_global, context_thread_local, sync_types, prell_deques],
-  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded],
+  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch],
   ./memory/[persistacks, lookaside_lists, memory_pools, allocs],
   ./config,
   system/ansi_c,
@@ -38,7 +38,7 @@ profile_extern_decl(idle)
 template myTodoBoxes*: Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]] =
   globalCtx.com.tasks[localCtx.worker.ID]
 
-template myThieves*: ChannelMpscUnbounded[StealRequest] =
+template myThieves*: ChannelMpscUnboundedBatch[StealRequest] =
   globalCtx.com.thefts[localCtx.worker.ID]
 
 template myMemPool*: TLPoolAllocator =

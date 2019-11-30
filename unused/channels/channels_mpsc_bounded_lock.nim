@@ -7,9 +7,9 @@
 
 import
   locks, atomics, typetraits,
-  ../config,
-  ../instrumentation/contracts,
-  ../memory/allocs
+  ../../weave/config,
+  ../../weave/instrumentation/contracts,
+  ../../weave/memory/allocs
 
 type
   ChannelMpscBounded*[T] = object

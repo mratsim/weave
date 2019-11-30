@@ -12,7 +12,7 @@ import
   ./instrumentation/[contracts, profilers, loggers],
   ./contexts, ./config,
   ./datatypes/[sync_types, prell_deques],
-  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded],
+  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch],
   ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
   ./scheduler, ./signals, ./workers, ./thieves, ./victims,
   # Low-level primitives
@@ -38,7 +38,7 @@ proc init*(_: type Runtime) =
   ## Allocation of the global context.
   globalCtx.mempools = wv_alloc(TLPoolAllocator, workforce())
   globalCtx.threadpool = wv_alloc(Thread[WorkerID], workforce())
-  globalCtx.com.thefts = wv_alloc(ChannelMpscUnbounded[StealRequest], workforce())
+  globalCtx.com.thefts = wv_alloc(ChannelMpscUnboundedBatch[StealRequest], workforce())
   globalCtx.com.tasks = wv_alloc(Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]], workforce())
   discard pthread_barrier_init(globalCtx.barrier, nil, workforce())
 

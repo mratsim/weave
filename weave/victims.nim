@@ -10,7 +10,7 @@ import
                sparsesets, prell_deques, flowvars],
   ./contexts, ./config,
   ./instrumentation/[contracts, profilers, loggers],
-  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded, channels_lazy_flowvars],
+  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_lazy_flowvars],
   ./thieves, ./loop_splitting,
   ./memory/memory_pools
 
