@@ -149,13 +149,13 @@ when isMainModule:
       stdout.write(" - SUCCESS\n")
 
     proc main() =
-      init(Runtime)
+      init(Weave)
 
       spawn display_int(123456)
       spawn display_int(654321)
 
-      sync(Runtime)
-      exit(Runtime)
+      sync(Weave)
+      exit(Weave)
 
     # main()
 
@@ -173,12 +173,12 @@ when isMainModule:
 
     proc main2() =
 
-      init(Runtime)
+      init(Weave)
 
       let f = async_fib(20)
 
-      sync(Runtime)
-      exit(Runtime)
+      sync(Weave)
+      exit(Weave)
 
       echo f
 

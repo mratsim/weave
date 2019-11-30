@@ -11,12 +11,12 @@ proc fib(n: int): int =
   result = sync(x) + y
 
 proc main() =
-  init(Runtime)
+  init(Weave)
 
   let f = fib(40)
 
-  sync(Runtime)
-  exit(Runtime)
+  sync(Weave)
+  exit(Weave)
 
   echo f
 

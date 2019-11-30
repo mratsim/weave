@@ -10,9 +10,10 @@ import
   weave/datatypes/flowvars
 
 export
-  Flowvar, Runtime,
+  Flowvar, Weave,
   spawn, sync,
-  init, exit
+  init, exit,
+  loadBalance
 
 # TODO, those are workaround for not binding symbols in spawn macro
 export

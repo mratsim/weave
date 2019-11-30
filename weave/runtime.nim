@@ -21,9 +21,9 @@ import
 # Runtime public routines
 # ----------------------------------------------------------------------------------
 
-type Runtime* = object
+type Weave* = object
 
-proc init*(_: type Runtime) =
+proc init*(_: type Weave) =
   # TODO detect Hyper-Threading and NUMA domain
 
   if existsEnv"WEAVE_NUM_THREADS":
@@ -84,7 +84,7 @@ proc globalCleanup() =
   metrics:
     log("+========================================+\n")
 
-proc exit*(_: type Runtime) =
+proc exit*(_: type Weave) =
   signalTerminate(nil)
   localCtx.signaledTerminate = true
 
@@ -97,7 +97,7 @@ proc exit*(_: type Runtime) =
   threadLocalCleanup()
   globalCleanup()
 
-proc sync*(_: type Runtime) =
+proc sync*(_: type Weave) =
   ## Global barrier for the Picasso runtime
   ## This is only valid in the root task
   Worker: return
@@ -178,3 +178,42 @@ proc sync*(_: type Runtime) =
 
   debugTermination:
     log(">>> Worker %2d leaves barrier <<<\n", myID())
+
+proc loadBalance*(_: type Weave) =
+  ## This makes the current thread ensures it shares work with other threads.
+  ##
+  ## This is done automatically at synchronization points
+  ## like task spawn and sync. But for long-running unbalance tasks
+  ## with no synchronization point this is needed.
+  ##
+  ## For example this can be placed at the end of a for-loop.
+  #
+  # Design notes:
+  # this is a leaky abstraction of Weave design, busy workers
+  # are the ones distributing tasks. However in the IO world
+  # adding poll() calls is widely used as well.
+  #
+  # It's arguably a much better way of handling:
+  # - load imbalance
+  # - the wide range of user CPUs
+  # - dynamic environment changes (maybe there are other programs)
+  # - generic functions on collections like map
+  #
+  # than and asking the developer to guesstimate the task size and
+  # hardcoding the task granularity like some popular frameworks requires.
+  #
+  # See: PyTorch troubles with OpenMP
+  #      Should we use OpenMP when we have 1000 or 80000 items an array?
+  #      https://github.com/zy97140/omp-benchmark-for-pytorch
+  #      It depends on:
+  #      - is it on a dual core CPU
+  #      - or a 4 sockets 100+ cores server grade CPU
+  #      - are you doing addition
+  #      - or exponentiation
+
+  shareWork()
+
+  if myThieves().peek() != 0:
+    var req: StealRequest
+    while recv(req):
+      dispatchTasks(req)
