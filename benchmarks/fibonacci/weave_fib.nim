@@ -15,7 +15,6 @@ proc main() =
 
   let f = fib(40)
 
-  sync(Weave)
   exit(Weave)
 
   echo f

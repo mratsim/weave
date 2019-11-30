@@ -84,19 +84,6 @@ proc globalCleanup() =
   metrics:
     log("+========================================+\n")
 
-proc exit*(_: type Weave) =
-  signalTerminate(nil)
-  localCtx.signaledTerminate = true
-
-  # 1 matching barrier in worker_entry_fn
-  discard pthread_barrier_wait(globalCtx.barrier)
-
-  # 1 matching barrier in metrics
-  workerMetrics()
-
-  threadLocalCleanup()
-  globalCleanup()
-
 proc sync*(_: type Weave) =
   ## Global barrier for the Picasso runtime
   ## This is only valid in the root task
@@ -178,6 +165,20 @@ proc sync*(_: type Weave) =
 
   debugTermination:
     log(">>> Worker %2d leaves barrier <<<\n", myID())
+
+proc exit*(_: type Weave) =
+  sync(_)
+  signalTerminate(nil)
+  localCtx.signaledTerminate = true
+
+  # 1 matching barrier in worker_entry_fn
+  discard pthread_barrier_wait(globalCtx.barrier)
+
+  # 1 matching barrier in metrics
+  workerMetrics()
+
+  threadLocalCleanup()
+  globalCleanup()
 
 proc loadBalance*(_: type Weave) =
   ## This makes the current thread ensures it shares work with other threads.

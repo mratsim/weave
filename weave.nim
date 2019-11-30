@@ -13,7 +13,8 @@ export
   Flowvar, Weave,
   spawn, sync,
   init, exit,
-  loadBalance
+  loadBalance,
+  isAllocated
 
 # TODO, those are workaround for not binding symbols in spawn macro
 export

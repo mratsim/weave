@@ -25,9 +25,9 @@ proc main() =
 
   let n = paramStr(1).parseUInt.uint64
 
-  let start = Wtime_msec()
+  let start = wtime_msec()
   let f = parfib(n)
-  let stop = Wtime_msec()
+  let stop = wtime_msec()
 
   echo "Result: ", f
   echo &"Elapsed wall time: {stop-start:.2} ms"

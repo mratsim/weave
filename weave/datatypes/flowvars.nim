@@ -41,6 +41,16 @@ type
     else:
       chan: ptr ChannelSpscSingleObject[T]
 
+func isAllocated*(fv: Flowvar): bool {.inline.}=
+  ## Returns true if a future is allocated
+  ## This may be useful for recursive algorithms that
+  ## may or may not return a future.
+  ## This is similar to Option or Maybe types
+  when defined(WV_LazyFlowvar):
+    return not fv.lfv.isNil
+  else:
+    return not fv.chan.isNil
+
 EagerFV:
   proc newFlowVar*(pool: var TLPoolAllocator, T: typedesc): Flowvar[T] {.inline.} =
     result.chan = pool.borrow(typeof result.chan[])
