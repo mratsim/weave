@@ -8,6 +8,27 @@
 import
   system/ansi_c
 
+# Helpers
+# ----------------------------------------------------------------------------------
+
+proc isPowerOfTwo*(n: int): bool {.inline.} =
+  (n and (n - 1)) == 0
+
+# TODO: cannot dispatch at compile-time due to https://github.com/nim-lang/Nim/issues/12726
+# but all our use-case are for power of 2
+
+func roundNextMultipleOf*(x: Natural, n: Natural): int {.inline.} =
+  assert n.isPowerOfTwo()
+  result = (x + n - 1) and not(n - 1)
+
+# func roundNextMultipleOf*(x: Natural, n: static Natural): int {.inline.} =
+#   ## Round the input to the next multiple of "n"
+#   when n.isPowerOfTwo():
+#     # n is a power of 2. (If compiler cannot prove that x>0 it does not make the optim)
+#     result = (x + n - 1) and not(n - 1)
+#   else:
+#     result = ((x + n - 1) div n) * n
+
 # Memory
 # ----------------------------------------------------------------------------------
 # TODO: write a dedicated threadsafe object-pool
@@ -35,7 +56,7 @@ proc wv_alloc*(T: typedesc): ptr T {.inline.}=
   when defined(WV_useNimAlloc):
     createSharedU(T)
   else:
-    cast[ptr T](c_malloc(sizeof(T)))
+    cast[ptr T](c_malloc(csize_t sizeof(T)))
 
 proc wv_allocPtr*(T: typedesc[ptr], zero: static bool = false): T {.inline.}=
   ## Default allocator for the Picasso library
@@ -60,7 +81,7 @@ proc wv_alloc*(T: typedesc, len: SomeInteger): ptr UncheckedArray[T] {.inline.} 
   when defined(WV_useNimAlloc):
     cast[type result](createSharedU(T, len))
   else:
-    cast[type result](c_malloc(len * sizeof(T)))
+    cast[type result](c_malloc(csize_t len*sizeof(T)))
 
 proc wv_free*[T: ptr](p: T) {.inline.} =
   when defined(WV_useNimAlloc):
@@ -78,3 +99,17 @@ template alloca*(T: typedesc): ptr T =
 
 template alloca*(T: typedesc, len: Natural): ptr UncheckedArray[T] =
   cast[ptr UncheckedArray[T]](alloca(sizeof(T) * len))
+
+# TODO: IIRC Windows requires _aligned_alloc
+proc aligned_alloc(alignment, size: csize_t): pointer {.sideeffect,importc, header:"<stdlib.h>".}
+
+proc wv_allocAligned*(T: typedesc, alignment: static Natural): ptr T {.inline.} =
+  static:
+    assert alignment.isPowerOfTwo()
+  let # TODO - cannot use a const due to https://github.com/nim-lang/Nim/issues/12726
+    size = sizeof(T)
+    requiredMem = size.roundNextMultipleOf(alignment)
+  cast[ptr T](aligned_alloc(csize_t alignment, csize_t requiredMem))
+
+proc wv_freeAligned*[T](p: ptr T){.inline.} =
+  c_free(p)

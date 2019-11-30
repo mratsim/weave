@@ -9,7 +9,7 @@ import
   ./datatypes/[sparsesets, sync_types, context_thread_local],
   ./contexts, ./targets,
   ./instrumentation/[contracts, profilers, loggers],
-  ./channels/channels_mpsc_unbounded,
+  ./channels/channels_mpsc_unbounded_batch,
   ./memory/persistacks,
   ./config, ./signals,
   std/atomics
@@ -38,7 +38,7 @@ proc newStealRequest(): StealRequest {.inline.} =
 proc rawSend(victimID: WorkerID, req: sink StealRequest) {.inline.}=
   ## Send a steal or work sharing request
   # TODO: check for race condition on runtime exit
-  # log("Worker %d: sending request 0x%.08x to %d (Channel: 0x%.08x)\n",
+  # log("Worker %2d: sending request 0x%.08x to %d (Channel: 0x%.08x)\n",
   #       myID(), cast[ByteAddress](req), victimID, globalCtx.com.thefts[victimID].addr)
   let stealRequestSent = globalCtx.com
                                   .thefts[victimID]
@@ -90,7 +90,8 @@ proc findVictimAndSteal(req: sink StealRequest) =
   #   and debugging that in a multithreading runtime
   #   would probably be very painful.
   let target = findVictim(req)
-  debugTermination: log("Worker %d: sending own steal request to %d\n", myID(), target)
+  debugTermination: log("Worker %2d: sending own steal request to %d (Channel 0x%.08x)\n",
+    myID(), target, globalCtx.com.thefts[target].addr)
   target.sendSteal(req)
 
 proc findVictimAndRelaySteal*(req: sink StealRequest) =
@@ -104,7 +105,11 @@ proc findVictimAndRelaySteal*(req: sink StealRequest) =
   #   and debugging that in a multithreading runtime
   #   would probably be very painful.
   let target = findVictim(req)
-  debugTermination: log("Worker %d: relay steal request to %d from %d\n", myID(), target, req.thiefID)
+  debugTermination: log("Worker %2d: relay steal request from %d to %d (Channel 0x%.08x)\n",
+    myID(), req.thiefID, target, globalCtx.com.thefts[target].addr)
+  # TODO there seem to be a livelock here with the new queue and 16+ workers.
+  #      activating the log above solves it.
+  # The runtime gets stuck in declineAll/trySteal
   target.relaySteal(req)
 
 # Stealing logic
@@ -171,7 +176,7 @@ proc drop*(req: sink StealRequest) =
   preCondition: not myWorker().isWaiting
 
   debugTermination:
-    log("Worker %d drops steal request\n", myID)
+    log("Worker %2d drops steal request\n", myID)
 
   # A dropped request still counts in requests outstanding
   # don't decrement the count so that no new theft is initiated
@@ -192,7 +197,7 @@ proc lastStealAttempt*(req: sink StealRequest) =
   else:
     req.state = Waiting
     debugTermination:
-      log("Worker %d sends state passively WAITING to its parent worker %d\n", myID(), myWorker().parent)
+      log("Worker %2d: sends state passively WAITING to its parent worker %d\n", myID(), myWorker().parent)
     sendShare(req)
     ascertain: not myWorker().isWaiting
     myWorker().isWaiting = true

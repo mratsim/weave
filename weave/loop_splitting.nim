@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./config,
+  ./config, ./contexts,
   ./datatypes/sync_types,
   ./instrumentation/[contracts, loggers]
 

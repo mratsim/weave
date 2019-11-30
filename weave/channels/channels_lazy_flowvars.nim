@@ -7,116 +7,87 @@
 
 import
   std/atomics,
-  ../config
+  ../config,
+  ../instrumentation/[contracts, loggers],
+  ../memory/memory_pools
 
 type
-  ChannelSpscSingleObject*[T] = object
-    ## Wait-free bounded single-producer single-consumer channel
-    ## that can only buffer a single item
-    ## Properties:
-    ##   - wait-free
-    ##   - supports weak memory models
-    ##   - no modulo operations
-    ##   - memory-efficient: buffer the size of the capacity
-    ##   - Padded to avoid false sharing
-    ##   - only 1 synchronization variable.
-    ##   - No extra indirection to access the item, the buffer is inline the channel
-    ##   - Linearizable
+  ChannelLazyFlowvar* = object
+    ## A type-erased SPSC channel for LazyFlowvar.
     ##
-    ## Requires T to fit in a CacheLine
-    ##
-    ## Usage:
-    ##   - Must be heap-allocated
-    ##   - The content of the channel is not destroyed upon channel destruction
-    ##
-    ## Semantics:
-    ##
-    ## The channel is a synchronization point,
-    ## the sender should be ensured that data is read only once and ownership is transferred
-    ## and the receiver should be ensured that a duplicate isn't left on the sender side.
-    ## As such, sending is "sinked" and receiving will always remove data from the channel.
-    ##
-    ## So this channel provides message passing
-    ## with the following strong guarantees:
-    ## - Messages are guaranteed to be delivered
-    ## - Messages will be delivered exactly once
-    ## - Linearizability
-    buffer {.align:WV_CacheLinePadding.}: T # Ensure proper padding if used in sequence of channels
+    ## Motivation, when LazyFlowvar needs to be converted
+    ## from stack-allocated memory to heap to extended their lifetime
+    ## we have no type information at all as the whole runtime
+    ## and especially tasks does not retain it.
+    next*{.align: WV_CacheLinePadding.}: Atomic[pointer] # Concurrent intrusive lists
     full: Atomic[bool]
+    itemSize*: uint8
+    totalSize*: uint8
+    buffer*: UncheckedArray[byte]
 
-proc `=`[T](
-    dest: var ChannelSpscSingleObject[T],
-    source: ChannelSpscSingleObject[T]
+proc `=`(
+    dest: var ChannelLazyFlowvar,
+    source: ChannelLazyFlowvar
   ) {.error: "A channel cannot be copied".}
 
-func initialize*[T](chan: var ChannelSpscSingleObject[T]) {.inline.} =
-  ## Creates a new Shared Memory Single Producer Single Consumer Bounded channel
-  ## Channels should be allocated on the shared memory heap
-  ##
-  ## When using multiple channels it is recommended that
-  ## you use a pointer to an array of channels
-  ## instead of an array of pointer to channels.
-  ##
-  ## This will limit memory fragmentation and also reduce the number
-  ## of potential cache and TLB misses
-  ##
-  ## Channels are padded to avoid false-sharing when packed
-  ## in arrays.
+proc newChannelLazyFlowvar*(pool: var TLPoolAllocator, itemsize: SomeInteger): ptr ChannelLazyFlowvar {.inline.} =
+  preCondition: itemsize.int in 0 .. int high(uint8)
+  preCondition: itemSize.int +
+                sizeof(result.next) +
+                sizeof(result.itemsize) +
+                sizeof(result.full) < WV_MemBlockSize # we could use 256 but 255 is nice on "totalSize"
 
-  # We don't need to zero-mem the padding
-  chan.buffer = default(T)
-  chan.full.store(false, moRelaxed)
+  result = pool.borrow(ChannelLazyFlowvar)
+  result.itemsize = uint8(itemsize)
+  result.full.store(false, moRelaxed)
 
-func clear*(chan: var ChannelSpscSingleObject) {.inline.} =
-  ## Reinitialize the data in the channel
-  ##
-  ## This is not thread-safe.
-  if chan.full.load(moRelaxed) == true:
-    `=destroy`(chan.buffer)
-    chan.full.store(moRelaxed) = false
+  # TODO Address Sanitizer / memory poisoning
 
-func isEmpty*[T](chan: var ChannelSpscSingleObject[T]): bool {.inline.} =
+func isEmpty*(chan: var ChannelLazyFlowvar): bool {.inline.} =
   not chan.full.load(moAcquire)
 
-func tryRecv*[T](chan: var ChannelSpscSingleObject[T], dst: var T): bool {.inline.} =
+func tryRecv*[T](chan: var ChannelLazyFlowvar, dst: var T): bool {.inline.} =
   ## Try receiving the item buffered in the channel
   ## Returns true if successful (channel was not empty)
   ##
   ## ⚠ Use only in the consumer thread that reads from the channel.
+  preCondition: sizeof(T) == chan.itemsize.int
+
   let full = chan.full.load(moAcquire)
   if not full:
     return false
-  dst = move chan.buffer
+  copyMem(dst.addr, chan.buffer.addr, chan.itemsize)
   chan.full.store(false, moRelease)
   return true
 
-func trySend*[T](chan: var ChannelSpscSingleObject[T], src: sink T): bool {.inline.} =
+func trySend*[T](chan: var ChannelLazyFlowvar, src: sink T): bool {.inline.} =
   ## Try sending an item into the channel
   ## Reurns true if successful (channel was empty)
   ##
   ## ⚠ Use only in the producer thread that writes from the channel.
+  preCondition: sizeof(T) == chan.itemsize.int
+
   let full = chan.full.load(moAcquire)
   if full:
     return false
-  `=sink`(chan.buffer, src)
+  copyMem(chan.buffer.addr, src.addr, chan.itemsize)
   chan.full.store(true, moRelease)
   return true
 
 # Sanity checks
 # ------------------------------------------------------------------------------
 when isMainModule:
-  ../memory/allocs
 
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}
 
-  template sendLoop[T](chan: var ChannelSpscSingleObject[T],
+  template sendLoop[T](chan: var ChannelLazyFlowvar,
                        data: sink T,
                        body: untyped): untyped =
     while not chan.trySend(data):
       body
 
-  template recvLoop[T](chan: var ChannelSpscSingleObject[T],
+  template recvLoop[T](chan: var ChannelLazyFlowvar,
                        data: var T,
                        body: untyped): untyped =
     while not chan.tryRecv(data):
@@ -125,7 +96,7 @@ when isMainModule:
   type
     ThreadArgs = object
       ID: WorkerKind
-      chan: ptr ChannelSpscSingleObject[int]
+      chan: ptr ChannelLazyFlowvar
 
     WorkerKind = enum
       Sender
@@ -170,8 +141,10 @@ when isMainModule:
     echo "Testing if 2 threads can send data"
     echo "-----------------------------------"
     var threads: array[2, Thread[ThreadArgs]]
-    let chan = wv_alloc(ChannelSpscSingle[int])
-    chan[].initialize()
+    var pool: TLPoolAllocator
+    pool.initialize(threadID = 0)
+
+    let chan = pool.newChannelLazyFlowvar(sizeof(int))
 
     createThread(threads[0], thread_func, ThreadArgs(ID: Receiver, chan: chan))
     createThread(threads[1], thread_func, ThreadArgs(ID: Sender, chan: chan))
@@ -179,7 +152,8 @@ when isMainModule:
     joinThread(threads[0])
     joinThread(threads[1])
 
-    wv_free(chan)
+    recycle(0, chan)
+
     echo "-----------------------------------"
     echo "Success"
 

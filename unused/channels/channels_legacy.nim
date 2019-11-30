@@ -128,7 +128,7 @@ proc channel_cache_alloc(
       return false
     p = p.next
 
-  p = cast[ptr ChannelCacheObj](c_malloc(sizeof(ChannelCacheObj)))
+  p = cast[ptr ChannelCacheObj](c_malloc(csize_t sizeof(ChannelCacheObj)))
   if p.isNil:
     raise newException(OutOfMemError, "Could not allocate memory")
 
@@ -188,12 +188,12 @@ proc channel_alloc*(size, n: int32, impl: ChannelImplKind): ChannelRaw =
           break
       p = p.next
 
-  result = cast[ChannelRaw](c_malloc(sizeof(ChannelObj)))
+  result = cast[ChannelRaw](c_malloc(csize_t sizeof(ChannelObj)))
   if result.isNil:
     raise newException(OutOfMemError, "Could not allocate memory")
 
   # To buffer n items, we allocate for n+1
-  result.buffer = cast[ptr UncheckedArray[byte]](c_malloc((n+1) * size))
+  result.buffer = cast[ptr UncheckedArray[byte]](c_malloc(csize_t (n+1)*size))
   if result.buffer.isNil:
     raise newException(OutOfMemError, "Could not allocate memory")
 

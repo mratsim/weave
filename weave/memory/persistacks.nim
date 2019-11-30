@@ -48,8 +48,7 @@ type
     # Parents directly enqueue special actions like shutting down.
     # So persistacks are in a global array
     # and we need to avoid cache line conflict between workers
-    pad: array[WV_CacheLineSize - N*sizeof(ptr T) - sizeof(pointer) - sizeof(int8), byte]
-    stack: array[N, ptr T]
+    stack{.align:WV_CacheLinePadding.}: array[N, ptr T]
     rawMem: ptr array[N, T]
     len*: int8
 
@@ -80,6 +79,11 @@ func borrow*[N: static int8, T](ps: var Persistack[N, T]): ptr T {.inline.} =
   ## until it is recycled.
   ##
   ## The object must be properly initialized by the caller.
+  ##
+  ## ⚠️ The lender thread must be the one recycling the reference
+  ## It can be passed to any thread as long as it's returned
+  ## to the main thread via ``recycle`` or that thread is notified
+  ## so that it can reclaim the slot via ``nowAvailable``
   preCondition:
     ps.len > 0
 
@@ -88,6 +92,7 @@ func borrow*[N: static int8, T](ps: var Persistack[N, T]): ptr T {.inline.} =
 
 func recycle*[N: static int8, T](ps: var Persistack[N, T], reference: sink(ptr T)) {.inline.} =
   ## Returns a reference to the persistack.
+  ## ⚠️ The lender thread must be the one recycling the reference
   preCondition:
     ps.len < N
 
@@ -107,6 +112,11 @@ func access*[N: static int8, T](ps: Persistack[N, T], index: SomeInteger): var T
   preCondition:
     index < N
   ps.rawMem[index]
+
+func reservedMemRange*(ps: Persistack): (ByteAddress, ByteAddress) =
+  ## View the memory ranged allocated for the persistacks
+  result[0] = cast[ByteAddress](ps.rawMem[0].addr)
+  result[1] = cast[ByteAddress](ps.rawMem[][^1].addr) + sizeof(ps.T)
 
 # Sanity checks
 # ------------------------------------------------------------------------------

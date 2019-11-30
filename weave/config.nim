@@ -19,7 +19,7 @@ const WV_MaxWorkers* {.intDefine.} = 255
 
 # WV_Profile: turn on profiling
 
-const WV_CacheLineSize* {.intDefine.} = 128
+const WV_CacheLinePadding* {.intDefine.} = 128
   ## Datastructure that are accessed from multiple threads
   ## are padded by this value to avoid
   ## false sharing / cache threashing / cache ping-pong

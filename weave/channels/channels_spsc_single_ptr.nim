@@ -8,7 +8,8 @@
 import
   std/atomics,
   ../config,
-  ../instrumentation/contracts
+  ../instrumentation/[contracts, loggers],
+  ../primitives/compiler_optimization_hints
 
 
 type
@@ -33,7 +34,6 @@ type
     ##
     ## Usage:
     ##   - Requires a pointer type
-    ##   - There is no need to zero-out the padding fields
     ##   - Only trivial objects can transit (no GC, can be copied and no custom destructor)
     ##   - The content of the channel is not destroyed upon channel destruction
     ##
@@ -50,8 +50,7 @@ type
     ## - Messages will be delivered exactly once
     ## - Linearizability
   ChannelRaw = object
-    pad0: array[WV_CacheLineSize - sizeof(pointer), byte] # If used in a sequence of channels
-    buffer: Atomic[pointer]
+    buffer {.align:WV_CacheLinePadding.}: Atomic[pointer] # Ensure proper padding if used in sequence of channels
 
 # Internal type-erased implementation
 # ---------------------------------------------------------------
@@ -113,6 +112,11 @@ func tryRecv*[T](chan: var ChannelSpscSinglePtr[T], dst: var T): bool {.inline.}
   ##
   ## ⚠ Use only in the consumer thread that reads from the channel.
   # Nim implicit conversion to pointer is not mutable
+  debug:
+    let data = chan.buffer.load(moAcquire)
+    if not data.isNil:
+      log("Channel SPSC 0x%.08x: receiving     0x%.08x\n", chan.addr, data)
+
   chan.tryRecvImpl(cast[var pointer](dst.addr))
 
 func trySend*[T](chan: var ChannelSpscSinglePtr[T], src: sink T): bool {.inline.} =
@@ -120,6 +124,11 @@ func trySend*[T](chan: var ChannelSpscSinglePtr[T], src: sink T): bool {.inline.
   ## Reurns true if successful (channel was empty)
   ##
   ## ⚠ Use only in the producer thread that writes from the channel.
+  debug:
+    let data = chan.buffer.load(moAcquire)
+    if not data.isNil:
+      log("Channel SPSC 0x%.08x: sending       0x%.08x\n", chan.addr, src)
+
   chan.trySendImpl(src)
 
 func isEmpty*[T](chan: var ChannelSpscSinglePtr[T]): bool {.inline.} =
@@ -128,18 +137,18 @@ func isEmpty*[T](chan: var ChannelSpscSinglePtr[T]): bool {.inline.} =
 # Sanity checks
 # ------------------------------------------------------------------------------
 when isMainModule:
-  import strutils
+  import strutils, ../memory/allocs
 
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}
 
-  template sendLoop[T](chan: var Channel[T],
+  template sendLoop[T](chan: var ChannelSpscSinglePtr[T],
                        data: sink T,
                        body: untyped): untyped =
     while not chan.trySend(data):
       body
 
-  template recvLoop[T](chan: var Channel[T],
+  template recvLoop[T](chan: var ChannelSpscSinglePtr[T],
                        data: var T,
                        body: untyped): untyped =
     while not chan.tryRecv(data):
@@ -148,7 +157,7 @@ when isMainModule:
   type
     ThreadArgs = object
       ID: WorkerKind
-      chan: ptr Channel[ptr int]
+      chan: ptr ChannelSpscSinglePtr[ptr int]
 
     WorkerKind = enum
       Sender
@@ -198,7 +207,7 @@ when isMainModule:
     echo "Testing if 2 threads can send data"
     echo "-----------------------------------"
     var threads: array[2, Thread[ThreadArgs]]
-    let chan = wv_alloc(Channel[ptr int])
+    let chan = wv_alloc(ChannelSpscSinglePtr[ptr int])
     chan[].initialize()
 
     createThread(threads[0], thread_func, ThreadArgs(ID: Receiver, chan: chan))

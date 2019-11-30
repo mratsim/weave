@@ -168,26 +168,26 @@ proc tasking_internal_statistics*() =
 
     discard tasking_internal_barrier()
 
-    printf("Worker %d: %u steal requests sent\n", ID, requests_sent)
-    printf("Worker %d: %u steal requests handled\n", ID, requests_handled)
-    printf("Worker %d: %u steal requests declined\n", ID, requests_declined)
-    printf("Worker %d: %u tasks executed\n", ID, num_tasks_exec)
-    printf("Worker %d: %u tasks sent\n", ID, tasks_sent)
-    printf("Worker %d: %u tasks split\n", ID, tasks_split)
+    printf("Worker %2d: %u steal requests sent\n", ID, requests_sent)
+    printf("Worker %2d: %u steal requests handled\n", ID, requests_handled)
+    printf("Worker %2d: %u steal requests declined\n", ID, requests_declined)
+    printf("Worker %2d: %u tasks executed\n", ID, num_tasks_exec)
+    printf("Worker %2d: %u tasks sent\n", ID, tasks_sent)
+    printf("Worker %2d: %u tasks split\n", ID, tasks_split)
     when defined(StealBackoff):
-      printf("Worker %d: %u steal requests resent\n", ID, requests_resent)
+      printf("Worker %2d: %u steal requests resent\n", ID, requests_resent)
     when StealStrategy == StealKind.adaptative:
       assert(requests_steal_one + requests_steal_half == requests_sent)
       if requests_sent != 0:
-        printf("Worker %d: %.2f %% steal-one\n", ID,
+        printf("Worker %2d: %.2f %% steal-one\n", ID,
           requests_steal_one.float64 / requests_sent.float64 * 100)
-        printf("Worker %d: %.2f %% steal-half\n", ID,
+        printf("Worker %2d: %.2f %% steal-half\n", ID,
           requests_steal_half.float64 / requests_sent.float64 * 100)
       else:
-        printf("Worker %d: %.2f %% steal-one\n", ID, 0)
-        printf("Worker %d: %.2f %% steal-half\n", ID, 0)
+        printf("Worker %2d: %.2f %% steal-one\n", ID, 0)
+        printf("Worker %2d: %.2f %% steal-half\n", ID, 0)
     when defined(LazyFutures):
-      printf("Worker %d: %u futures converted\n", ID, futures_converted)
+      printf("Worker %2d: %u futures converted\n", ID, futures_converted)
 
     profile_results()
     flushFile(stdout)

@@ -10,8 +10,9 @@ import
                sparsesets, prell_deques, flowvars],
   ./contexts, ./config,
   ./instrumentation/[contracts, profilers, loggers],
-  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded],
-  ./thieves, ./loop_splitting
+  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_lazy_flowvars],
+  ./thieves, ./loop_splitting,
+  ./memory/memory_pools
 
 # Victims - Adaptative task splitting
 # ----------------------------------------------------------------------------------
@@ -40,14 +41,14 @@ proc recv*(req: var StealRequest): bool {.inline.} =
 
     debug:
       if result:
-        log("Worker %d: receives request 0x%.08x from %d with %d potential victims. (Channel: 0x%.08x)\n",
+        log("Worker %2d: receives request 0x%.08x from %d with %d potential victims. (Channel: 0x%.08x)\n",
               myID(), cast[ByteAddress](req), req.thiefID, req.victims.len, myThieves().addr)
 
     # We treat specially the case where children fail to steal
     # and defer to the current worker (their parent)
     while result and req.state == Waiting:
       debugTermination:
-        log("Worker %d receives state passively WAITING from its child worker %d\n",
+        log("Worker %2d: receives state passively WAITING from its child worker %d\n",
             myID(), req.thiefID)
 
       # Only children can forward a request where they sleep
@@ -75,7 +76,7 @@ proc declineOwn(req: sink StealRequest) =
   preCondition: req.victims.isEmpty()
 
   debugTermination:
-    log("Worker %d: received own request (req.state: %s, left: %d, right %d)\n", myID(), $req.state, myWorker().leftIsWaiting, myWorker().rightIsWaiting)
+    log("Worker %2d: received own request (req.state: %s, left: %d, right %d)\n", myID(), $req.state, myWorker().leftIsWaiting, myWorker().rightIsWaiting)
 
   if req.state == Stealing and myWorker().leftIsWaiting and myWorker().rightIsWaiting:
     when WV_MaxConcurrentStealPerWorker == 1:
@@ -149,6 +150,8 @@ proc takeTasks(req: StealRequest): tuple[task: Task, loot: int32] =
     result.loot = 1
 
 proc send(req: sink StealRequest, task: sink Task, numStolen: int32 = 1) {.inline.}=
+  debug: log("Worker %2d: sending %d tasks (task.fn 0x%.08x) to Worker %2d\n",
+    myID(), numStolen, task.fn, req.thiefID, req.thiefAddr)
   let taskSent = req.thiefAddr[].trySend(task)
   when defined(WV_LastThief):
     myThefts().lastThief = req.thiefID
@@ -159,16 +162,14 @@ proc send(req: sink StealRequest, task: sink Task, numStolen: int32 = 1) {.inlin
   incCounter(tasksSent, numStolen)
 
 LazyFV:
-  import ./channels/channels_legacy
-
   proc convertLazyFlowvar(task: Task) {.inline.} =
     # Allocate the Lazy future on the heap to extend its lifetime
     var lfv: LazyFlowvar
     copyMem(lfv.addr, task.data.addr, sizeof(LazyFlowvar))
     if not lfv.hasChannel:
-      # lfv.allocChannel()
       lfv.hasChannel = true
-      lfv.lazyChan.chan = channel_alloc(int32 sizeof(lfv.lazyChan), 0, Spsc)
+      # TODO, support bigger than pointer size
+      lfv.lazy.chan = newChannelLazyFlowvar(myMemPool(), itemsize = sizeof(LazyChannel))
       incCounter(futuresConverted)
 
   proc batchConvertLazyFlowvar(task: Task) =
@@ -195,9 +196,8 @@ proc dispatchTasks*(req: sink StealRequest) =
       # TODO LastVictim
       LazyFV:
         batchConvertLazyFlowvar(task)
-      debug: log("Worker %2d: preparing a task with function address %d\n", myID(), task.fn)
-      debug: log("Worker %2d: sent %d task%s to worker %d\n",
-                  myID(), loot, if loot > 1: "s" else: "", req.thiefID)
+      debug: log("Worker %2d: preparing %d task(s) for worker %2d with function address 0x%.08x\n",
+        myID(), loot, req.thiefID, task.fn)
       req.send(task, loot)
   else:
     ascertain: myWorker().deque.isEmpty()

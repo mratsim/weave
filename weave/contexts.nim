@@ -6,12 +6,13 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./datatypes/[context_global, context_thread_local, sync_types],
-  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded],
-  ./memory/[persistacks, intrusive_stacks],
+  ./datatypes/[context_global, context_thread_local, sync_types, prell_deques],
+  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch],
+  ./memory/[persistacks, lookaside_lists, memory_pools, allocs],
   ./config,
   system/ansi_c,
-  ./instrumentation/[profilers, loggers]
+  ./instrumentation/[profilers, loggers, contracts],
+  ./primitives/barriers
 
 # Contexts
 # ----------------------------------------------------------------------------------
@@ -31,23 +32,17 @@ profile_extern_decl(send_recv_task)
 profile_extern_decl(enq_deq_task)
 profile_extern_decl(idle)
 
-# Task caching
-# ----------------------------------------------------------------------------------
-
-proc newTaskFromCache*(): Task {.inline.} =
-  if localCtx.taskCache.isEmpty():
-    allocate(result)
-  else:
-    result = localCtx.taskCache.pop()
-
 # Aliases
 # ----------------------------------------------------------------------------------
 
 template myTodoBoxes*: Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]] =
   globalCtx.com.tasks[localCtx.worker.ID]
 
-template myThieves*: ChannelMpscUnbounded[StealRequest] =
+template myThieves*: ChannelMpscUnboundedBatch[StealRequest] =
   globalCtx.com.thefts[localCtx.worker.ID]
+
+template myMemPool*: TLPoolAllocator =
+  globalCtx.mempools[localCtx.worker.ID]
 
 template workforce*: int32 =
   globalCtx.numWorkers
@@ -70,6 +65,45 @@ template myMetrics*: untyped =
 
 template isRootTask*(task: Task): bool =
   task.parent.isNil
+
+# Task caching
+# ----------------------------------------------------------------------------------
+
+proc newTaskFromCache*(): Task =
+  result = localCtx.taskCache.pop()
+  if result.isNil:
+    result = myMemPool().borrow(deref(Task))
+  # Zeroing is expensive, it's 96 bytes
+
+  # result.fn = nil # Always overwritten
+  # result.parent = nil # Always overwritten
+  result.prev = nil
+  result.next = nil
+  result.futures = nil
+  result.start = 0
+  result.cur = 0
+  result.stop = 0
+  result.chunks = 0
+  result.splitThreshold = 0
+  result.batch = 0
+  result.isLoop = false
+  result.hasFuture = false
+
+proc delete*(task: Task) {.inline.} =
+  preCondition: not task.isNil()
+  recycle(myID(), task)
+
+iterator items(t: Task): Task =
+  var cur = t
+  while not cur.isNil:
+    let next = cur.next
+    yield cur
+    cur = next
+
+proc flushAndDispose*(dq: var PrellDeque) =
+  let leftovers = flush(dq)
+  for task in items(leftovers):
+    recycle(myID(), task)
 
 # Dynamic Scopes
 # ----------------------------------------------------------------------------------
@@ -108,27 +142,27 @@ proc workerMetrics*() =
 
     discard pthread_barrier_wait(globalCtx.barrier)
 
-    c_printf("Worker %d: %u steal requests sent\n", myID(), localCtx.counters.stealSent)
-    c_printf("Worker %d: %u steal requests handled\n", myID(), localCtx.counters.stealHandled)
-    c_printf("Worker %d: %u steal requests declined\n", myID(), localCtx.counters.stealDeclined)
-    c_printf("Worker %d: %u tasks executed\n", myID(), localCtx.counters.tasksExec)
-    c_printf("Worker %d: %u tasks sent\n", myID(), localCtx.counters.tasksSent)
-    c_printf("Worker %d: %u tasks split\n", myID(), localCtx.counters.tasksSplit)
+    c_printf("Worker %2d: %u steal requests sent\n", myID(), localCtx.counters.stealSent)
+    c_printf("Worker %2d: %u steal requests handled\n", myID(), localCtx.counters.stealHandled)
+    c_printf("Worker %2d: %u steal requests declined\n", myID(), localCtx.counters.stealDeclined)
+    c_printf("Worker %2d: %u tasks executed\n", myID(), localCtx.counters.tasksExec)
+    c_printf("Worker %2d: %u tasks sent\n", myID(), localCtx.counters.tasksSent)
+    c_printf("Worker %2d: %u tasks split\n", myID(), localCtx.counters.tasksSplit)
     when defined(StealBackoff):
-      c_printf("Worker %d: %u steal requests resent\n", myID(), localCtx.counters.stealResent)
+      c_printf("Worker %2d: %u steal requests resent\n", myID(), localCtx.counters.stealResent)
     StealAdaptative:
       ascertain: localCtx.counters.stealOne + localCtx.counters.stealHalf == localCtx.counters.stealSent
       if localCtx.counters.stealSent != 0:
-        c_printf("Worker %d: %.2f %% steal-one\n", myID(),
+        c_printf("Worker %2d: %.2f %% steal-one\n", myID(),
           localCtx.counters.stealOne.float64 / localCtx.counters.stealSent.float64 * 100)
-        c_printf("Worker %d: %.2f %% steal-half\n", myID(),
+        c_printf("Worker %2d: %.2f %% steal-half\n", myID(),
           localCtx.counters.stealHalf.float64 / localCtx.counters.stealSent.float64 * 100)
       else:
-        c_printf("Worker %d: %.2f %% steal-one\n", myID(), 0)
-        c_printf("Worker %d: %.2f %% steal-half\n", myID(), 0)
+        c_printf("Worker %2d: %.2f %% steal-one\n", myID(), 0)
+        c_printf("Worker %2d: %.2f %% steal-half\n", myID(), 0)
     LazyFV:
-      c_printf("Worker %d: %u futures converted\n", myID(), localCtx.counters.futuresConverted)
-    c_printf("Worker %d: random victim fast path (slow path): %3.0f %% (%3.0f %%)\n",
+      c_printf("Worker %2d: %u futures converted\n", myID(), localCtx.counters.futuresConverted)
+    c_printf("Worker %2d: random victim fast path (slow path): %3.0f %% (%3.0f %%)\n",
       myID(), localCtx.counters.randomVictimEarlyExits.float64 * 100 / localCtx.counters.randomVictimCalls.float64,
       100 - localCtx.counters.randomVictimEarlyExits.float64 * 100 / localCtx.counters.randomVictimCalls.float64
     )

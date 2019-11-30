@@ -21,7 +21,7 @@ proc detectTermination*() {.inline.} =
   preCondition: not localCtx.runtimeIsQuiescent
 
   debugTermination:
-    log(">>> Worker %d detects termination <<<\n", myID())
+    log(">>> Worker %2d detects termination <<<\n", myID())
 
   localCtx.runtimeIsQuiescent = true
 
@@ -36,7 +36,7 @@ proc asyncSignal(fn: proc (_: pointer) {.nimcall.}, chan: var ChannelSpscSingleP
     # TODO: StealLastVictim
 
     let signalSent = chan.trySend(dummy)
-    debug: log("Worker %d: sending asyncSignal\n", myID())
+    debug: log("Worker %2d: sending asyncSignal\n", myID())
     postCondition: signalSent
 
 proc signalTerminate*(_: pointer) =

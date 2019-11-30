@@ -8,7 +8,7 @@
 import
   ./bounded_queues, ./sync_types, ./prell_deques,
   ../config,
-  ../memory/[intrusive_stacks, persistacks, allocs],
+  ../memory/[lookaside_lists, persistacks, allocs],
   ../instrumentation/contracts,
   ../random/rng
 
@@ -71,7 +71,7 @@ type
     ## Thread-Local context
     worker*: Worker
     thefts*: Thefts
-    taskCache*: IntrusiveStack[Task]
+    taskCache*: LookAsideList[Task]
     stealCache*: Persistack[WV_MaxConcurrentStealPerWorker, deref(StealRequest)]
     # Leader thread only - Whole runtime is quiescent
     runtimeIsQuiescent*: bool

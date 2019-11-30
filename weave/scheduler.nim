@@ -9,8 +9,8 @@ import
   ./instrumentation/[contracts, profilers, loggers],
   ./primitives/barriers,
   ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars, sparsesets],
-  ./channels/[channels_legacy, channels_spsc_single_ptr, channels_mpsc_unbounded],
-  ./memory/[persistacks, intrusive_stacks, allocs],
+  ./channels/[channels_spsc_single_object, channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_lazy_flowvars],
+  ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
   ./contexts, ./config,
   ./victims, ./loop_splitting,
   ./thieves, ./workers,
@@ -24,24 +24,98 @@ import
 # Local context
 # ----------------------------------------------------------------------------------
 
-proc init*(ctx: var TLContext) =
+proc init*(ctx: var TLContext) {.gcsafe.} =
   ## Initialize the thread-local context of a worker (including the lead worker)
 
-  myWorker().deque = newPrellDeque(Task)
-  myTodoBoxes().initialize()
-  myWorker().initialize(maxID = workforce() - 1)
-  myThieves().initialize()
+  # Memory
+  # -----------------------------------------------------------
 
+  # Caching description:
+  #
+  # Thread-local objects, with a lifetime equal to the thread lifetime
+  # are allocated directly with no caching.
+  #
+  # Short-lived synchronization objects are allocated depending on their characteristics
+  #
+  # - Steal requests:
+  #   are bounded, exchanged between threads but by design
+  #   a thread knows when its steal request is unused:
+  #   - either it received a corresponding task
+  #   - or the steal request was return
+  #
+  #   So caching is done via a ``Persistack``, a simple stack
+  #   that can either recycle an object or be notified that object is unused.
+  #   I.e. even after lending an object its reference persists in the stack.
+  #
+  # - Task channels:
+  #   Similarly, everytime a steal request is created
+  #   a channel to receive the task must be with the exact same lifetime.
+  #   A persistack is used as well.
+  #
+  # - Flowvars / Futures:
+  #   are unbounded, visible to users.
+  #   In the usual case the thread that allocated them, collect them,
+  #   if the flowvar is awaited in the proc that spawned it.
+  #   A flowvar may be stolen by another thread if it is returned (not tested at the moment).
+  #   Tree and recursive algorithms might spawn a huge number of flowvars initially.
+  #
+  #   Caching is done via a ``thread-safe memory pool``.
+  #   If WV_LazyFlowvar, they are allocated on the stack until we have
+  #   to extend their lifetime beyond the task stack.
+  #
+  # - Tasks:
+  #   are unbounded and either exchanged between threads in case of imbalance
+  #   or stay within their threads.
+  #   Tree and recursive algorithms might create a huge number of tasks initially.
+  #
+  #   Caching is done via a ``look-aside list`` that cooperate with the memory pool
+  #   to adaptatively store/release tasks to it.
+  #
+  # Note that the memory pool for flowvars and tasks is able to release memory back to the OS
+  # The memory pool provides a deterministic heartbeat, every ~N allocations (N depending on the arena size)
+  # expensive pool maintenance is done and amortized.
+  # The lookaside list hooks in into this heartbeat for its own adaptative processing
+
+  # The mempool is initialized in worker_entry_fn
+  # as the main thread needs it for the root task
+  ctx.taskCache.initialize(tID = myID(), freeFn = memory_pools.recycle)
+  myMemPool.hook.setCacheMaintenanceEx(ctx.taskCache)
+
+  # Worker
+  # -----------------------------------------------------------
+  myWorker().deque.initialize()
+  myWorker().initialize(maxID = workforce() - 1)
+
+  myTodoBoxes().initialize()
+  for i in 0 ..< myTodoBoxes().len:
+    myTodoBoxes().access(i).initialize()
+
+  ascertain: myTodoBoxes().len == WV_MaxConcurrentStealPerWorker
+
+  # Thieves
+  # -----------------------------------------------------------
+  myThieves().initialize()
   localCtx.stealCache.initialize()
   for i in 0 ..< localCtx.stealCache.len:
     localCtx.stealCache.access(i).victims.allocate(capacity = workforce())
 
-  ascertain: myTodoBoxes().len == WV_MaxConcurrentStealPerWorker
-
-  # Workers seed their RNG with their myID()
   myThefts().rng.seed(myID())
 
+  # Debug
+  # -----------------------------------------------------------
+  debug: # TODO debugMem
+    let (tStart, tStop) = myTodoBoxes().reservedMemRange()
+    log("Worker %2d: tasks channels range       0x%.08x-0x%.08x\n",
+      myID(), tStart, tStop
+    )
+    log("Worker %2d: steal requests channel is  0x%.08x\n",
+      myID(), myThieves().addr)
+    let (sStart, sStop) = localCtx.stealCache.reservedMemRange()
+    log("Worker %2d: steal requests cache range 0x%.08x-0x%.08x\n",
+      myID(), sStart, sStop)
+
   # Thread-Local Profiling
+  # -----------------------------------------------------------
   profile_init(run_task)
   profile_init(enq_deq_task)
   profile_init(send_recv_task)
@@ -98,7 +172,7 @@ proc schedulingLoop() =
     # when all threads are ready.
 
     # 1. Private task deque
-    debug: log("Worker %d: schedloop 1 - task from local deque\n", myID())
+    debug: log("Worker %2d: schedloop 1 - task from local deque\n", myID())
     while (let task = nextTask(childTask = false); not task.isNil):
       # Prio is: children, then thieves then us
       ascertain: not task.fn.isNil
@@ -109,7 +183,7 @@ proc schedulingLoop() =
         localCtx.taskCache.add(task)
 
     # 2. Run out-of-task, become a thief
-    debug: log("Worker %d: schedloop 2 - becoming a thief\n", myID())
+    debug: log("Worker %2d: schedloop 2 - becoming a thief\n", myID())
     trySteal(isOutOfTasks = true)
     ascertain: myThefts().outstanding > 0
 
@@ -122,7 +196,7 @@ proc schedulingLoop() =
 
     # 3. We stole some task(s)
     ascertain: not task.fn.isNil
-    debug: log("Worker %d: schedloop 3 - stoled tasks\n", myID())
+    debug: log("Worker %2d: schedloop 3 - stoled tasks\n", myID())
 
     let loot = task.batch
     if loot > 1:
@@ -135,19 +209,19 @@ proc schedulingLoop() =
       myThefts().recentThefts += 1
 
     # 4. Share loot with children
-    debug: log("Worker %d: schedloop 4 - sharing work\n", myID())
+    debug: log("Worker %2d: schedloop 4 - sharing work\n", myID())
     shareWork()
 
     # 5. Work on what is left
-    debug: log("Worker %d: schedloop 5 - working on leftover\n", myID())
+    debug: log("Worker %2d: schedloop 5 - working on leftover\n", myID())
     profile(run_task):
       run(task)
     profile(enq_deq_task):
       # The memory is reused but not zero-ed
       localCtx.taskCache.add(task)
 
-proc threadLocalCleanup*() =
-  myWorker().deque.delete()
+proc threadLocalCleanup*() {.gcsafe.} =
+  myWorker().deque.flushAndDispose()
 
   for i in 0 ..< WV_MaxConcurrentStealPerWorker:
     # No tasks left
@@ -160,16 +234,18 @@ proc threadLocalCleanup*() =
   # but those are on the stack as well and auto-destroyed
 
   # The task cache is full of tasks
-  `=destroy`(localCtx.taskCache)
+  delete(localCtx.taskCache)
   delete(localCtx.stealCache)
+  discard myMemPool().teardown()
 
-proc worker_entry_fn*(id: WorkerID) =
+proc worker_entry_fn*(id: WorkerID) {.gcsafe.} =
   ## On the start of the threadpool workers will execute this
   ## until they receive a termination signal
   # We assume that thread_local variables start all at their binary zero value
   preCondition: localCtx == default(TLContext)
 
   myID() = id # If this crashes, you need --tlsemulation:off
+  myMemPool().initialize(myID())
   localCtx.init()
   discard pthread_barrier_wait(globalCtx.barrier)
 
@@ -186,14 +262,14 @@ proc worker_entry_fn*(id: WorkerID) =
 
 EagerFV:
   template isFutReady(): untyped =
-    fv.chan.tryRecv(parentResult)
+    fv.chan[].tryRecv(parentResult)
 LazyFV:
   template isFutReady(): untyped =
-    if fv.lazyFV.hasChannel:
-      ascertain: not fv.lazyFV.lazy_chan.chan.isNil
-      fv.lazyFV.lazyChan.chan.tryRecv(parentResult)
+    if fv.lfv.hasChannel:
+      ascertain: not fv.lfv.lazy.chan.isNil
+      fv.lfv.lazy.chan[].tryRecv(parentResult)
     else:
-      fv.lazyFV.isReady
+      fv.lfv.isReady
 
 proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
   ## Eagerly complete an awaited FlowVar
@@ -205,7 +281,7 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
       break CompleteFuture
 
     ## 1. Process all the children of the current tasks (and only them)
-    debug: log("Worker %d: forcefut 1 - task from local deque\n", myID())
+    debug: log("Worker %2d: forcefut 1 - task from local deque\n", myID())
     while (let task = nextTask(childTask = true); not task.isNil):
       profile(run_task):
         run(task)
@@ -218,7 +294,7 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
 
     # 2. Run out-of-task, become a thief and help other threads
     #    to reach children faster
-    debug: log("Worker %d: forcefut 2 - becoming a thief\n", myID())
+    debug: log("Worker %2d: forcefut 2 - becoming a thief\n", myID())
     while not isFutReady():
       trySteal(isOutOfTasks = false)
       var task: Task
@@ -239,7 +315,7 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
 
       # 3. We stole some task(s)
       ascertain: not task.fn.isNil
-      debug: log("Worker %d: forcefut 3 - stoled tasks\n", myID())
+      debug: log("Worker %2d: forcefut 3 - stoled tasks\n", myID())
 
       let loot = task.batch
       if loot > 1:
@@ -253,7 +329,7 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
         myThefts().recentThefts += 1
 
       # Share loot with children workers
-      debug: log("Worker %d: forcefut 4 - sharing work\n", myID())
+      debug: log("Worker %2d: forcefut 4 - sharing work\n", myID())
       shareWork()
 
       # Run the rest
@@ -263,18 +339,11 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
         # The memory is reused but not zero-ed
         localCtx.taskCache.add(task)
 
-  LazyFV:
-    # Cleanup the lazy flowvar if allocated or copy directly into result
-    if not fv.lazyFV.hasChannel:
-      ascertain: fv.lazyFV.isReady
-      copyMem(parentResult.addr, fv.lazyFV.lazyChan.buf.addr, sizeof(parentResult))
-    else:
-      ascertain: not fv.lazyFV.lazyChan.chan.isNil
-      fv.lazyFV.lazyChan.chan.delete()
-
 proc schedule*(task: sink Task) =
   ## Add a new task to be scheduled in parallel
   preCondition: not task.fn.isNil
+  debug: log("Worker %2d: scheduling task.fn 0x%.08x\n", myID(), task.fn)
+
   myWorker().deque.addFirst task
 
   profile_stop(enq_deq_task)
@@ -283,7 +352,7 @@ proc schedule*(task: sink Task) =
   if localCtx.runtimeIsQuiescent:
     ascertain: myID() == LeaderID
     debugTermination:
-      log(">>> Worker %d resumes execution after barrier <<<\n", myID())
+      log(">>> Worker %2d resumes execution after barrier <<<\n", myID())
     localCtx.runtimeIsQuiescent = false
 
   shareWork()

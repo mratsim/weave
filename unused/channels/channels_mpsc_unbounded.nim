@@ -1,8 +1,8 @@
 import
-  std/atomics,
-  ../config,
-  ../primitives/compiler_optimization_hints, # for prefetch
-  ../instrumentation/[contracts, loggers]
+  std/atomics, std/macros,
+  ../../weave/config,
+  ../../weave/primitives/compiler_optimization_hints, # for prefetch
+  ../../weave/instrumentation/[contracts, loggers]
 
 type
   Enqueueable = concept x, type T
@@ -10,7 +10,7 @@ type
     x.next is Atomic[pointer]
     # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
 
-  ChannelMpscUnbounded*[T: Enqueueable] = object
+  ChannelMpscUnboundedBatch*[T: Enqueueable] = object
     ## Lockless multi-producer single-consumer channel
     ##
     ## Properties:
@@ -24,61 +24,60 @@ type
     #       to make sure there are no bugs
     #       on arch with relaxed memory models
 
-    count: Atomic[int]
+    # Accessed by all
+    count{.align: WV_CacheLinePadding.}: Atomic[int]
+    # Producers and consumer slow-path
+    back{.align: WV_CacheLinePadding.}: Atomic[pointer] # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
     dummy: typeof(default(T)[]) # Deref the pointer type
-    pad0: array[WV_CacheLineSize - sizeof(pointer), byte]
-    front: T
-    pad1: array[WV_CacheLineSize - sizeof(int), byte]
-    back: Atomic[pointer] # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
+    # Consumer only
+    # ⚠️ Field to be kept at the end
+    #   so that it can be intrusive to consumers data structure
+    #   like a memory pool
+    front{.align: WV_CacheLinePadding.}: T
 
 template checkInvariants(): untyped =
   ascertain: not(chan.front.isNil)
   ascertain: not(chan.back.load(moRelaxed).isNil)
 
-proc initialize*[T](chan: var ChannelMpscUnbounded[T]) =
+proc initialize*[T](chan: var ChannelMpscUnboundedBatch[T]) =
   # We keep a dummy node within the queue itself
   # it doesn't need any dynamic allocation which simplify
   # its use in an allocator
   chan.dummy.reset()
   chan.front = chan.dummy.addr
   chan.back.store(chan.dummy.addr, moRelaxed)
+  chan.count.store(0, moRelaxed)
 
-proc trySendImpl[T](chan: var ChannelMpscUnbounded[T], src: sink T, count: static bool): bool {.inline.}=
+proc trySendImpl[T](chan: var ChannelMpscUnboundedBatch[T], src: sink T, count: static bool): bool {.inline.}=
   ## Send an item to the back of the channel
   ## As the channel as unbounded capacity, this should never fail
   checkInvariants()
 
+  when count:
+    discard chan.count.fetchAdd(1, moRelaxed)
   src.next.store(nil, moRelaxed)
   fence(moRelease)
   let oldBack = chan.back.exchange(src, moRelaxed)
   cast[T](oldBack).next.store(src, moRelaxed) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
-  when count:
-    discard chan.count.fetchAdd(1, moRelaxed)
 
   return true
 
-proc trySend*[T](chan: var ChannelMpscUnbounded[T], src: sink T): bool =
-  # log("Channel 0x%.08x trySend - front: 0x%.08x (%d), second: 0x%.08x, back: 0x%.08x\n", chan.addr, chan.front, chan.front.val, chan.front.next, chan.back)
+proc trySend*[T](chan: var ChannelMpscUnboundedBatch[T], src: sink T): bool {.inline.}=
   chan.trySendImpl(src, count = true)
 
-proc reenqueueDummy[T](chan: var ChannelMpscUnbounded[T]) =
+proc reenqueueDummy[T](chan: var ChannelMpscUnboundedBatch[T]) =
   # log("Channel 0x%.08x reenqueing dummy\n")
   discard chan.trySendImpl(chan.dummy.addr, count = false)
 
-proc tryRecv*[T](chan: var ChannelMpscUnbounded[T], dst: var T): bool =
+proc tryRecv*[T](chan: var ChannelMpscUnboundedBatch[T], dst: var T): bool =
   ## Try receiving the next item buffered in the channel
   ## Returns true if successful (channel was not empty)
   ## This can fail spuriously on the last element if producer
   ## enqueues a new element while the consumer was dequeing it
-  assert not(chan.front.isNil)
-  assert not(chan.back.load(moRelaxed).isNil)
+  checkInvariants()
 
   var first = chan.front
-  # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
-  var next = cast[T](first.next.load(moRelaxed))
-
-  # log("Channel 0x%.08x tryRecv - first: 0x%.08x (%d), next: 0x%.08x (%d), last: 0x%.08x\n",
-  #   chan.addr, first, first.val, next, if not next.isNil: next.val else: 0, chan.back)
+  var next = cast[T](first.next.load(moRelaxed)) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
 
   if first == chan.dummy.addr:
     # First node is the dummy
@@ -130,7 +129,7 @@ proc tryRecv*[T](chan: var ChannelMpscUnbounded[T], dst: var T): bool =
   # spurious failure
   return false
 
-func peek*(chan: var ChannelMpscUnbounded): int32 {.inline.} =
+func peek*(chan: var ChannelMpscUnboundedBatch): int32 {.inline.} =
   ## Estimates the number of items pending in the channel
   ## - If called by the consumer the true number might be more
   ##   due to producers adding items concurrently.
@@ -140,6 +139,9 @@ func peek*(chan: var ChannelMpscUnbounded): int32 {.inline.} =
   ##
   ## This is a non-locking operation.
   result = int32 chan.count.load(moRelaxed)
+
+  # For the consumer it's always positive or zero
+  postCondition: result >= 0
 
 # Sanity checks
 # ------------------------------------------------------------------------------
@@ -157,13 +159,13 @@ when isMainModule:
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}
 
-  template sendLoop[T](chan: var ChannelMpscUnbounded[T],
+  template sendLoop[T](chan: var ChannelMpscUnboundedBatch[T],
                        data: sink T,
                        body: untyped): untyped =
     while not chan.trySend(data):
       body
 
-  template recvLoop[T](chan: var ChannelMpscUnbounded[T],
+  template recvLoop[T](chan: var ChannelMpscUnboundedBatch[T],
                        data: var T,
                        body: untyped): untyped =
     while not chan.tryRecv(data):
@@ -198,7 +200,7 @@ when isMainModule:
 
     ThreadArgs = object
       ID: WorkerKind
-      chan: ptr ChannelMpscUnbounded[Val]
+      chan: ptr ChannelMpscUnboundedBatch[Val]
 
   template Worker(id: WorkerKind, body: untyped): untyped {.dirty.} =
     if args.ID == id:
@@ -213,12 +215,9 @@ when isMainModule:
     when defined(debugNimalloc):
       createShared(ValObj)
     else:
-      cast[Val](c_malloc(sizeof(ValObj)))
+      cast[Val](c_malloc(csize_t sizeof(ValObj)))
 
   proc valFree(val: Val) =
-    ## Note: it seems like freeing memory
-    ##       is confusing the allocators
-    ## The test pass if memory is not freed
     when defined(debugNimalloc):
       freeShared(val)
     else:
@@ -226,17 +225,6 @@ when isMainModule:
 
   proc thread_func(args: ThreadArgs) =
 
-    # Worker RECEIVER:
-    # ---------
-    # <- chan
-    # <- chan
-    # <- chan
-    #
-    # Worker SENDER:
-    # ---------
-    # chan <- 42
-    # chan <- 53
-    # chan <- 64
     Worker(Receiver):
       var counts: array[Sender1..Sender15, int]
       for j in 0 ..< 15 * NumVals:
@@ -248,8 +236,10 @@ when isMainModule:
         let sender = WorkerKind(val.val div Padding)
         doAssert val.val == counts[sender] + ord(sender) * Padding, "Incorrect value: " & $val.val
         inc counts[sender]
-        # valFree(val) # Don't free memory for testing the queue, allocators break
+        valFree(val)
 
+      for count in counts:
+        doAssert count == NumVals
 
     Worker(Sender1..Sender15):
       for j in 0 ..< NumVals:
@@ -267,7 +257,7 @@ when isMainModule:
     echo "Testing if 15 threads can send data to 1 consumer"
     echo "------------------------------------------------------------------------"
     var threads: array[WorkerKind, Thread[ThreadArgs]]
-    let chan = createSharedU(ChannelMpscUnbounded[Val]) # CreateU is not zero-init
+    let chan = createSharedU(ChannelMpscUnboundedBatch[Val]) # CreateU is not zero-init
     chan[].initialize()
 
     createThread(threads[Receiver], thread_func, ThreadArgs(ID: Receiver, chan: chan))
