@@ -34,7 +34,7 @@ type
 
 func len*(q: BoundedQueue): int {.inline.} =
   result = q.back - q.front
-  while result < 0:
+  if result < 0:
     # Case when front in [Capacity, 2*Capacity)
     # and tail in [0, Capacity) range
     # for example for a queue of capacity 7 that rolled twice:
@@ -46,7 +46,7 @@ func len*(q: BoundedQueue): int {.inline.} =
     # front is at index 10 (real 3)
     # back is at index 15 (real 1)
     # back - front + capacity = 1 - 3 + 7 = 5
-    result += q.Capacity
+    result += 2 * q.Capacity
 
 func isEmpty*(q: BoundedQueue): bool {.inline.} =
   q.front == q.back
