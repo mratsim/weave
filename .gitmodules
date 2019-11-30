@@ -1,0 +1,3 @@
+[submodule "benchmarks/vendor/bots"]
+	path = benchmarks/vendor/bots
+	url = https://github.com/bsc-pm/bots
