@@ -36,6 +36,15 @@ _Credits: Angelina Lee_
 
   https://www.cse.wustl.edu/~angelee/home_page/papers/ws-future.pdf
 
+## Difficulty
+
+Cactus stacks are a difficult problem to solve in a portable way and without introducing costs
+on every function calls and/or context switching.
+
+The Go and Rust core developers had to abandon their support in their runtime:
+- https://mail.mozilla.org/pipermail/rust-dev/2013-November/006314.html
+- https://docs.google.com/document/d/1wAaf1rYoM4S4gtnPh0zOlGzWtrZFQ5suE8qr2sD8uWQ/pub
+
 ## Talk
 
 - Memory abstractions for parallel programming
