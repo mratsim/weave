@@ -161,7 +161,7 @@ proc main() =
   else:
     let exeName = getAppFilename().extractFilename()
     echo &"Usage: {exeName} <n (matrix size):{n}>"
-    echo &"Up to 2 parameters are valid. Received {paramCount()}"
+    echo &"Up to 1 parameter is valid. Received {paramCount()}"
     quit 1
 
   var A = newMatrixNxN[float32](n)
@@ -186,6 +186,10 @@ proc main() =
   exit(Weave)
 
   let stop = wtime_msec()
+
+  getrusage(RusageSelf, ru)
+  rss = ru.ru_maxrss - rss
+  flt = ru.ru_minflt - flt
 
   const lazy = defined(WV_LazyFlowvar)
   const config = if lazy: " (lazy flowvars)"
