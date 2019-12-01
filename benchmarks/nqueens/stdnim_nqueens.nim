@@ -38,10 +38,11 @@
 import
   # Stdlib
   system/ansi_c, strformat, os, strutils,
-  # Weave
-  ../../weave,
+  threadpool,
   # bench
   ../wtime
+
+# This deadlocks :/
 
 # Nim helpers
 # -------------------------------------------------
@@ -126,8 +127,8 @@ proc nqueens_par(n, j: int32, a: CharArray): int32 =
       localCounts[i] = spawn nqueens_par(n, j+1, b)
 
   for i in 0 ..< n:
-    if localCounts[i].isSpawned():
-      result += sync(localCounts[i])
+    if not localCounts[i].isNil():
+      result += ^localCounts[i]
 
 const solutions = [
   1,
@@ -168,7 +169,6 @@ proc main() =
     echo &"The number of queens N (on a NxN board) must be in the range [1, {solutions.len}]"
     quit 1
 
-  init(Weave)
 
   let start = wtime_msec()
   let count = nqueens_par(n, 0, alloca(char, n))
@@ -183,7 +183,5 @@ proc main() =
     stdout.write('\n')
 
   echo &"Elapsed wall time: {stop-start:2.4f} ms"
-
-  exit(Weave)
 
 main()
