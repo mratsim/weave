@@ -3,3 +3,6 @@ build/*
 # Haskell
 *.hi
 *.o
+
+# C / C++
+*.out

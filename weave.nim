@@ -14,7 +14,7 @@ export
   spawn, sync,
   init, exit,
   loadBalance,
-  isAllocated
+  isSpawned
 
 # TODO, those are workaround for not binding symbols in spawn macro
 export
