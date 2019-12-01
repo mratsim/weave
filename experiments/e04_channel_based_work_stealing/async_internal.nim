@@ -6,6 +6,9 @@ import
   ./future_internal,
   ./profile, ./runtime
 
+when not compileOption("threads"):
+  {.error: "This requires --threads:on compilation flag".}
+
 # TODO:
 # overload with loop bounds for task splitting
 
