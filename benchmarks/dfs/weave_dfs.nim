@@ -57,6 +57,7 @@ proc main() =
     echo &"Up to 2 parameters are valid. Received {paramCount()}"
     quit 1
 
+  # Staccato benches runtime init and exit as well
   let start = wtime_usec()
 
   init(Weave)

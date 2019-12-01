@@ -17,5 +17,7 @@ export
   isSpawned
 
 # TODO, those are workaround for not binding symbols in spawn macro
+import weave/contexts
 export
-  readyWith, forceFuture
+  readyWith, forceFuture,
+  isRootTask
