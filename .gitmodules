@@ -1,3 +1,15 @@
 [submodule "benchmarks/vendor/bots"]
 	path = benchmarks/vendor/bots
 	url = https://github.com/bsc-pm/bots
+[submodule "benchmarks/vendor/staccato"]
+	path = benchmarks/vendor/staccato
+	url = https://github.com/rkuchumov/staccato
+[submodule "benchmarks/vendor/uts-benchmark-code"]
+	path = benchmarks/vendor/uts-benchmark-code
+	url = https://git.code.sf.net/p/uts-benchmark/code
+[submodule "benchmarks/vendor/fibril"]
+	path = benchmarks/vendor/fibril
+	url = https://github.com/chaoran/fibril
+[submodule "benchmarks/vendor/tasking-2.0"]
+	path = benchmarks/vendor/tasking-2.0
+	url = https://github.com/aprell/tasking-2.0

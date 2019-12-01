@@ -41,10 +41,10 @@ type
     else:
       chan: ptr ChannelSpscSingleObject[T]
 
-func isAllocated*(fv: Flowvar): bool {.inline.}=
-  ## Returns true if a future is allocated
+func isSpawned*(fv: Flowvar): bool {.inline.}=
+  ## Returns true if a future is spawned
   ## This may be useful for recursive algorithms that
-  ## may or may not return a future.
+  ## may or may not spawn a future depending on a condition.
   ## This is similar to Option or Maybe types
   when defined(WV_LazyFlowvar):
     return not fv.lfv.isNil

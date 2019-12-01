@@ -126,7 +126,7 @@ proc nqueens_par(n, j: int32, a: CharArray): int32 =
       localCounts[i] = spawn nqueens_par(n, j+1, b)
 
   for i in 0 ..< n:
-    if localCounts[i].isAllocated:
+    if localCounts[i].isSpawned():
       result += sync(localCounts[i])
 
 const solutions = [
