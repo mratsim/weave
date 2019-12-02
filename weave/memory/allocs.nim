@@ -31,8 +31,6 @@ func roundNextMultipleOf*(x: Natural, n: Natural): int {.inline.} =
 
 # Memory
 # ----------------------------------------------------------------------------------
-# TODO: write a dedicated threadsafe object-pool
-#       to reduce Nim/system calls
 
 # Nim allocShared, createShared, deallocShared
 # take a global lock that is absolutely killing performance

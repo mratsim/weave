@@ -119,8 +119,6 @@ func excl*(s: var SparseSet, n: SomeInteger) {.inline.} =
 func randomPick*(s: SparseSet, rng: var RngState): int32 =
   ## Randomly pick from the set.
   # The value is NOT removed from it.
-  # TODO: this would require rejection sampling for proper uniform distribution
-  # TODO: use a rng with better speed / distribution
   let pickIdx = rng.uniform(s.len)
   result = s.values[pickIdx].int32
 
