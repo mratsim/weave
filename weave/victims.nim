@@ -14,6 +14,34 @@ import
   ./thieves, ./loop_splitting,
   ./memory/memory_pools
 
+# Victims - Proxy handling on behalf of idle child workers
+# ----------------------------------------------------------------------------------
+
+proc hasThievesProxy(worker: WorkerID): bool =
+  ## Check if a worker has steal requests pending
+  ## This also checks the child of this worker
+  if worker == Not_a_worker:
+    return false
+
+  for w in traverseDepthFirst(worker, maxID()):
+    if getThievesOf(w).peek() > 0:
+      return true
+  return false
+
+proc recvProxy(req: var StealRequest, worker: WorkerID): bool =
+  ## Receives steal requests on behalf of child workers
+  ## Note that on task reception, children are waken up
+  ## and tasks are sent to them before thieves so this should happen rarely
+  if worker == Not_a_worker:
+    return false
+
+  profile(send_recv_req):
+    for w in traverseDepthFirst(worker, maxID()):
+      result = getThievesOf(w).tryRecv(req)
+      if result:
+        return true
+  return false
+
 # Victims - Adaptative task splitting
 # ----------------------------------------------------------------------------------
 
@@ -26,6 +54,12 @@ proc approxNumThieves(): int32 {.inline.} =
   #   - Workers may send steal requests before actually running out-of-work
   let approxNumThieves = 1 + myThieves().peek()
   debug: log("Worker %2d: has %ld steal requests\n", myID(), approxNumThieves)
+
+proc approxNumThievesProxy(worker: WorkerID): int32 =
+  # Estimate the number of idle workers of a worker subtree
+  result = 0
+  for w in traverseDepthFirst(worker, maxID()):
+    result += getThievesOf(w).peek()
 
 # Victims - Steal requests handling
 # ----------------------------------------------------------------------------------
@@ -68,6 +102,14 @@ proc recv*(req: var StealRequest): bool {.inline.} =
       # Check the next steal request
       result = myThieves().tryRecv(req)
 
+    # # When a child thread backs off, it is parked by the OS
+    # # We need to handle steal requests on its behalf to avoid latency
+    # if not result and myWorker().leftIsWaiting:
+    #   result = myLeftChildThieves().tryRecv(req)
+
+    # if not result and myWorker().rightIsWaiting:
+    #   result = myRightChildThieves().tryRecv(req)
+
   postCondition: not result or (result and req.state != Waiting)
 
 proc declineOwn(req: sink StealRequest) =
@@ -81,17 +123,17 @@ proc declineOwn(req: sink StealRequest) =
   if req.state == Stealing and myWorker().leftIsWaiting and myWorker().rightIsWaiting:
     when WV_MaxConcurrentStealPerWorker == 1:
       # When there is only one concurrent steal request allowed, it's always the last.
-      lastStealAttempt(req)
+      lastStealAttemptFailure(req)
     else:
       # Is this the last theft attempt allowed per steal request?
-      # - if so: lastStealAttempt special case (termination if lead thread, sleep if worker)
+      # - if so: lastStealAttemptFailure special case (termination if lead thread, sleep if worker)
       # - if not: drop it and wait until we receive work or all out steal requests failed.
       if myThefts().outstanding == WV_MaxConcurrentStealPerWorker and
           myTodoBoxes().len == WV_MaxConcurrentStealPerWorker - 1:
         # "WV_MaxConcurrentStealPerWorker - 1" steal requests have been dropped
         # as evidenced by the corresponding channel "address boxes" being recycled
         ascertain: myThefts().dropped == WV_MaxConcurrentStealPerWorker - 1
-        lastStealAttempt(req)
+        lastStealAttemptFailure(req)
       else:
         drop(req)
   else:

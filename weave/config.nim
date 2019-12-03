@@ -99,7 +99,7 @@ template EagerFV*(body: untyped): untyped =
 # ----------------------------------------------------------------------------------
 
 when not defined(WV_MaxRetriesPerSteal):
-  template WV_MaxRetriesPerSteal*: int32 = workforce() - 1
+  template WV_MaxRetriesPerSteal*: int32 = maxID()
     ## Number of steal attempts per steal requests
     ## before a steal request is sent back to the thief
     ## Default value is the number of workers minus one

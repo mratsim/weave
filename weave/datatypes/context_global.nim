@@ -8,6 +8,7 @@
 import
   ../channels/channels_mpsc_unbounded_batch,
   ../channels/channels_spsc_single_ptr,
+  ../channels/event_signaling,
   ../memory/[persistacks, memory_pools],
   ../config,
   ../primitives/barriers,
@@ -30,12 +31,12 @@ type
     #   so they are stored on the BSS segment
     #   (no storage used just size + fixed memory offset)
     #   would work but then it requires a pointer indirection
-    #   per channel
-    #   and a known max number of workers
+    #   per channel and a known max number of workers
 
-    # Theft channels is bounded to "NumWorkers * WV_MaxConcurrentStealPerWorker"
+    # Theft channels are bounded to "NumWorkers * WV_MaxConcurrentStealPerWorker"
     thefts*: ptr UncheckedArray[ChannelMpscUnboundedBatch[StealRequest]]
     tasks*: ptr UncheckedArray[Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]]]
+    # parking*: ptr UncheckedArray[EventNotifier]
 
   GlobalContext* = object
     com*: ComChannels

@@ -1,4 +1,13 @@
-# Channel implementations
+# Communications channels
+
+In this folder, you will find all cross-thread synchronization types used in Weave.
+
+The main type is the Channel which comes in different flavors depending on its use.
+
+To prevent polling an empty channel uselessly
+Channels can be associated with an event notifier, that will park them and only wake them up when required.
+
+## Channels
 
 There are many ways to implement channels with different use-cases and different tradeoffs.
 
