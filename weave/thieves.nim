@@ -9,7 +9,7 @@ import
   ./datatypes/[sparsesets, sync_types, context_thread_local],
   ./contexts, ./targets,
   ./instrumentation/[contracts, profilers, loggers],
-  ./channels/channels_mpsc_unbounded_batch,
+  ./channels/[channels_mpsc_unbounded_batch, event_signaling],
   ./memory/persistacks,
   ./config, ./signals,
   std/atomics
@@ -184,7 +184,7 @@ proc drop*(req: sink StealRequest) =
   myTodoBoxes().recycle(req.thiefAddr)
   localCtx.stealCache.recycle(req)
 
-proc lastStealAttempt*(req: sink StealRequest) =
+proc lastStealAttemptFailure*(req: sink StealRequest) =
   ## If it's the last theft attempt per emitted steal requests
   ## - if we are the lead thread, we know that every other threads are idle/waiting for work
   ##   but there is none --> termination
@@ -201,3 +201,4 @@ proc lastStealAttempt*(req: sink StealRequest) =
     sendShare(req)
     ascertain: not myWorker().isWaiting
     myWorker().isWaiting = true
+    # myParking().wait()

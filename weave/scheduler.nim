@@ -84,7 +84,9 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
   # Worker
   # -----------------------------------------------------------
   myWorker().deque.initialize()
-  myWorker().initialize(maxID = workforce() - 1)
+  myWorker().initialize(maxID())
+
+  # myParking().initialize()
 
   myTodoBoxes().initialize()
   for i in 0 ..< myTodoBoxes().len:
@@ -228,13 +230,11 @@ proc threadLocalCleanup*() {.gcsafe.} =
     ascertain: myTodoBoxes().access(i).isEmpty()
     localCtx.stealCache.access(i).victims.delete()
   myTodoBoxes().delete()
-
-  # A BoundedQueue (work-sharing requests) is on the stack
-  # It contains steal requests for non-leaf workers
-  # but those are on the stack as well and auto-destroyed
+  # `=destroy`(myParking())
 
   # The task cache is full of tasks
   delete(localCtx.taskCache)
+  # This also deletes steal requests already sent to other workers
   delete(localCtx.stealCache)
   discard myMemPool().teardown()
 

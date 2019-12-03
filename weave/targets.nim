@@ -19,16 +19,11 @@ proc markIdle(victims: var SparseSet, workerID: WorkerID) =
   preCondition:
     -1 <= workerID and workerID < workforce()
 
-  if workerID == -1:
-    # Invalid worker ID (parent of root or out-of-bound child)
+  if workerID == Not_a_worker:
     return
 
-  let maxID = workforce() - 1
-  if workerID < workforce():
-    # mark children
-    victims.excl(workerID)
-    markIdle(victims, left(workerID, maxID))
-    markIdle(victims, right(workerID, maxID))
+  for w in traverseDepthFirst(workerID, maxID()):
+    victims.excl(w)
 
 proc randomVictim(victims: SparseSet, workerID: WorkerID): WorkerID =
   ## Choose a random victim != ID from the list of potential VictimsBitset
@@ -39,7 +34,7 @@ proc randomVictim(victims: SparseSet, workerID: WorkerID): WorkerID =
 
   # No eligible victim? Return message to sender
   if victims.isEmpty():
-    return -1
+    return Not_a_worker
 
   result = victims.randomPick(myThefts().rng)
   # debug: log("Worker %2d: rng %d, vict: %d\n", myID(), myThefts().rng, result)
@@ -52,7 +47,7 @@ proc findVictim*(req: var StealRequest): WorkerID =
   preCondition:
     myID() notin req.victims
 
-  result = -1
+  result = Not_a_worker
 
   if req.thiefID == myID():
     # Steal request initiated by the current worker.
@@ -78,7 +73,7 @@ proc findVictim*(req: var StealRequest): WorkerID =
     ascertain: myID() notin req.victims
     result = randomVictim(req.victims, req.thiefID)
 
-  if result == -1:
+  if result == Not_a_worker:
     # Couldn't find a victim. Return the steal request to the thief
     ascertain: req.victims.isEmpty()
     result = req.thiefID

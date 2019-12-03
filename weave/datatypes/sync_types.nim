@@ -85,6 +85,8 @@ type
     when StealStrategy == StealKind.adaptative:
       stealHalf*: bool                            # Thief wants half the tasks
 
+const Not_a_worker* = -1
+
 # Ensure unicity of a given steal request
 # -----------------------------------------------------------
 # Unfortunately Nim compiler cannot infer in while loops that

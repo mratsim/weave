@@ -7,7 +7,7 @@
 
 import
   ./datatypes/[context_global, context_thread_local, sync_types, prell_deques],
-  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch],
+  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, event_signaling],
   ./memory/[persistacks, lookaside_lists, memory_pools, allocs],
   ./config,
   system/ansi_c,
@@ -35,17 +35,26 @@ profile_extern_decl(idle)
 # Aliases
 # ----------------------------------------------------------------------------------
 
+template isRootTask*(task: Task): bool =
+  task.parent.isNil
+
 template myTodoBoxes*: Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]] =
   globalCtx.com.tasks[localCtx.worker.ID]
 
 template myThieves*: ChannelMpscUnboundedBatch[StealRequest] =
   globalCtx.com.thefts[localCtx.worker.ID]
 
+template getThievesOf*(worker: WorkerID): ChannelMpscUnboundedBatch[StealRequest] =
+  globalCtx.com.thefts[worker]
+
 template myMemPool*: TLPoolAllocator =
   globalCtx.mempools[localCtx.worker.ID]
 
 template workforce*: int32 =
   globalCtx.numWorkers
+
+template maxID*: int32 =
+  globalCtx.numWorkers - 1
 
 template myID*: WorkerID =
   localCtx.worker.ID
@@ -63,8 +72,14 @@ template myMetrics*: untyped =
   metrics:
     localCtx.counters
 
-template isRootTask*(task: Task): bool =
-  task.parent.isNil
+template myParking*: EventNotifier =
+  globalCtx.com.parking[localCtx.worker.ID]
+
+template wakeup*(worker: WorkerID) =
+  bind signal
+  globalCtx.com.parking[worker].signal()
+
+export event_signaling.wait
 
 # Task caching
 # ----------------------------------------------------------------------------------

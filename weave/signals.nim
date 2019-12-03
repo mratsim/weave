@@ -46,9 +46,9 @@ proc signalTerminate*(_: pointer) =
   #    so their cache for task channels should be full
   #    if there were sufficiently more tasks than workers
   # 2. Since they have an unique parent, no one else sent them a signal (checked in asyncSignal)
-  if myWorker().left != -1:
+  if myWorker().left != Not_a_worker:
     asyncSignal(signalTerminate, globalCtx.com.tasks[myWorker().left].access(0))
-  if myWorker().right != -1:
+  if myWorker().right != Not_a_worker:
     asyncSignal(signalTerminate, globalCtx.com.tasks[myWorker().right].access(0))
 
   Worker:
