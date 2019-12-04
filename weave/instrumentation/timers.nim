@@ -83,7 +83,7 @@ template timer_reset(timer: var Timer, ghzClock: float64) =
 template timer_start*(timer: var Timer) =
   timer.start = getticks()
 
-template timer_end*(timer: var Timer) =
+template timer_stop*(timer: var Timer) =
   timer.stop = getticks()
   timer.elapsed += timer.stop - timer.start
 

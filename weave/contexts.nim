@@ -32,6 +32,10 @@ profile_extern_decl(send_recv_task)
 profile_extern_decl(enq_deq_task)
 profile_extern_decl(idle)
 
+# TODO, many visibility issues with profilers and timers
+import instrumentation/timers
+export timers
+
 # Aliases
 # ----------------------------------------------------------------------------------
 

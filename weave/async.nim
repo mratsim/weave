@@ -13,7 +13,9 @@ import
   ./datatypes/[flowvars, sync_types],
   ./instrumentation/[contracts, profilers]
 
-export forceFuture # workaround visibility issue
+# workaround visibility issues
+export forceFuture
+export profilers, contexts
 
 macro spawn*(funcCall: typed): untyped =
   # We take typed argument so that overloading resolution
@@ -80,13 +82,15 @@ macro spawn*(funcCall: typed): untyped =
         `fnCall`
     # Create the task
     result.add quote do:
-      profile(enq_deq_task):
+      timer_start(timer_enq_deq_task) # templates visibility issue
+      block enq_deq_task:
         let task = newTaskFromCache()
         task.parent = myTask()
         task.fn = `async_fn`
         when bool(`withArgs`):
           cast[ptr `argsTy`](task.data.addr)[] = `args`
         schedule(task)
+      timer_stop(timer_enq_deq_task)
 
   else: ################ Need a future
     # We repack fut + args.

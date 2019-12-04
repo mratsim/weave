@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 # TODO: unused import warning - https://github.com/nim-lang/Nim/issues/11826
-import system/ansi_c, ./timers
+import system/ansi_c, macros, ./timers
 
 
 # Profiling
@@ -50,17 +50,20 @@ when defined(WV_Profile):
     # checkName(name)
     timer_new(`timer _ name`, CpuFreqGhz)
 
-  template profile_start*(name: untyped) {.dirty.} =
-    bind checkName, timer_start
+  macro profile_start*(name: untyped): untyped =
+    let timerName = ident("timer_" & $name)
     # checkName(name)
-    timer_start(`timer _ name`)
+    result = quote do:
+      timer_start(`timerName`)
 
-  template profile_stop*(name: untyped) {.dirty.} =
-    bind checkName, timer_end
+  macro profile_stop*(name: untyped): untyped =
+    let timerName = ident("timer_" & $name)
     # checkName(name)
-    timer_end(`timer _ name`)
+    result = quote do:
+      timer_stop(`timerName`)
 
-  template profile*(name, body: untyped): untyped {.dirty.} =
+
+  template profile*(name, body: untyped): untyped =
     profile_start(name)
     body
     profile_stop(name)
