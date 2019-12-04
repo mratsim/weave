@@ -17,7 +17,7 @@ import
 # Victims - Proxy handling on behalf of idle child workers
 # ----------------------------------------------------------------------------------
 
-proc hasThievesProxy(worker: WorkerID): bool =
+proc hasThievesProxy*(worker: WorkerID): bool =
   ## Check if a worker has steal requests pending
   ## This also checks the child of this worker
   if worker == Not_a_worker:
@@ -60,6 +60,7 @@ proc approxNumThievesProxy(worker: WorkerID): int32 =
   result = 0
   for w in traverseDepthFirst(worker, maxID()):
     result += getThievesOf(w).peek()
+  debug: log("Worker %2d: found %ld steal requests addressed to its child %d and grandchildren\n", myID(), result, worker)
 
 # Victims - Steal requests handling
 # ----------------------------------------------------------------------------------
@@ -82,8 +83,13 @@ proc recv*(req: var StealRequest): bool {.inline.} =
     # and defer to the current worker (their parent)
     while result and req.state == Waiting:
       debugTermination:
-        log("Worker %2d: receives state passively WAITING from its child worker %d\n",
-            myID(), req.thiefID)
+        log("Worker %2d: receives state passively WAITING from its child worker %d (left (%d): %s, right (%d): %s)\n",
+            myID(), req.thiefID,
+            myWorker().left,
+            if myWorker().leftIsWaiting: "waiting" else: "not waiting",
+            myWorker().right,
+            if myWorker().rightIsWaiting: "waiting" else: "not waiting"
+          )
 
       # Only children can forward a request where they sleep
       ascertain: req.thiefID == myWorker().left or
@@ -102,23 +108,33 @@ proc recv*(req: var StealRequest): bool {.inline.} =
       # Check the next steal request
       result = myThieves().tryRecv(req)
 
-    # # When a child thread backs off, it is parked by the OS
-    # # We need to handle steal requests on its behalf to avoid latency
-    # if not result and myWorker().leftIsWaiting:
-    #   result = myLeftChildThieves().tryRecv(req)
+    # When a child thread backs off, it is parked by the OS
+    # We need to handle steal requests on its behalf to avoid latency
+    if not result and myWorker().leftIsWaiting:
+      result = recvProxy(req, myWorker().left)
 
-    # if not result and myWorker().rightIsWaiting:
-    #   result = myRightChildThieves().tryRecv(req)
+
+    if not result and myWorker().rightIsWaiting:
+      result = recvProxy(req, myWorker().right)
 
   postCondition: not result or (result and req.state != Waiting)
 
 proc declineOwn(req: sink StealRequest) =
   ## Decline our own steal request
-  # No one had jobs to steal
-  preCondition: req.victims.isEmpty()
 
-  debugTermination:
-    log("Worker %2d: received own request (req.state: %s, left: %d, right %d)\n", myID(), $req.state, myWorker().leftIsWaiting, myWorker().rightIsWaiting)
+  # The assumption that no one had jobs to steal
+  # does not hold when we process our child requests
+  # we might have taken one we sent to our children
+  # TODO: how to prevent cascading sleep
+  # preCondition: req.victims.isEmpty()
+
+  debug:
+    log("Worker %2d: received own request (req.state: %s, left (%d): %s, right (%d): %s)\n",
+      myID(), $req.state,
+      myWorker().left,
+      if myWorker().leftIsWaiting: "waiting" else: "not waiting",
+      myWorker().right,
+      if myWorker().rightIsWaiting: "waiting" else: "not waiting")
 
   if req.state == Stealing and myWorker().leftIsWaiting and myWorker().rightIsWaiting:
     when WV_MaxConcurrentStealPerWorker == 1:
@@ -257,7 +273,12 @@ proc splitAndSend*(task: Task, req: sink StealRequest) =
 
     # Split iteration range according to given strategy
     # [start, stop) => [start, split) + [split, end)
-    let split = split(task, approxNumThieves())
+    var guessThieves = approxNumThieves()
+    if myWorker().leftIsWaiting:
+      guessThieves += approxNumThievesProxy(myWorker().left)
+    if myWorker().rightIsWaiting:
+      guessThieves += approxNumThievesProxy(myWorker().right)
+    let split = split(task, guessThieves)
 
     # New task gets the upper half
     dup.start = split
@@ -329,7 +350,10 @@ proc shareWork*() {.inline.} =
       else:
         ascertain: myWorker().rightIsWaiting
         myWorker().rightIsWaiting = false
+      wakeup(req.thiefID)
       # Now we can dequeue as we found work
+      # We cannot access the steal request anymore or
+      # we would have a race with the child worker recycling it.
       discard myWorker().workSharingRequests.dequeue()
     else:
       break

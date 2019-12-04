@@ -8,7 +8,7 @@
 import
   ../channels/channels_mpsc_unbounded_batch,
   ../channels/channels_spsc_single_ptr,
-  ../channels/event_signaling,
+  ../channels/event_notifiers,
   ../memory/[persistacks, memory_pools],
   ../config,
   ../primitives/barriers,
@@ -36,7 +36,7 @@ type
     # Theft channels are bounded to "NumWorkers * WV_MaxConcurrentStealPerWorker"
     thefts*: ptr UncheckedArray[ChannelMpscUnboundedBatch[StealRequest]]
     tasks*: ptr UncheckedArray[Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]]]
-    # parking*: ptr UncheckedArray[EventNotifier]
+    parking*: ptr UncheckedArray[EventNotifier]
 
   GlobalContext* = object
     com*: ComChannels

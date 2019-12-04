@@ -151,7 +151,7 @@ func initialize*(w: var Worker, maxID: WorkerID) {.inline.} =
     w.rightIsWaiting = true
 
 template isLeaf(node, maxID: int32): bool =
-  node >= maxID div 2
+  2*node + 1 > maxID
 
 func lastLeafOfSubTree(start, maxID: int32): int32 =
   ## Returns the last leaf of a sub tree
@@ -198,7 +198,8 @@ iterator traverseDepthFirst*(start, maxID: int32): int32 =
 
   while true:
     node = depthIdx + relPos - 1
-    yield node
+    if node <= maxID:
+      yield node
     if node == lastLeaf:
       break
     if node.isLeaf(maxId):
@@ -262,3 +263,27 @@ when isMainModule:
   check(12,from12)
   check(13,from13)
   check(14,from14)
+
+  # ----------------------------------
+  # Incomplete trees
+  let incomplete3 =  [0, 1, 3, 2]
+  let incomplete7 =  [0, 1, 3, 7, 4, 2, 5, 6]
+  let incomplete8 =  [0, 1, 3, 7, 8, 4, 2, 5, 6]
+  let incomplete9 =  [0, 1, 3, 7, 8, 4, 9, 2, 5, 6]
+  let incomplete10 = [0, 1, 3, 7, 8, 4, 9, 10, 2, 5, 6]
+  let incomplete11 = [0, 1, 3, 7, 8, 4, 9, 10, 2, 5, 11, 6]
+
+  template checkI(start, maxID: int, target: untyped) =
+    var pos = 0
+    for i in traverseDepthFirst(start, maxID):
+      doAssert: target[pos] == i
+      pos += 1
+
+    doAssert pos == target.len
+
+  checkI(0, 3, incomplete3)
+  checkI(0, 7, incomplete7)
+  checkI(0, 8, incomplete8)
+  checkI(0, 9, incomplete9)
+  checkI(0, 10, incomplete10)
+  checkI(0, 11, incomplete11)

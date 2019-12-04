@@ -149,6 +149,8 @@ when isMainModule:
       stdout.write(" - SUCCESS\n")
 
     proc main() =
+      echo "Sanity check 1: Printing 123456 654321 in parallel"
+
       init(Weave)
 
       spawn display_int(123456)
@@ -157,7 +159,7 @@ when isMainModule:
       sync(Weave)
       exit(Weave)
 
-    # main()
+    main()
 
   block: # Async/Await
 
@@ -172,6 +174,7 @@ when isMainModule:
       result = sync(x) + y
 
     proc main2() =
+      echo "Sanity check 2: fib(20)"
 
       init(Weave)
 
@@ -182,4 +185,4 @@ when isMainModule:
 
       echo f
 
-    main2()
+    # main2()

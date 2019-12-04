@@ -7,7 +7,7 @@
 
 import
   ./datatypes/[context_global, context_thread_local, sync_types, prell_deques],
-  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, event_signaling],
+  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, event_notifiers],
   ./memory/[persistacks, lookaside_lists, memory_pools, allocs],
   ./config,
   system/ansi_c,
@@ -75,11 +75,13 @@ template myMetrics*: untyped =
 template myParking*: EventNotifier =
   globalCtx.com.parking[localCtx.worker.ID]
 
-template wakeup*(worker: WorkerID) =
-  bind signal
-  globalCtx.com.parking[worker].signal()
+template wakeup*(target: WorkerID) =
+  mixin notify
+  debugTermination:
+    log("Worker %2d: waking up child %2d\n", localCtx.worker.ID, target)
+  globalCtx.com.parking[target].notify()
 
-export event_signaling.wait
+export event_notifiers.wait
 
 # Task caching
 # ----------------------------------------------------------------------------------

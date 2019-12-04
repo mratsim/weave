@@ -36,7 +36,7 @@ proc asyncSignal(fn: proc (_: pointer) {.nimcall.}, chan: var ChannelSpscSingleP
     # TODO: StealLastVictim
 
     let signalSent = chan.trySend(dummy)
-    debug: log("Worker %2d: sending asyncSignal\n", myID())
+    debugTermination: log("Worker %2d: sending asyncSignal\n", myID())
     postCondition: signalSent
 
 proc signalTerminate*(_: pointer) =
@@ -47,9 +47,13 @@ proc signalTerminate*(_: pointer) =
   #    if there were sufficiently more tasks than workers
   # 2. Since they have an unique parent, no one else sent them a signal (checked in asyncSignal)
   if myWorker().left != Not_a_worker:
+    # Send the terminate signal
     asyncSignal(signalTerminate, globalCtx.com.tasks[myWorker().left].access(0))
+    # Wake the worker up so that it can process the terminate signal
+    wakeup(myWorker().left)
   if myWorker().right != Not_a_worker:
     asyncSignal(signalTerminate, globalCtx.com.tasks[myWorker().right].access(0))
+    wakeup(myWorker().right)
 
   Worker:
     # When processing this signal for our queue, it was counted

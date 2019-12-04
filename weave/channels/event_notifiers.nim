@@ -89,7 +89,7 @@ func wait*(en: var EventNotifier) {.inline.} =
 
   assert not en.waiting.load(moRelaxed)
 
-func signal*(en: var EventNotifier) {.inline.} =
+func notify*(en: var EventNotifier) {.inline.} =
   ## Signal a thread that it can be unparked
 
   # No thread waiting, return
