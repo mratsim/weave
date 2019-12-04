@@ -97,8 +97,6 @@ type
       shareHalf*: int
     when defined(WV_LazyFlowvar):
       futuresConverted*: int
-    randomVictimCalls*: int
-    randomVictimEarlyExits*: int
 
 # Worker proc
 # ----------------------------------------------------------------------------------

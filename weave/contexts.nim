@@ -179,10 +179,6 @@ proc workerMetrics*() =
         c_printf("Worker %2d: %.2f %% steal-half\n", myID(), 0)
     LazyFV:
       c_printf("Worker %2d: %u futures converted\n", myID(), localCtx.counters.futuresConverted)
-    c_printf("Worker %2d: random victim fast path (slow path): %3.0f %% (%3.0f %%)\n",
-      myID(), localCtx.counters.randomVictimEarlyExits.float64 * 100 / localCtx.counters.randomVictimCalls.float64,
-      100 - localCtx.counters.randomVictimEarlyExits.float64 * 100 / localCtx.counters.randomVictimCalls.float64
-    )
 
     profile_results(myID())
     flushFile(stdout)

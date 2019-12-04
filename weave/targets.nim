@@ -30,8 +30,6 @@ proc randomVictim(victims: SparseSet, workerID: WorkerID): WorkerID =
   preCondition:
     myID() notin victims
 
-  incCounter(randomVictimCalls)
-
   # No eligible victim? Return message to sender
   if victims.isEmpty():
     return Not_a_worker
