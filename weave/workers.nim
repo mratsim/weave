@@ -82,9 +82,13 @@ proc run*(task: Task) {.inline.} =
   debug: log("Worker %2d: running task.fn 0x%.08x\n", myID(), task.fn)
   task.fn(task.data.addr)
   myTask() = this
-  metrics:
-    if task.isLoop:
-      # We have executed |stop-start| iterations
-      incCounter(tasksExec, abs(task.stop - task.start))
-    else:
-      incCounter(tasksExec)
+  if task.isLoop:
+    # We have executed |stop-start| iterations
+    let iters = abs(task.stop - task.start)
+    StealAdaptative:
+      myThefts().recentTasks += iters.int32 # overflow?
+    incCounter(tasksExec, iters)
+  else:
+    StealAdaptative:
+      myThefts().recentTasks += 1
+    incCounter(tasksExec)
