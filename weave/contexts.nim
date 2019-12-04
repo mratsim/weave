@@ -165,8 +165,6 @@ proc workerMetrics*() =
     c_printf("Worker %2d: %u tasks executed\n", myID(), localCtx.counters.tasksExec)
     c_printf("Worker %2d: %u tasks sent\n", myID(), localCtx.counters.tasksSent)
     c_printf("Worker %2d: %u tasks split\n", myID(), localCtx.counters.tasksSplit)
-    when defined(StealBackoff):
-      c_printf("Worker %2d: %u steal requests resent\n", myID(), localCtx.counters.stealResent)
     StealAdaptative:
       ascertain: localCtx.counters.stealOne + localCtx.counters.stealHalf == localCtx.counters.stealSent
       if localCtx.counters.stealSent != 0:

@@ -88,8 +88,6 @@ type
     stealDeclined*: int
     shareSent*: int
     shareHandled*: int
-    when defined(WV_StealBackoff):
-      stealResent*: int
     when StealStrategy == StealKind.adaptative:
       stealOne*: int
       stealHalf*: int
