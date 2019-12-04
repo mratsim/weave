@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./datatypes/[sparsesets, sync_types, context_thread_local],
+  ./datatypes/[sparsesets, sync_types, context_thread_local, binary_worker_trees],
   ./contexts, ./targets,
   ./instrumentation/[contracts, profilers, loggers],
   ./channels/[channels_mpsc_unbounded_batch, event_notifiers],

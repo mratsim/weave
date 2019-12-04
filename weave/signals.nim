@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./datatypes/[context_thread_local, sync_types],
+  ./datatypes/[context_thread_local, sync_types, binary_worker_trees],
   ./contexts, ./config,
   ./instrumentation/[contracts, loggers, profilers],
   ./memory/persistacks,

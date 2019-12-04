@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./datatypes/[sparsesets, sync_types, context_thread_local],
+  ./datatypes/[sparsesets, sync_types, context_thread_local, binary_worker_trees],
   ./contexts,
   ./random/rng,
   ./instrumentation/[contracts, loggers],
@@ -22,7 +22,7 @@ proc markIdle(victims: var SparseSet, workerID: WorkerID) =
   if workerID == Not_a_worker:
     return
 
-  for w in traverseDepthFirst(workerID, maxID()):
+  for w in traverseBreadthFirst(workerID, maxID()):
     victims.excl(w)
 
 proc randomVictim(victims: SparseSet, workerID: WorkerID): WorkerID =

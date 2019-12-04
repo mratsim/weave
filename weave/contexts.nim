@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./datatypes/[context_global, context_thread_local, sync_types, prell_deques],
+  ./datatypes/[context_global, context_thread_local, sync_types, prell_deques, binary_worker_trees],
   ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, event_notifiers],
   ./memory/[persistacks, lookaside_lists, memory_pools, allocs],
   ./config,

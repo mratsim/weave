@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./sparsesets,
+  ./sparsesets, ./binary_worker_trees,
   ../config,
   ../channels/channels_spsc_single_ptr,
   ../instrumentation/contracts,
@@ -20,21 +20,6 @@ const
   TaskDataSize* = 192 - 96
 
 type
-  # Worker
-  # ----------------------------------------------------------------------------------
-  WorkerID* = int32
-  WorkerState* = enum
-    ## Steal requests carry one of the following states:
-    ## - Working means the requesting worker is (likely) still busy
-    ##   but anticipating running out of tasks
-    ## - Stealing means the requesting worker has run out of tasks
-    ##   and is trying to steal some
-    ## - Waiting means the requesting worker backs off and waits for tasks
-    ##   from its parent worker
-    Working
-    Stealing
-    Waiting
-
   # Task
   # ----------------------------------------------------------------------------------
 
@@ -84,8 +69,6 @@ type
     state*: WorkerState                           # State of the thief
     when StealStrategy == StealKind.adaptative:
       stealHalf*: bool                            # Thief wants half the tasks
-
-const Not_a_worker* = -1
 
 # Ensure unicity of a given steal request
 # -----------------------------------------------------------

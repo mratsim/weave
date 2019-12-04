@@ -12,7 +12,7 @@ import
   ../memory/[persistacks, memory_pools],
   ../config,
   ../primitives/barriers,
-  ./sync_types
+  ./sync_types, ./binary_worker_trees
 
 # Global / inter-thread communication channels
 # ----------------------------------------------------------------------------------

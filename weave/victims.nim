@@ -7,7 +7,7 @@
 
 import
   ./datatypes/[sync_types, context_thread_local, bounded_queues,
-               sparsesets, prell_deques, flowvars],
+               sparsesets, prell_deques, flowvars, binary_worker_trees],
   ./contexts, ./config,
   ./instrumentation/[contracts, profilers, loggers],
   ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_lazy_flowvars],
@@ -23,7 +23,7 @@ proc hasThievesProxy*(worker: WorkerID): bool =
   if worker == Not_a_worker:
     return false
 
-  for w in traverseDepthFirst(worker, maxID()):
+  for w in traverseBreadthFirst(worker, maxID()):
     if getThievesOf(w).peek() > 0:
       return true
   return false
@@ -36,7 +36,7 @@ proc recvProxy(req: var StealRequest, worker: WorkerID): bool =
     return false
 
   profile(send_recv_req):
-    for w in traverseDepthFirst(worker, maxID()):
+    for w in traverseBreadthFirst(worker, maxID()):
       result = getThievesOf(w).tryRecv(req)
       if result:
         return true
@@ -58,7 +58,7 @@ proc approxNumThieves(): int32 {.inline.} =
 proc approxNumThievesProxy(worker: WorkerID): int32 =
   # Estimate the number of idle workers of a worker subtree
   result = 0
-  for w in traverseDepthFirst(worker, maxID()):
+  for w in traverseBreadthFirst(worker, maxID()):
     result += getThievesOf(w).peek()
   debug: log("Worker %2d: found %ld steal requests addressed to its child %d and grandchildren\n", myID(), result, worker)
 
