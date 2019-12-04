@@ -9,7 +9,7 @@ import
   ./instrumentation/[contracts, profilers, loggers],
   ./primitives/barriers,
   ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars, sparsesets],
-  ./channels/[channels_spsc_single_object, channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_lazy_flowvars],
+  ./channels/[channels_spsc_single_object, channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_lazy_flowvars, event_notifiers],
   ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
   ./contexts, ./config,
   ./victims, ./loop_splitting,
@@ -86,7 +86,7 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
   myWorker().deque.initialize()
   myWorker().initialize(maxID())
 
-  # myParking().initialize()
+  myParking().initialize()
 
   myTodoBoxes().initialize()
   for i in 0 ..< myTodoBoxes().len:
@@ -230,7 +230,7 @@ proc threadLocalCleanup*() {.gcsafe.} =
     ascertain: myTodoBoxes().access(i).isEmpty()
     localCtx.stealCache.access(i).victims.delete()
   myTodoBoxes().delete()
-  # `=destroy`(myParking())
+  `=destroy`(myParking())
 
   # The task cache is full of tasks
   delete(localCtx.taskCache)

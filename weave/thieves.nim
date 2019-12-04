@@ -9,7 +9,7 @@ import
   ./datatypes/[sparsesets, sync_types, context_thread_local],
   ./contexts, ./targets,
   ./instrumentation/[contracts, profilers, loggers],
-  ./channels/[channels_mpsc_unbounded_batch, event_signaling],
+  ./channels/[channels_mpsc_unbounded_batch, event_notifiers],
   ./memory/persistacks,
   ./config, ./signals,
   std/atomics
@@ -90,7 +90,7 @@ proc findVictimAndSteal(req: sink StealRequest) =
   #   and debugging that in a multithreading runtime
   #   would probably be very painful.
   let target = findVictim(req)
-  debugTermination: log("Worker %2d: sending own steal request to %d (Channel 0x%.08x)\n",
+  debug: log("Worker %2d: sending own steal request to %d (Channel 0x%.08x)\n",
     myID(), target, globalCtx.com.thefts[target].addr)
   target.sendSteal(req)
 
@@ -105,7 +105,7 @@ proc findVictimAndRelaySteal*(req: sink StealRequest) =
   #   and debugging that in a multithreading runtime
   #   would probably be very painful.
   let target = findVictim(req)
-  debugTermination: log("Worker %2d: relay steal request from %d to %d (Channel 0x%.08x)\n",
+  debug: log("Worker %2d: relay steal request from %d to %d (Channel 0x%.08x)\n",
     myID(), req.thiefID, target, globalCtx.com.thefts[target].addr)
   # TODO there seem to be a livelock here with the new queue and 16+ workers.
   #      activating the log above solves it.
@@ -201,4 +201,4 @@ proc lastStealAttemptFailure*(req: sink StealRequest) =
     sendShare(req)
     ascertain: not myWorker().isWaiting
     myWorker().isWaiting = true
-    # myParking().wait()
+    myParking().wait() # Thread is blocked here until woken up.
