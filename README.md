@@ -17,7 +17,7 @@ Weave provides an unique scheduler with the following properties:
   As the number of cores in computer is growing steadily, developers need to find new avenues of parallelism
   to exploit them.
   Unfortunately existing framework requires computation to take 10000 cycles at minimum (Intel TBB)
-  which corresponds to 3.33 ms on a 3 GHz CPU to amortize the cost of scheduling.
+  which corresponds to 3.33 µs on a 3 GHz CPU to amortize the cost of scheduling.
   This burden the developers with questions of grain size, heuristics on distributing parallel loop
   for the common case and mischeduling on recursive tree algorithms with potentially very low compute-intensive leaves.
   - Weave uses an adaptative work-stealing scheduler that adapts its stealing strategy depending
@@ -26,8 +26,7 @@ Weave provides an unique scheduler with the following properties:
   - Weave also uses an adaptative lazy loop splitting strategy.
     Loops will only be split when needed. There is no partitioning issue or grain size issue,
     or estimating if the workload is memory-bound or compute-bound, see [PyTorch OpenMP woes on parallel map](https://github.com/zy97140/omp-benchmark-for-pytorch).
-  - Weave aims efficient multicore scaling for very fine-grained tasks starting from the 200 cycles range upward (67 µs on 3GHz).
-    Note that Weave benchmarks are done with granularities of 1µs, 10µs and 100µs.
+  - Weave aims efficient multicore scaling for very fine-grained tasks starting from the 2000 cycles range upward (0.67 µs on 3GHz).
 - Fast and low-overhead:
   While the number of cores have been growing steadily, many programs
   are now hitting the limit of memory bandwidth and require tuning allocators,
