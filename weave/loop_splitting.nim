@@ -41,9 +41,9 @@ func splitHalf(task: Task): int {.inline.} =
 func splitAdaptative(task: Task, approxNumThieves: int32): int {.inline.} =
   ## Split iteration range based on the number of steal requests
   let itersLeft = abs(task.stop - task.cur)
-  preCondition: itersLeft > task.splitThreshold
+  preCondition: itersLeft > 1
 
-  debug: log("Worker %2d: %ld of %ld iterations left\n", myID(), iters_left, abs(task.stop - task.start))
+  debug: log("Worker %2d: %ld of %ld iterations left (%d thieves)\n", myID(), iters_left, abs(task.stop - task.start), approxNumThieves)
 
   # Send a chunk of work to all
   let chunk = max(itersLeft div (approxNumThieves + 1), 1)

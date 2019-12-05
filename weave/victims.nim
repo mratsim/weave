@@ -52,7 +52,7 @@ proc approxNumThieves(): int32 {.inline.} =
   #     as more requests may pile up concurrently.
   #   - We already read 1 steal request before trying to split so need to add it back.
   #   - Workers may send steal requests before actually running out-of-work
-  let approxNumThieves = 1 + myThieves().peek()
+  result = 1 + myThieves().peek()
   debug: log("Worker %2d: has %ld steal requests\n", myID(), approxNumThieves)
 
 proc approxNumThievesProxy(worker: WorkerID): int32 =
