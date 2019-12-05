@@ -82,7 +82,9 @@ macro spawn*(funcCall: typed): untyped =
         `fnCall`
     # Create the task
     result.add quote do:
-      timer_start(timer_enq_deq_task) # templates visibility issue
+      when defined(WV_profile):
+        # TODO profiling templates visibility issue
+        timer_start(timer_enq_deq_task)
       block enq_deq_task:
         let task = newTaskFromCache()
         task.parent = myTask()
@@ -90,7 +92,8 @@ macro spawn*(funcCall: typed): untyped =
         when bool(`withArgs`):
           cast[ptr `argsTy`](task.data.addr)[] = `args`
         schedule(task)
-      timer_stop(timer_enq_deq_task)
+      when defined(WV_profile):
+        timer_stop(timer_enq_deq_task)
 
   else: ################ Need a future
     # We repack fut + args.
