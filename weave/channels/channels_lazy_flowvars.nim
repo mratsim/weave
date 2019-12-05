@@ -23,7 +23,7 @@ type
     full: Atomic[bool]
     itemSize*: uint8
     totalSize*: uint8
-    buffer*: UncheckedArray[byte]
+    buffer*{.align: 8.}: UncheckedArray[byte]
 
 proc `=`(
     dest: var ChannelLazyFlowvar,
