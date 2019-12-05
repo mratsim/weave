@@ -108,14 +108,13 @@ proc recv*(req: var StealRequest): bool {.inline.} =
       # Check the next steal request
       result = myThieves().tryRecv(req)
 
-    # When a child thread backs off, it is parked by the OS
-    # We need to handle steal requests on its behalf to avoid latency
-    if not result and myWorker().leftIsWaiting:
-      result = recvProxy(req, myWorker().left)
+    # # When a child thread backs off, it is parked by the OS
+    # # We need to handle steal requests on its behalf to avoid latency
+    # if not result and myWorker().leftIsWaiting:
+    #   result = recvProxy(req, myWorker().left)
 
-
-    if not result and myWorker().rightIsWaiting:
-      result = recvProxy(req, myWorker().right)
+    # if not result and myWorker().rightIsWaiting:
+    #   result = recvProxy(req, myWorker().right)
 
   postCondition: not result or (result and req.state != Waiting)
 
@@ -274,10 +273,10 @@ proc splitAndSend*(task: Task, req: sink StealRequest) =
     # Split iteration range according to given strategy
     # [start, stop) => [start, split) + [split, end)
     var guessThieves = approxNumThieves()
-    if myWorker().leftIsWaiting:
-      guessThieves += approxNumThievesProxy(myWorker().left)
-    if myWorker().rightIsWaiting:
-      guessThieves += approxNumThievesProxy(myWorker().right)
+    # if myWorker().leftIsWaiting:
+    #   guessThieves += approxNumThievesProxy(myWorker().left)
+    # if myWorker().rightIsWaiting:
+    #   guessThieves += approxNumThievesProxy(myWorker().right)
     let split = split(task, guessThieves)
 
     # New task gets the upper half
@@ -350,7 +349,8 @@ proc shareWork*() {.inline.} =
       else:
         ascertain: myWorker().rightIsWaiting
         myWorker().rightIsWaiting = false
-      wakeup(req.thiefID)
+      # wakeup(req.thiefID) - backoff is deactivated
+
       # Now we can dequeue as we found work
       # We cannot access the steal request anymore or
       # we would have a race with the child worker recycling it.

@@ -89,6 +89,10 @@ func wait*(en: var EventNotifier) {.inline.} =
 
   assert not en.waiting.load(moRelaxed)
 
+# TODO there is a deadlock at the moment as a worker sending a
+#      WAITING steal request and then actually waiting is not atomic
+# see https://github.com/mratsim/weave/issues/27
+# and https://github.com/mratsim/weave/pull/28
 func notify*(en: var EventNotifier) {.inline.} =
   ## Signal a thread that it can be unparked
 

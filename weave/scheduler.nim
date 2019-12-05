@@ -86,7 +86,7 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
   myWorker().deque.initialize()
   myWorker().initialize(maxID())
 
-  myParking().initialize()
+  # myParking().initialize() - Backoff deactivated
 
   myTodoBoxes().initialize()
   for i in 0 ..< myTodoBoxes().len:
@@ -230,7 +230,7 @@ proc threadLocalCleanup*() {.gcsafe.} =
     ascertain: myTodoBoxes().access(i).isEmpty()
     localCtx.stealCache.access(i).victims.delete()
   myTodoBoxes().delete()
-  `=destroy`(myParking())
+  # `=destroy`(myParking()) # Backoff deactivated
 
   # The task cache is full of tasks
   delete(localCtx.taskCache)

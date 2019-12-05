@@ -50,10 +50,10 @@ proc signalTerminate*(_: pointer) =
     # Send the terminate signal
     asyncSignal(signalTerminate, globalCtx.com.tasks[myWorker().left].access(0))
     # Wake the worker up so that it can process the terminate signal
-    wakeup(myWorker().left)
+    # wakeup(myWorker().left) - Backoff deactivated
   if myWorker().right != Not_a_worker:
     asyncSignal(signalTerminate, globalCtx.com.tasks[myWorker().right].access(0))
-    wakeup(myWorker().right)
+    # wakeup(myWorker().right) - Backoff deactivated
 
   Worker:
     # When processing this signal for our queue, it was counted
