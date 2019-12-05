@@ -40,7 +40,7 @@ proc spc_consume(usec: int32) =
 
     dummy_cpt()
 
-    if elapsed >= poll_elapsed:
+    if elapsed >= global_poll_elapsed:
       let pollStart = wtime_usec()
       loadBalance(Weave)
       pollElapsed += wtime_usec() - pollStart

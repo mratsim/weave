@@ -6,6 +6,8 @@ import
   ./future_internal,
   ./profile, ./runtime
 
+export profile
+
 when not compileOption("threads"):
   {.error: "This requires --threads:on compilation flag".}
 

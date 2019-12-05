@@ -129,7 +129,10 @@ macro spawn*(funcCall: typed): untyped =
     # Create the task
     let freshIdent = ident($retType)
     result.add quote do:
-      profile(enq_deq_task):
+      when defined(WV_profile):
+        # TODO profiling templates visibility issue
+        timer_start(timer_enq_deq_task)
+      block enq_deq_task:
         let task = newTaskFromCache()
         task.parent = myTask()
         task.fn = `async_fn`
@@ -137,9 +140,10 @@ macro spawn*(funcCall: typed): untyped =
         let `fut` = newFlowvar(myMemPool(), `freshIdent`)
         cast[ptr `futArgsTy`](task.data.addr)[] = `futArgs`
         schedule(task)
-
-      # Return the future
-      `fut`
+        when defined(WV_profile):
+          timer_stop(timer_enq_deq_task)
+        # Return the future
+        `fut`
 
   # Wrap in a block for namespacing
   result = nnkBlockStmt.newTree(newEmptyNode(), result)

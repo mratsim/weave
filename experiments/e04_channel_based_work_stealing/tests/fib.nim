@@ -6,7 +6,7 @@ import
   ../profile,
   ../runtime,
   ../primitives/c,
-  ../tasking,
+  ../tasking, ../tasking_internal,
   # bench
   ./wtime, ./resources
 
