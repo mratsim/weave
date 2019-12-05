@@ -45,6 +45,7 @@ import
   ../runtime,
   ../primitives/c,
   ../tasking,
+  ../tasking_internal,
   # bench
   ./wtime
 
@@ -142,7 +143,9 @@ const solutions = [
   2680,
   14200,
   73712,
-  365596
+  365596,
+  2279184, # 15x15
+  14772512
 ]
 
 proc verifyQueens(n, res: int32) =
