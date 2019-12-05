@@ -70,6 +70,9 @@ macro parallelFor*(loopParams: untyped, body: untyped): untyped =
       captured.add body[0][1][i]
       capturedTy.add newCall(ident"typeof", body[0][1][i])
 
+    # Remove the captures section
+    body[0] = nnkDiscardStmt.newTree(body[0].toStrLit)
+
   # Package the body in a proc
   # --------------------------------------------------------
   var params = @[newEmptyNode()] # for loops have no return value
@@ -169,7 +172,7 @@ macro parallelFor*(loopParams: untyped, body: untyped): untyped =
 when isMainModule:
   import ./instrumentation/loggers
 
-  block: # Async without result
+  block:
     proc main() =
       init(Weave)
 
@@ -179,4 +182,25 @@ when isMainModule:
       sync(Weave)
       exit(Weave)
 
+    echo "Simple parallel for"
+    echo "-------------------------"
     main()
+    echo "-------------------------"
+
+  block: # Capturing outside scope
+    proc main2() =
+      init(Weave)
+
+      var i = 10
+      parallelFor j in 0 ..< 10:
+        captures: i
+        log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
+
+      sync(Weave)
+      exit(Weave)
+
+
+    echo "\n\nCapturing outside variable"
+    echo "-------------------------"
+    main2()
+    echo "-------------------------"
