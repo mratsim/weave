@@ -6,6 +6,9 @@ import
   ./future_internal,
   ./profile, ./runtime
 
+when not compileOption("threads"):
+  {.error: "This requires --threads:on compilation flag".}
+
 # TODO: autocreate a closure either via:
 #
 # async_for i in 0 .. 10:
@@ -112,7 +115,7 @@ macro async_for*(
   # Create the task
   let prof = bindSym("profile")
   result.add quote do:
-    prof(enq_deq_task):
+    profile(enq_deq_task):
       let task = task_alloc()
       task.parent = get_current_task()
       task.fn = `async_fn`
@@ -126,6 +129,7 @@ macro async_for*(
         cast[ptr `argsTy`](task.data.addr)[] = `args`
       push task
 
+  echo result.toStrLit
 
 when isMainModule:
   import ./tasking, ./primitives/c
