@@ -3,7 +3,7 @@ import
   macros, typetraits,
   # Internal
   ./scheduler, ./runtime, ./contexts,
-  ./datatypes/[flowvars, sync_types],
+  ./datatypes/sync_types,
   ./instrumentation/[contracts, profilers]
 
 when not compileOption("threads"):
@@ -26,6 +26,21 @@ template parallelForWrapper(idx: untyped{ident}, body: untyped): untyped =
     loadBalance(Weave)
 
 macro parallelFor*(loopParams: untyped, body: untyped): untyped =
+  ## Parallel for loop
+  ## Syntax:
+  ##
+  ## parallelFor i in 0 ..< 10:
+  ##   echo(i)
+  ##
+  ## Variables from the external scope needs to be explicitly captured
+  ##
+  ##  var a = 100
+  ##  var b = 10
+  ##  parallelFor i in 0 ..< 10:
+  ##    captures: {a, b}
+  ##    echo a + b + i
+
+  result = newStmtList()
 
   # Checks
   # --------------------------------------------------------
@@ -66,12 +81,18 @@ macro parallelFor*(loopParams: untyped, body: untyped): untyped =
 
   if body[0].kind == nnkCall and body[0][0].eqIdent"captures":
     body[0][1].expectKind(nnkStmtList)
-    for i in 0 ..< body[0][1].len:
-      captured.add body[0][1][i]
-      capturedTy.add newCall(ident"typeof", body[0][1][i])
+    body[0][1][0].expectKind(nnkCurly)
+    for i in 0 ..< body[0][1][0].len:
+      captured.add body[0][1][0][i]
+      capturedTy.add newCall(ident"typeof", body[0][1][0][i])
 
     # Remove the captures section
     body[0] = nnkDiscardStmt.newTree(body[0].toStrLit)
+
+  let CapturedTy = ident"CapturedTy"
+  if capturedTy.len > 0:
+    result.add quote do:
+      type `CapturedTy` = `capturedTy`
 
   # Package the body in a proc
   # --------------------------------------------------------
@@ -102,19 +123,18 @@ macro parallelFor*(loopParams: untyped, body: untyped): untyped =
 
   # Sanity checks
   # --------------------------------------------------------
-  result = newStmtList()
   if captured.len > 0:
     result.add quote do:
       static:
-        doAssert supportsCopyMem(`capturedTy`), "\n\n parallelFor" &
+        doAssert supportsCopyMem(`CapturedTy`), "\n\n parallelFor" &
           " has arguments managed by GC (ref/seq/strings),\n" &
           "  they cannot be distributed across threads.\n" &
-          "  Argument types: " & $`capturedTy` & "\n\n"
+          "  Argument types: " & $`CapturedTy` & "\n\n"
 
-        doAssert sizeof(`capturedTy`) <= TaskDataSize, "\n\n parallelFor" &
+        doAssert sizeof(`CapturedTy`) <= TaskDataSize, "\n\n parallelFor" &
           " has arguments that do not fit in the parallel tasks data buffer.\n" &
-          "  Argument types: " & `capturedTy`.name & "\n" &
-          "  Current size: " & $sizeof(`capturedTy`) & "\n" &
+          "  Argument types: " & `CapturedTy`.name & "\n" &
+          "  Current size: " & $sizeof(`CapturedTy`) & "\n" &
           "  Maximum size allowed: " & $TaskDataSize & "\n\n"
 
   # Create the closure environment
@@ -147,7 +167,7 @@ macro parallelFor*(loopParams: untyped, body: untyped): untyped =
       assert not isRootTask(this)
 
       when bool(`withArgs`):
-        let `data` = cast[`capturedTy`](param)
+        let `data` = cast[ptr `CapturedTy`](param)
       `fnCall`
 
   # Create the task
@@ -163,11 +183,8 @@ macro parallelFor*(loopParams: untyped, body: untyped): untyped =
       task.stop = `stop`
       task.stride = 1
       when bool(`withArgs`):
-        cast[ptr `capturedTy`](task.data.addr)[] = `captured`
+        cast[ptr `CapturedTy`](task.data.addr)[] = `captured`
       schedule(task)
-
-
-  echo result.toStrLit
 
 when isMainModule:
   import ./instrumentation/loggers
@@ -179,28 +196,44 @@ when isMainModule:
       parallelFor i in 0 ..< 100:
         log("%d (thread %d)\n", i, myID())
 
-      sync(Weave)
       exit(Weave)
 
     echo "Simple parallel for"
     echo "-------------------------"
-    main()
+    # main()
     echo "-------------------------"
 
   block: # Capturing outside scope
     proc main2() =
       init(Weave)
 
-      var i = 10
-      parallelFor j in 0 ..< 10:
-        captures: i
-        log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
+      var a = 100
+      var b = 10
+      parallelFor i in 0 ..< 10:
+        captures: {a, b}
+        log("a+b+i = %d (thread %d)\n", a+i, myID())
 
-      sync(Weave)
       exit(Weave)
 
 
-    echo "\n\nCapturing outside variable"
+    echo "\n\nCapturing outside variables"
     echo "-------------------------"
-    main2()
+    # main2()
+    echo "-------------------------"
+
+
+  block: # Capturing outside scope
+    proc main3() =
+      init(Weave)
+
+      parallelFor i in 0 ..< 4:
+        parallelFor j in 0 ..< 8:
+          captures: {i}
+          log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
+
+      exit(Weave)
+
+    echo "\n\nNested loops"
+    echo "-------------------------"
+    main3()
     echo "-------------------------"
