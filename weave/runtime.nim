@@ -181,7 +181,7 @@ proc exit*(_: type Weave) =
   threadLocalCleanup()
   globalCleanup()
 
-proc loadBalance*(_: type Weave) =
+proc loadBalance*(_: type Weave) {.gcsafe.} =
   ## This makes the current thread ensures it shares work with other threads.
   ##
   ## This is done automatically at synchronization points

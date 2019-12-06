@@ -12,7 +12,7 @@ import
 export
   Flowvar, Weave,
   spawn, sync,
-  parallelFor,
+  parallelFor, parallelForStrided,
   init, exit,
   loadBalance,
   isSpawned

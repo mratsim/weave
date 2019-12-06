@@ -73,15 +73,15 @@ const
 
 template metrics*(body: untyped): untyped =
   when defined(WV_Metrics):
-    {.noSideEffect.}: body
+    {.noSideEffect, gcsafe.}: body
 
 template debugTermination*(body: untyped): untyped =
   when defined(WV_DebugTermination) or defined(WV_Debug):
-    {.noSideEffect.}: body
+    {.noSideEffect, gcsafe.}: body
 
 template debug*(body: untyped): untyped =
   when defined(WV_Debug):
-    {.noSideEffect.}: body
+    {.noSideEffect, gcsafe.}: body
 
 template StealAdaptative*(body: untyped): untyped =
   when StealStrategy == StealKind.adaptative:

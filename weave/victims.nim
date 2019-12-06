@@ -235,7 +235,7 @@ LazyFV:
         convertLazyFlowvar(task)
       task = task.next
 
-proc dispatchTasks*(req: sink StealRequest) =
+proc dispatchTasks*(req: sink StealRequest) {.gcsafe.}=
   ## Send tasks in return of a steal request
   ## or decline and relay the steal request to another thread
 
@@ -283,6 +283,9 @@ proc splitAndSend*(task: Task, req: sink StealRequest) =
     dup.cur = split
     dup.stop = task.stop
 
+    # Current task continues with lower half
+    task.stop = split
+
   debug: log("Worker %2d: Sending [%ld, %ld) to worker %d\n", myID(), dup.start, dup.stop, req.thiefID)
 
   profile(send_recv_task):
@@ -299,9 +302,6 @@ proc splitAndSend*(task: Task, req: sink StealRequest) =
       raise newException(ValueError, "Unsupported code path: splitting a for-loop with futures")
 
     req.send(dup)
-
-    # Current task continues with lower half
-    myTask().stop = split
 
   incCounter(tasksSplit)
   debug: log("Worker %2d: Continuing with [%ld, %ld)\n", myID(), task.cur, task.stop)

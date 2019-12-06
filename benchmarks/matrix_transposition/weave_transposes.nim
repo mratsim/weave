@@ -14,16 +14,11 @@ import
   cpuinfo, streams, strscans,
   # Third-party
   cligen,
+  # Weave
+  ../../weave,
   # bench
   ../wtime, ../resources
 
-# OpenMP
-# ---------------------------------------------------
-
-{.passC:"-fopenmp".}
-{.passL:"-fopenmp".}
-{.pragma: omp, header:"omp.h".}
-proc omp_get_num_threads*(): cint {.omp.}
 
 # Memory
 # ---------------------------------------------------
@@ -65,8 +60,8 @@ proc wv_free*[T: ptr](p: T) {.inline.} =
 type TransposeStrategy = enum
   Sequential
   Naive
-  Collapsed
-  TiledCollapsed
+  Nested
+  TiledNested
 
 # Question: do we need __restrict to avoid the compiler generating
 #           defensive aliasing robust code?
@@ -76,47 +71,36 @@ proc sequentialTranspose(M, N: int, bufIn, bufOut: ptr UncheckedArray[float32]) 
     for i in 0 ..< M:
       bufOut[j*M+i] = bufIn[i*N+j]
 
-proc ompNaiveTranspose(M, N: int, bufIn, bufOut: ptr UncheckedArray[float32]) =
+proc weaveNaiveTranspose(M, N: int, bufIn, bufOut: ptr UncheckedArray[float32]) =
   ## Transpose a MxN matrix into a NxM matrix
 
   # Write are more expensive than read so we keep i accesses linear for writes
-  {.push stacktrace:off.}
-  for j in 0||(N-1):
+  parallelFor j in 0 ..< N:
+    captures: {M, N, bufIn, bufOut}
     for i in 0 ..< M:
       bufOut[j*M+i] = bufIn[i*N+j]
-  {.pop.}
 
-proc ompCollapsedTranspose(M, N: int, bufIn, bufOut: ptr UncheckedArray[float32]) =
-  ## Transpose a MxN matrix into a NxM matrix
+proc weaveNestedTranspose(M, N: int, bufIn, bufOut: ptr UncheckedArray[float32]) =
+  ## Transpose a MxN matrix into a NxM matrix with nested for loops
 
-  # We need to go down to C level for the collapsed clause
-  # This relies on M, N, bfIn, bufOut symbols being the same in C and Nim
-  # The proper interpolation syntax is a bit busy otherwise
-  {.emit: """
+  parallelFor j in 0 ..< N:
+    captures: {M, N, bufIn, bufOut}
+    parallelFor i in 0 ..< M:
+      captures: {j, M, N, bufIn, bufOut}
+      bufOut[j*M+i] = bufIn[i*N+j]
 
-  #pragma omp parallel for collapse(2)
-  for (int i = 0; i < `M`; ++i)
-    for (int j = 0; j < `N`; ++j)
-      `bufOut`[j*M+i] = `bufIn`[i*N+j];
-  """.}
+proc weave2DTiledNestedTranspose(M, N: int, bufIn, bufOut: ptr UncheckedArray[float32]) =
+  ## Transpose with 2D tiling and nested
 
-proc omp2DTiledCollapsedTranspose(M, N: int, bufIn, bufOut: ptr UncheckedArray[float32]) =
-  ## Transpose with 2D tiling and collapsed
+  const blck = 64 # const do not need to be captured
 
-  const blck = 64
-
-  {.emit: """
-
-  #define min(a,b) (((a)<(b))?(a):(b))
-
-  #pragma omp parallel for collapse(2)
-  for (int j = 0; j < `N`; j+=`blck`)
-    for (int i = 0; i < `M`; i+=`blck`)
-      for (int jj = j; jj<j+`blck` && jj<`N`; jj++)
-        for (int ii = i; ii<min(i+`blck`,`M`); ii++)
-          `bufOut`[ii+jj*`M`] = `bufIn`[jj+ii*`N`];
-  """.}
-
+  parallelForStrided j in 0 ..< N, stride = blck:
+    captures: {M, N, bufIn, bufOut}
+    parallelForStrided i in 0 ..< M, stride = blck:
+      captures: {j, M, N, bufIn, bufOut}
+      for jj in j ..< min(j+blck, N):
+        for ii in i ..< min(i+blck, M):
+          bufOut[jj*M+ii] = bufIn[ii*N+jj]
 
 # Meta
 # ---------------------------------------------------
@@ -160,8 +144,12 @@ proc report(
   let mxnPerf = reqOps.float/(mxnTime*1e-3 / nrounds.float) * 1e-9 # Gops per second
   let nxmPerf = reqOps.float/(nxmTime*1e-3 / nrounds.float) * 1e-9 # Gops per second
 
+  const lazy = defined(WV_LazyFlowvar)
+  const config = if lazy: " (lazy flowvars)"
+                 else: " (eager flowvars)"
+
   echo "--------------------------------------------------------------------------"
-  echo "Scheduler:                                    OpenMP"
+  echo "Scheduler:                                    Weave ", config
   echo "Benchmark:                                    Transpose - ", $transposeStrategy
   echo "Threads:                                      ", nthreads
   echo "# of rounds:                                  ", nrounds
@@ -198,12 +186,16 @@ proc report(
     echo "# of page faults:                             ", mxnPageFaults
     echo "Perf (GMEMOPs/s ~ GigaMemory Operations/s)    ", round(nxmPerf, 3)
 
-template runBench(transposeName: typed, reorderCompute: bool): untyped =
+template runBench(transposeName: typed, reorderCompute, isSequential: bool): untyped =
   if not reorderCompute:
+    if not isSequential:
+      init(Weave)
     memUsage(mxnMaxRss, mxnRuntimeRss, mxnPageFaults):
       let start = wtime_msec()
       for _ in 0 ..< nrounds:
         transposeName(M, N, bufIn, bufOut)
+      if not isSequential:
+        sync(Weave)
       let stop = wtime_msec()
       mxnTime = stop - start
 
@@ -211,19 +203,29 @@ template runBench(transposeName: typed, reorderCompute: bool): untyped =
       let start = wtime_msec()
       for _ in 0 ..< nrounds:
         transposeName(N, M, bufIn, bufOut)
+      if not isSequential:
+        sync(Weave)
       let stop = wtime_msec()
       nxmTime = stop - start
+
+    if not isSequential:
+      exit(Weave)
 
     report(M, N, nthreads, nrounds, reorderCompute,
         transposeStrat, reqOps, reqBytes,
         mxnTime, mxnMaxRSS, mxnRuntimeRss, mxnPageFaults,
         nxmTime, nxmMaxRSS, nxmRuntimeRss, nxmPageFaults
       )
+
   else:
+    if not isSequential:
+      init(Weave)
     memUsage(nxmMaxRss, nxmRuntimeRss, nxmPageFaults):
       let start = wtime_msec()
       for _ in 0 ..< nrounds:
         transposeName(N, M, bufIn, bufOut)
+      if not isSequential:
+        sync(Weave)
       let stop = wtime_msec()
       nxmTime = stop - start
 
@@ -231,8 +233,13 @@ template runBench(transposeName: typed, reorderCompute: bool): untyped =
       let start = wtime_msec()
       for _ in 0 ..< nrounds:
         transposeName(M, N, bufIn, bufOut)
+      if not isSequential:
+        sync(Weave)
       let stop = wtime_msec()
       mxnTime = stop - start
+
+    if not isSequential:
+      exit(Weave)
 
     report(M, N, nthreads, nrounds, reorderCompute,
         transposeStrat, reqOps, reqBytes,
@@ -243,11 +250,17 @@ template runBench(transposeName: typed, reorderCompute: bool): untyped =
 # Interface
 # ---------------------------------------------------
 
-proc main(M = 400, N = 4000, nrounds = 10000, transposeStrat = TiledCollapsed, reorderCompute=false) =
+proc main(M = 400, N = 4000, nrounds = 10000, transposeStrat = TiledNested, reorderCompute=false) =
   echo "Inverting the transpose order may favor one transposition heavily for non-tiled strategies"
 
-  let nthreads = if transposeStrat == Sequential: 1'i32
-                 else: omp_get_num_threads()
+  let isSequential = transposeStrat == Sequential
+  var nthreads: int32
+  if transposeStrat == Sequential:
+    nthreads = 1
+  elif existsEnv"WEAVE_NUM_THREADS":
+    nthreads = getEnv"WEAVE_NUM_THREADS".parseInt().int32
+  else:
+    nthreads = countProcessors().int32
 
   let (reqOps, reqBytes, bufSize) = computeMeta(M, N)
 
@@ -259,10 +272,10 @@ proc main(M = 400, N = 4000, nrounds = 10000, transposeStrat = TiledCollapsed, r
   var mxnTime, nxmTime: float64
 
   case transposeStrat
-  of Sequential: runBench(sequentialTranspose, reorderCompute)
-  of Naive: runBench(ompNaiveTranspose, reorderCompute)
-  of Collapsed: runBench(ompCollapsedTranspose, reorderCompute)
-  of TiledCollapsed: runBench(omp2DTiledCollapsedTranspose, reorderCompute)
+  of Sequential: runBench(sequentialTranspose, reorderCompute, isSequential)
+  of Naive: runBench(weaveNaiveTranspose, reorderCompute, isSequential)
+  of Nested: runBench(weaveNestedTranspose, reorderCompute, isSequential)
+  of TiledNested: runBench(weave2DTiledNestedTranspose, reorderCompute, isSequential)
 
   wv_free(bufOut)
   wv_free(bufIn)
