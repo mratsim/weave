@@ -4,6 +4,20 @@ _"Good artists borrow, great artists steal."_ -- Pablo Picasso
 
 Weave (codenamed "Project Picasso") is a multithreading runtime for the [Nim programming language](https://nim-lang.org/)
 
+> ⚠️ Disclaimer:
+>
+> Weave currently has no test suite or continuous integration.
+> In particular, the synchronization primitives were not formally verified
+> or model-checked to prove the absence of data races or deadlock/livelock,
+> nor were they passed under a data race detection tool.
+>
+> Individual components are tested and the benchmarks as well,
+> however the potential interleaving of hundreds of threads for
+> billions of tasks and memory accesses was not.
+>
+> Weave does limit synchronization to only simple SPSC and MPSC channels which greatly reduces
+> the potential bug surface.
+
 Weave provides an unique scheduler with the following properties:
 - Message-Passing based:
   unlike alternative work-stealing schedulers, this means that Weave is usable
