@@ -25,7 +25,7 @@ template parallelForWrapper(idx: untyped{ident}, body: untyped): untyped =
     this.cur += this.stride
     loadBalance(Weave)
 
-macro parallelFor*(loopParams: untyped, body: untyped): untyped =
+macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped =
   ## Parallel for loop
   ## Syntax:
   ##
@@ -181,10 +181,16 @@ macro parallelFor*(loopParams: untyped, body: untyped): untyped =
       task.start = `start`
       task.cur = `start`
       task.stop = `stop`
-      task.stride = 1
+      task.stride = `stride`
       when bool(`withArgs`):
         cast[ptr `CapturedTy`](task.data.addr)[] = `captured`
       schedule(task)
+
+template parallelFor*(loopParams: untyped, body: untyped): untyped =
+  parallelForImpl(loopParams, stride = 1, body)
+
+template parallelForStrided*(loopParams: untyped, stride: Positive, body: untyped): untyped =
+  parallelForImpl(loopParams, stride, body)
 
 when isMainModule:
   import ./instrumentation/loggers
@@ -222,7 +228,7 @@ when isMainModule:
     echo "-------------------------"
 
 
-  block: # Capturing outside scope
+  block: # Nested loops
     proc main3() =
       init(Weave)
 
@@ -235,5 +241,22 @@ when isMainModule:
 
     echo "\n\nNested loops"
     echo "-------------------------"
-    main3()
+    # main3()
+    echo "-------------------------"
+
+
+  block: # Strided Nested loops
+    proc main4() =
+      init(Weave)
+
+      parallelForStrided i in 0 ..< 100, stride = 30:
+        parallelForStrided j in 0 ..< 200, stride = 60:
+          captures: {i}
+          log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
+
+      exit(Weave)
+
+    echo "\n\nStrided Nested loops"
+    echo "-------------------------"
+    main4()
     echo "-------------------------"

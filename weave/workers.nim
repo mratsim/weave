@@ -83,8 +83,9 @@ proc run*(task: Task) {.inline.} =
   task.fn(task.data.addr)
   myTask() = this
   if task.isLoop:
-    # We have executed |stop-start| iterations
-    let iters = abs(task.stop - task.start)
+    # We have executed |stop-start| iterations, for now only support forward iterations
+    ascertain: task.stop > task.start
+    let iters = task.stop - task.start
     StealAdaptative:
       myThefts().recentTasks += iters.int32 # overflow?
     incCounter(tasksExec, iters)

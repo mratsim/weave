@@ -21,7 +21,7 @@ import
 
 func splitHalf(task: Task): int {.inline.} =
   ## Split loop iteration range in half
-  task.cur + (task.stop - task.cur) shr 1
+  task.cur + ((task.stop - task.cur) div task.stride) shr 1
 
 # TODO: removed - https://github.com/aprell/tasking-2.0/commit/61068370282335802c07fcbc6bab3c9904c8ee4b
 #
@@ -38,12 +38,18 @@ func splitHalf(task: Task): int {.inline.} =
 #   debug: log("Worker %2d: sending %ld iterations\n", myID(), task.chunks)
 #   return task.stop - task.chunks
 
+func roundPrevMultipleOf(x: SomeInteger, step: SomeInteger): SomeInteger {.inline.} =
+  ## Round the input to the previous multiple of "step"
+  result = x - x mod step
+
 func splitAdaptative(task: Task, approxNumThieves: int32): int {.inline.} =
   ## Split iteration range based on the number of steal requests
-  let itersLeft = abs(task.stop - task.cur)
+  let itersLeft = (task.stop - task.cur) div task.stride
   preCondition: itersLeft > 1
 
-  debug: log("Worker %2d: %ld of %ld iterations left (%d thieves)\n", myID(), iters_left, abs(task.stop - task.start), approxNumThieves)
+  debug:
+    log("Worker %2d: %ld iterations left (start: %d, current: %d, stop: %d, stride: %d, %d thieves)\n",
+      myID(), iters_left, task.start, task.cur, task.stop, task.stride, approxNumThieves)
 
   # Send a chunk of work to all
   let chunk = max(itersLeft div (approxNumThieves + 1), 1)
@@ -51,8 +57,8 @@ func splitAdaptative(task: Task, approxNumThieves: int32): int {.inline.} =
   postCondition:
     itersLeft > chunk
 
-  debug: log("Worker %2d: sending %ld iterations\n", myID(), chunk)
-  return task.stop - chunk
+  debug: log("Worker %2d: sending %ld iterations\n", myID(), chunk*task.stride)
+  return roundPrevMultipleOf(task.stop - chunk*task.stride, chunk*task.stride)
 
 template split*(task: Task, approxNumThieves: int32): int =
   when SplitStrategy == SplitKind.half:
@@ -65,4 +71,4 @@ template split*(task: Task, approxNumThieves: int32): int =
     {.error: "Unreachable".}
 
 template isSplittable*(t: Task): bool =
-  not t.isNil and t.isLoop and abs(t.stop - t.cur) > 1
+  not t.isNil and t.isLoop and (t.stop - t.cur) div t.stride > 1
