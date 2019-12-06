@@ -52,7 +52,7 @@ proc approxNumThieves(): int32 {.inline.} =
   #     as more requests may pile up concurrently.
   #   - We already read 1 steal request before trying to split so need to add it back.
   #   - Workers may send steal requests before actually running out-of-work
-  let approxNumThieves = 1 + myThieves().peek()
+  result = 1 + myThieves().peek()
   debug: log("Worker %2d: has %ld steal requests\n", myID(), approxNumThieves)
 
 proc approxNumThievesProxy(worker: WorkerID): int32 =
@@ -174,18 +174,18 @@ proc decline*(req: sink StealRequest) =
       req.victims.excl(myID())
       req.findVictimAndRelaySteal()
 
-proc receivedOwn(req: sink StealRequest) =
+template receivedOwn(req: sink StealRequest) =
   preCondition: req.state != Waiting
 
   when WV_StealEarly > 0:
-    task = myTask()
+    let task = myTask()
     let tasksLeft = if not task.isNil and task.isLoop:
                       abs(task.stop - task.cur)
                     else: 0
 
     # Received our own steal request, we can forget about it
     # if we now have more tasks that the threshold
-    if myWorker().deque > WV_StealEarly or
+    if myWorker().deque.pendingTasks > WV_StealEarly or
         tasksLeft > WV_StealEarly:
       req.forget()
   else:
@@ -193,7 +193,7 @@ proc receivedOwn(req: sink StealRequest) =
 
 proc takeTasks(req: StealRequest): tuple[task: Task, loot: int32] =
   ## Take tasks in the worker deque to send them
-  ## to other
+  ## to others
   when StealStrategy == StealKind.adaptative:
     if req.stealHalf:
       myWorker().deque.stealHalf(result.task, result.loot)
@@ -210,8 +210,6 @@ proc send(req: sink StealRequest, task: sink Task, numStolen: int32 = 1) {.inlin
   debug: log("Worker %2d: sending %d tasks (task.fn 0x%.08x) to Worker %2d\n",
     myID(), numStolen, task.fn, req.thiefID, req.thiefAddr)
   let taskSent = req.thiefAddr[].trySend(task)
-  when defined(WV_LastThief):
-    myThefts().lastThief = req.thiefID
 
   postCondition: taskSent # SPSC channel with only 1 slot
 
@@ -284,15 +282,20 @@ proc splitAndSend*(task: Task, req: sink StealRequest) =
     dup.cur = split
     dup.stop = task.stop
 
-  log("Worker %2d: Sending [%ld, %ld) to worker %d\n", myID(), dup.start, dup.stop, req.thiefID)
+  debug: log("Worker %2d: Sending [%ld, %ld) to worker %d\n", myID(), dup.start, dup.stop, req.thiefID)
 
   profile(send_recv_task):
     dup.batch = 1
-    # TODO StealLastVictim
 
     if dup.hasFuture:
-      # TODO
-      discard
+      # Patch the task with a new future for the result.
+      # Problem: we lost the type information so we don't
+      # know the size. The type erased channel supports up to WV_MemBlockSize - 11 bytes
+      # This also prevents us from using the typed SPSC channels
+
+      # In multithreading exceptions are not always properly printed so use also a message
+      log("Worker %d: Unsupported code path, splitting a for loop with futures", myID())
+      raise newException(ValueError, "Unsupported code path: splitting a for-loop with futures")
 
     req.send(dup)
 
@@ -300,6 +303,7 @@ proc splitAndSend*(task: Task, req: sink StealRequest) =
     myTask().stop = split
 
   incCounter(tasksSplit)
+  debug: log("Worker %2d: Continuing with [%ld, %ld)\n", myID(), task.cur, task.stop)
 
 proc distributeWork(req: sink StealRequest): bool =
   ## Handle incoming steal request

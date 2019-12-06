@@ -34,21 +34,19 @@ type
     parent*: Task
     prev*: Task
     next*: Task
-    # List of futures required by the current task
-    futures*: pointer
+    # 32 bytes
     start*: int
     cur*: int
     stop*: int
-    chunks*: int
-    splitThreshold*: int # TODO: can probably be removed with the adaptative algorithm
-    batch*: int32
-    when defined(WV_StealLastVictim):
-      victim*: int32
+    stride*: int
+    # 64 bytes
+    futures*: pointer # List of futures required by the current task
+    batch*: int32 # TODO remove
     isLoop*: bool
     hasFuture*: bool
+    # 78 bytes
     # User data - including the FlowVar channel to send back result.
     data*: array[TaskDataSize, byte]
-    # Ideally we can replace fn + data by a Nim closure.
 
     # TODO: support loops with steps
 

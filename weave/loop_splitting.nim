@@ -23,25 +23,27 @@ func splitHalf(task: Task): int {.inline.} =
   ## Split loop iteration range in half
   task.cur + (task.stop - task.cur) shr 1
 
-func splitGuided(task: Task): int {.inline.} =
-  ## Split iteration range based on the number of workers
-  let itersLeft = abs(task.stop - task.cur)
-
-  preCondition: task.chunks > 0
-  preCondition: itersLeft > task.splitThreshold
-
-  if itersLeft <= task.chunks:
-    return task.splitHalf()
-
-  debug: log("Worker %2d: sending %ld iterations\n", myID(), task.chunks)
-  return task.stop - task.chunks
+# TODO: removed - https://github.com/aprell/tasking-2.0/commit/61068370282335802c07fcbc6bab3c9904c8ee4b
+#
+# func splitGuided(task: Task): int {.inline.} =
+#   ## Split iteration range based on the number of workers
+#   let itersLeft = abs(task.stop - task.cur)
+#
+#   preCondition: task.chunks > 0
+#   preCondition: itersLeft > task.splitThreshold
+#
+#   if itersLeft <= task.chunks:
+#     return task.splitHalf()
+#
+#   debug: log("Worker %2d: sending %ld iterations\n", myID(), task.chunks)
+#   return task.stop - task.chunks
 
 func splitAdaptative(task: Task, approxNumThieves: int32): int {.inline.} =
   ## Split iteration range based on the number of steal requests
   let itersLeft = abs(task.stop - task.cur)
-  preCondition: itersLeft > task.splitThreshold
+  preCondition: itersLeft > 1
 
-  debug: log("Worker %2d: %ld of %ld iterations left\n", myID(), iters_left, abs(task.stop - task.start))
+  debug: log("Worker %2d: %ld of %ld iterations left (%d thieves)\n", myID(), iters_left, abs(task.stop - task.start), approxNumThieves)
 
   # Send a chunk of work to all
   let chunk = max(itersLeft div (approxNumThieves + 1), 1)
@@ -62,5 +64,5 @@ template split*(task: Task, approxNumThieves: int32): int =
   else:
     {.error: "Unreachable".}
 
-func isSplittable*(t: Task): bool =
-  not t.isNil and t.isLoop and abs(t.stop - t.cur) > t.splitThreshold
+template isSplittable*(t: Task): bool =
+  not t.isNil and t.isLoop and abs(t.stop - t.cur) > 1
