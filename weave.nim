@@ -6,12 +6,13 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  weave/[async, runtime],
+  weave/[async, parallel_for, runtime],
   weave/datatypes/flowvars
 
 export
   Flowvar, Weave,
   spawn, sync,
+  parallelFor,
   init, exit,
   loadBalance,
   isSpawned
