@@ -63,8 +63,10 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
   if body[0].kind == nnkCall and body[0][0].eqIdent"captures":
     (captured, capturedTy) = extractCaptures(body, 0)
 
+  let withArgs = capturedTy.len > 0
+
   let CapturedTy = ident"CapturedTy"
-  if capturedTy.len > 0:
+  if withArgs:
     result.add quote do:
       type `CapturedTy` = `capturedTy`
 
@@ -72,46 +74,34 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
 
   # Package the body in a proc
   # --------------------------------------------------------
-  let parForName = ident"parallelForSection"
+  let parForName = ident"weaveParallelForSection"
+  let env = ident("weaveParForClosureEnv_") # typed pointer to data
   result.add packageParallelFor(
                 parForName, bindSym"parallelForWrapper",
-                idx, body,
+                idx, body, env,
                 captured, capturedTy
               )
 
-  # Create the closure environment
-  # --------------------------------------------------------
-  var fnCall = newCall(parForName)
-  let data = ident("data") # typed pointer to data
-
-  if captured.len == 1:
-    # With only 1 arg, the tuple syntax doesn't construct a tuple
-    # let data = (123) is an int
-    fnCall.add nnkDerefExpr.newTree(data)
-  else: # This handles the 0 argument case as well
-    for i in 0 ..< captured.len:
-      fnCall.add nnkBracketExpr.newTree(
-        data, newLit i
-      )
-
   # Create the async function (that calls the proc that packages the loop body)
   # --------------------------------------------------------
-  let async_fn = ident("weaveParallelFor")
-  let withArgs = captured.len > 0
+  let parForTask = ident("weaveTask_ParallelFor_")
+  var fnCall = newCall(parForName)
+  if withArgs:
+    fnCall.add(env)
 
   result.add quote do:
-    proc `async_fn`(param: pointer) {.nimcall, gcsafe.} =
+    proc `parForTask`(param: pointer) {.nimcall, gcsafe.} =
       let this = myTask()
       assert not isRootTask(this)
 
       when bool(`withArgs`):
-        let `data` = cast[ptr `CapturedTy`](param)
+        let `env` = cast[ptr `CapturedTy`](param)
       `fnCall`
 
   # Create the task
   # --------------------------------------------------------
   result.addLoopTask(
-    async_fn, start, stop, stride, captured, CapturedTy
+    parForTask, start, stop, stride, captured, CapturedTy
   )
 
 macro parallelFor*(loopParams: untyped, body: untyped): untyped =
@@ -143,9 +133,10 @@ when isMainModule:
 
       var a = 100
       var b = 10
-      parallelFor i in 0 ..< 10:
-        captures: {a, b}
-        log("a+b+i = %d (thread %d)\n", a+i, myID())
+      expandMacros:
+        parallelFor i in 0 ..< 10:
+          captures: {a, b}
+          log("a+b+i = %d (thread %d)\n", a+b+i, myID())
 
       exit(Weave)
 

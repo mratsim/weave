@@ -143,7 +143,7 @@ proc addSanityChecks*(statement, capturedTypes, capturedTypesSym: NimNode) =
 
 proc packageParallelFor*(
         procIdent, wrapperTemplate: NimNode,
-        idx, body: NimNode,
+        idx, body, env: NimNode,
         capturedVars, capturedTypes: NimNode,
         returnVal = newEmptyNode() # For-loops can return a result in the case of parallel reductions
      ): NimNode =
@@ -154,18 +154,35 @@ proc packageParallelFor*(
   # - The captured variables and their types
   # - The return value of the for loop for reductions
   #   or an EmptyNode
-  var params = @[returnVal]
-  for i in 0 ..< capturedVars.len:
-    params.add newIdentDefs(
-                 capturedVars[i],
-                 capturedTypes[i]
-               )
-
   let pragmas = nnkPragma.newTree(
                   ident"nimcall",
-                  ident"gcsafe"
+                  ident"gcsafe",
+                  ident"inline"
                 )
-  let procBody = newCall(
+
+  var params = @[returnVal]
+  var procBody = newStmtList()
+
+  if capturedVars.len > 0:
+    params.add newIdentDefs(
+      env, nnkPtrTy.newTree(capturedTypes)
+    )
+
+    let derefEnv = nnkBracketExpr.newTree(env)
+    if capturedVars.len > 1:
+      # Unpack the variables captured from the environment
+      # let (a, b, c) = env[]
+      var unpacker = nnkVarTuple.newTree()
+      capturedVars.copyChildrenTo(unpacker)
+      unpacker.add newEmptyNode()
+      unpacker.add derefEnv
+
+      procBody.add nnkLetSection.newTree(unpacker)
+    else:
+      procBody.add newLetStmt(capturedVars[0], derefEnv)
+
+
+  procBody.add newCall(
     wrapperTemplate,
     idx, body
   )
