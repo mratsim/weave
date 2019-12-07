@@ -85,7 +85,7 @@ proc globalCleanup() =
   metrics:
     log("+========================================+\n")
 
-proc sync*(_: type Weave) =
+proc sync*(_: type Weave) {.gcsafe.} =
   ## Global barrier for the Picasso runtime
   ## This is only valid in the root task
   Worker: return
@@ -102,7 +102,7 @@ proc sync*(_: type Weave) =
       while (let task = nextTask(childTask = false); not task.isNil):
         # TODO: duplicate schedulingLoop
         profile(run_task):
-          run(task)
+          runTask(task)
         profile(enq_deq_task):
           # The memory is reused but not zero-ed
           localCtx.taskCache.add(task)
@@ -153,7 +153,7 @@ proc sync*(_: type Weave) =
       # 5. Work on what is left
       debug: log("Worker %2d: globalsync 5 - working on leftover\n", myID())
       profile(run_task):
-        run(task)
+        runTask(task)
       profile(enq_deq_task):
         # The memory is reused but not zero-ed
         localCtx.taskCache.add(task)

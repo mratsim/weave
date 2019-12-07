@@ -30,7 +30,7 @@ type
     ## for intrusive containers
     # We save memory by using int32 instead of int on select properties
     # order field by size to optimize zero initialization (bottleneck on recursive algorithm)
-    fn*: proc (param: pointer) {.nimcall.}
+    fn*: proc (param: pointer) {.nimcall, gcsafe.}
     parent*: Task
     prev*: Task
     next*: Task

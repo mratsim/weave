@@ -25,7 +25,7 @@ proc detectTermination*() {.inline.} =
 
   localCtx.runtimeIsQuiescent = true
 
-proc asyncSignal(fn: proc (_: pointer) {.nimcall.}, chan: var ChannelSpscSinglePtr[Task]) =
+proc asyncSignal(fn: proc (_: pointer) {.nimcall, gcsafe.}, chan: var ChannelSpscSinglePtr[Task]) =
   ## Send an asynchronous signal `fn` to channel `chan`
 
   # Package the signal in a dummy task
@@ -39,7 +39,7 @@ proc asyncSignal(fn: proc (_: pointer) {.nimcall.}, chan: var ChannelSpscSingleP
     debugTermination: log("Worker %2d: sending asyncSignal\n", myID())
     postCondition: signalSent
 
-proc signalTerminate*(_: pointer) =
+proc signalTerminate*(_: pointer) {.gcsafe.} =
   preCondition: not localCtx.signaledTerminate
 
   # 1. Terminating means everyone ran out of tasks
