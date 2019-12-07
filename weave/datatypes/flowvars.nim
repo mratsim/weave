@@ -41,6 +41,10 @@ type
     else:
       chan: ptr ChannelSpscSingleObject[T]
 
+  FlowvarList*[T] = ptr object
+    next*: FlowvarList[T]
+    fv*: Flowvar[T]
+
 func isSpawned*(fv: Flowvar): bool {.inline.}=
   ## Returns true if a future is spawned
   ## This may be useful for recursive algorithms that
@@ -97,5 +101,30 @@ LazyFV:
       ascertain: not fv.lfv.lazy.chan.isNil
       recycle(myID(), fv.lfv.lazy.chan)
 
+  import sync_types
+
+  proc convertLazyFlowvar*(task: Task) {.inline.}=
+    # Allocate the Lazy future on the heap to extend its lifetime
+    var lfv: LazyFlowvar
+    copyMem(lfv.addr, task.data.addr, sizeof(LazyFlowvar))
+    if not lfv.hasChannel:
+      lfv.hasChannel = true
+      # TODO, support bigger than pointer size
+      lfv.lazy.chan = newChannelLazyFlowvar(myMemPool(), itemsize = sizeof(LazyChannel))
+      incCounter(futuresConverted)
+
+  proc batchConvertLazyFlowvar*(task: Task) =
+    var task = task
+    while not task.isNil:
+      if task.hasFuture:
+        convertLazyFlowvar(task)
+      task = task.next
+
 # TODO destructors for automatic management
 #      of the user-visible flowvars
+
+# Public
+# -------------------------------------------
+
+proc sync*[T](fv: FlowVar[T]): T =
+  fv.forceComplete(result)

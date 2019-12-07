@@ -152,8 +152,8 @@ macro spawn*(funcCall: typed): untyped =
   result = nnkBlockStmt.newTree(newEmptyNode(), result)
   # echo result.toStrLit
 
-proc sync*[T](fv: FlowVar[T]): T =
-  fv.forceComplete(result)
+# Sanity checks
+# --------------------------------------------------------
 
 when isMainModule:
   block: # Async without result

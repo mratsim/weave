@@ -217,24 +217,6 @@ proc send(req: sink StealRequest, task: sink Task, numStolen: int32 = 1) {.inlin
   incCounter(stealHandled)
   incCounter(tasksSent, numStolen)
 
-LazyFV:
-  proc convertLazyFlowvar(task: Task) {.inline.} =
-    # Allocate the Lazy future on the heap to extend its lifetime
-    var lfv: LazyFlowvar
-    copyMem(lfv.addr, task.data.addr, sizeof(LazyFlowvar))
-    if not lfv.hasChannel:
-      lfv.hasChannel = true
-      # TODO, support bigger than pointer size
-      lfv.lazy.chan = newChannelLazyFlowvar(myMemPool(), itemsize = sizeof(LazyChannel))
-      incCounter(futuresConverted)
-
-  proc batchConvertLazyFlowvar(task: Task) =
-    var task = task
-    while not task.isNil:
-      if task.hasFuture:
-        convertLazyFlowvar(task)
-      task = task.next
-
 proc dispatchTasks*(req: sink StealRequest) {.gcsafe.}=
   ## Send tasks in return of a steal request
   ## or decline and relay the steal request to another thread
