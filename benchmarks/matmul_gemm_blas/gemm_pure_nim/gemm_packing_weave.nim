@@ -56,6 +56,8 @@ proc pack_A_mc_kc*[T; ukernel: static MicroKernel](
       for i in remainder ..< MR: # Pad with 0 if packing over the edge
         offBuf[k*MR + i] = 0.T
 
+  sync(Weave)
+
 # ############################################################
 #
 #                    Packing B
