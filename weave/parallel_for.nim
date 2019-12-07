@@ -42,9 +42,60 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
 
   result = newStmtList()
 
+  # Deal with Nim given us typed AST when we want untyped ...
+  # --------------------------------------------------------
+  var loopParams = loopParams
+  # Rebuild an untyped ast
+  if loopParams.kind != nnkInfix:
+    # Instead of
+    # ---------------
+    # Infix
+    #   Ident "in"
+    #   Ident "i"
+    #   Infix
+    #     Ident "..<"
+    #     IntLit 0
+    #     Ident "n"
+    #
+    # We received
+    # ---------------
+    # StmtList
+    #   Call
+    #     OpenSymChoice
+    #       Sym "contains"
+    #       Sym "contains"
+    #       Sym "contains"
+    #     Infix
+    #       OpenSymChoice
+    #         Sym "..<"
+    #         Sym "..<"
+    #         Sym "..<"
+    #         Sym "..<"
+    #         Sym "..<"
+    #         Sym "..<"
+    #       IntLit 0
+    #       Ident "n"
+    #     Ident "i"
+    loopParams[0].expectKind(nnkCall)
+    loopParams[0][0].expectKind(nnkOpenSymChoice)
+    assert loopParams[0][0][0].eqIdent"contains"
+    loopParams[0][1].expectKind(nnkInfix)
+    loopParams[0][1][0].expectKind(nnkOpenSymChoice)
+
+    # Rebuild loopParams
+    loopParams = nnkInfix.newTree(
+      ident"in",
+      loopParams[0][2],
+      nnkInfix.newTree(
+        ident($loopParams[0][1][0][0]),
+        loopParams[0][1][1],
+        loopParams[0][1][2]
+      )
+    )
+
   # Checks
   # --------------------------------------------------------
-  # looParams should have the form "i in 0..<10"
+  # loopParams should have the form "i in 0..<10"
   loopParams.expectKind(nnkInfix)
   assert loopParams[0].eqIdent"in"
   loopParams[1].expectKind(nnkIdent)
@@ -162,7 +213,7 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
   let withArgs = captured.len > 0
 
   result.add quote do:
-    proc `async_fn`(param: pointer) {.nimcall.} =
+    proc `async_fn`(param: pointer) {.nimcall, gcsafe.} =
       let this = myTask()
       assert not isRootTask(this)
 
@@ -186,11 +237,11 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
         cast[ptr `CapturedTy`](task.data.addr)[] = `captured`
       schedule(task)
 
-template parallelFor*(loopParams: untyped, body: untyped): untyped =
-  parallelForImpl(loopParams, stride = 1, body)
+macro parallelFor*(loopParams: untyped, body: untyped): untyped =
+  result = getAST(parallelForImpl(loopParams, 1, body))
 
-template parallelForStrided*(loopParams: untyped, stride: Positive, body: untyped): untyped =
-  parallelForImpl(loopParams, stride, body)
+macro parallelForStrided*(loopParams: untyped, stride: Positive, body: untyped): untyped =
+  result = getAST(parallelForImpl(loopParams, stride, body))
 
 when isMainModule:
   import ./instrumentation/loggers
