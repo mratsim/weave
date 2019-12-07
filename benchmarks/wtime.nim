@@ -1,6 +1,5 @@
 
-import strutils, ospaths
-from os import DirSep
+import strutils, os
 
 const cSourcesPath = currentSourcePath.rsplit(DirSep, 1)[0]
 const cHeader = csourcesPath / "wtime.h"

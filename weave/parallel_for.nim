@@ -1,10 +1,21 @@
+# Weave
+# Copyright (c) 2019 Mamy André-Ratsimbazafy
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at http://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+# Parallel for loops
+# ----------------------------------------------------------
+# Parallel reductions/folds are dispatch to the parallel_reduce file
+
 import
   # Standard library
-  macros, typetraits,
+  macros,
   # Internal
-  ./scheduler, ./runtime, ./contexts,
-  ./datatypes/sync_types,
-  ./instrumentation/[contracts, profilers]
+  ./parallel_macros,
+  ./contexts,
+  ./instrumentation/contracts
 
 when not compileOption("threads"):
   {.error: "This requires --threads:on compilation flag".}
@@ -42,151 +53,31 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
 
   result = newStmtList()
 
-  # Deal with Nim given us typed AST when we want untyped ...
+  # Loop parameters
   # --------------------------------------------------------
-  var loopParams = loopParams
-  # Rebuild an untyped ast
-  if loopParams.kind != nnkInfix:
-    # Instead of
-    # ---------------
-    # Infix
-    #   Ident "in"
-    #   Ident "i"
-    #   Infix
-    #     Ident "..<"
-    #     IntLit 0
-    #     Ident "n"
-    #
-    # We received
-    # ---------------
-    # StmtList
-    #   Call
-    #     OpenSymChoice
-    #       Sym "contains"
-    #       Sym "contains"
-    #       Sym "contains"
-    #     Infix
-    #       OpenSymChoice
-    #         Sym "..<"
-    #         Sym "..<"
-    #         Sym "..<"
-    #         Sym "..<"
-    #         Sym "..<"
-    #         Sym "..<"
-    #       IntLit 0
-    #       Ident "n"
-    #     Ident "i"
-    loopParams[0].expectKind(nnkCall)
-    loopParams[0][0].expectKind(nnkOpenSymChoice)
-    assert loopParams[0][0][0].eqIdent"contains"
-    loopParams[0][1].expectKind(nnkInfix)
-    loopParams[0][1][0].expectKind(nnkOpenSymChoice)
-
-    # Rebuild loopParams
-    loopParams = nnkInfix.newTree(
-      ident"in",
-      loopParams[0][2],
-      nnkInfix.newTree(
-        ident($loopParams[0][1][0][0]),
-        loopParams[0][1][1],
-        loopParams[0][1][2]
-      )
-    )
-
-  # Checks
-  # --------------------------------------------------------
-  # loopParams should have the form "i in 0..<10"
-  loopParams.expectKind(nnkInfix)
-  assert loopParams[0].eqIdent"in"
-  loopParams[1].expectKind(nnkIdent)
-  loopParams[2].expectKind(nnkInfix) # 0 ..< 10 / 0 .. 10, for now we don't support slice objects
-  assert loopParams[2][0].eqIdent".." or loopParams[2][0].eqIdent"..<"
-
-  # Extract loop parameters
-  # --------------------------------------------------------
-
-  let idx = loopParams[1]
-  let start = loopParams[2][1]
-  var stop = loopParams[2][2]
-  # We use exclusive bounds
-  if loopParams[2][0].eqIdent"..":
-    stop = newCall(ident"+", stop, newLit(1))
+  let (idx, start, stop) = extractLP(loopParams)
 
   # Extract captured variables
   # --------------------------------------------------------
-  body.expectKind(nnkStmtList)
-
-  # parallelFor i in 0 ..< 10:
-  #   captures: a
-  #   ...
-  #
-  # StmtList
-  #   Call
-  #     Ident "captures"
-  #     StmtList
-  #       Ident "a"
-  #   Rest of the body
-
-  var captured = nnkPar.newTree()
-  var capturedTy = nnkPar.newTree()
-
+  var captured, capturedTy: NimNode
   if body[0].kind == nnkCall and body[0][0].eqIdent"captures":
-    body[0][1].expectKind(nnkStmtList)
-    body[0][1][0].expectKind(nnkCurly)
-    for i in 0 ..< body[0][1][0].len:
-      captured.add body[0][1][0][i]
-      capturedTy.add newCall(ident"typeof", body[0][1][0][i])
-
-    # Remove the captures section
-    body[0] = nnkDiscardStmt.newTree(body[0].toStrLit)
+    (captured, capturedTy) = extractCaptures(body, 0)
 
   let CapturedTy = ident"CapturedTy"
   if capturedTy.len > 0:
     result.add quote do:
       type `CapturedTy` = `capturedTy`
 
+  result.addSanityChecks(capturedTy, CapturedTy)
+
   # Package the body in a proc
   # --------------------------------------------------------
-  var params = @[newEmptyNode()] # for loops have no return value
-  for i in 0 ..< captured.len:
-    params.add newIdentDefs(
-                 captured[i],
-                 capturedTy[i]
-               )
-
-  let pragmas = nnkPragma.newTree(
-                  ident"nimcall",
-                  ident"gcsafe"
-                )
-  var procBody = newStmtList()
-  procBody.add newCall(
-    bindSym"parallelForWrapper",
-    idx, body
-  )
-
   let parForName = ident"parallelForSection"
-  let parForSection = newProc(
-    name = parForName,
-    params = params,
-    body = procBody,
-    pragmas = pragmas
-  )
-
-  # Sanity checks
-  # --------------------------------------------------------
-  if captured.len > 0:
-    result.add quote do:
-      static:
-        doAssert supportsCopyMem(`CapturedTy`), "\n\n parallelFor" &
-          " has arguments managed by GC (ref/seq/strings),\n" &
-          "  they cannot be distributed across threads.\n" &
-          "  Argument types: " & $`capturedTy` & "\n\n"
-
-        doAssert sizeof(`CapturedTy`) <= TaskDataSize, "\n\n parallelFor" &
-          " has arguments that do not fit in the parallel tasks data buffer.\n" &
-          "  Argument types: " & `capturedTy`.name & "\n" &
-          "  Current size: " & $sizeof(`CapturedTy`) & "\n" &
-          "  Maximum size allowed: " & $TaskDataSize & "\n\n"
+  result.add packageParallelFor(
+                parForName, bindSym"parallelForWrapper",
+                idx, body,
+                captured, capturedTy
+              )
 
   # Create the closure environment
   # --------------------------------------------------------
@@ -202,10 +93,6 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
       fnCall.add nnkBracketExpr.newTree(
         data, newLit i
       )
-
-  # Declare the proc that packages the loop body
-  # --------------------------------------------------------
-  result.add parForSection
 
   # Create the async function (that calls the proc that packages the loop body)
   # --------------------------------------------------------
@@ -223,19 +110,9 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
 
   # Create the task
   # --------------------------------------------------------
-  result.add quote do:
-    profile(enq_deq_task):
-      let task = newTaskFromCache()
-      task.parent = myTask()
-      task.fn = `async_fn`
-      task.isLoop = true
-      task.start = `start`
-      task.cur = `start`
-      task.stop = `stop`
-      task.stride = `stride`
-      when bool(`withArgs`):
-        cast[ptr `CapturedTy`](task.data.addr)[] = `captured`
-      schedule(task)
+  result.addLoopTask(
+    async_fn, start, stop, stride, captured, CapturedTy
+  )
 
 macro parallelFor*(loopParams: untyped, body: untyped): untyped =
   result = getAST(parallelForImpl(loopParams, 1, body))
@@ -244,7 +121,7 @@ macro parallelForStrided*(loopParams: untyped, stride: Positive, body: untyped):
   result = getAST(parallelForImpl(loopParams, stride, body))
 
 when isMainModule:
-  import ./instrumentation/loggers
+  import ./instrumentation/loggers, ./runtime
 
   block:
     proc main() =
@@ -300,10 +177,11 @@ when isMainModule:
     proc main4() =
       init(Weave)
 
-      parallelForStrided i in 0 ..< 100, stride = 30:
-        parallelForStrided j in 0 ..< 200, stride = 60:
-          captures: {i}
-          log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
+      expandMacros:
+        parallelForStrided i in 0 ..< 100, stride = 30:
+          parallelForStrided j in 0 ..< 200, stride = 60:
+            captures: {i}
+            log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
 
       exit(Weave)
 
