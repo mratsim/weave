@@ -104,6 +104,7 @@ proc gebp_mkernel*[T; ukernel: static MicroKernel](
           alpha, upanel_a, upanel_b,                 #    αA[ic+ir:ic+ir+mr, pc:pc+kc] *
           beta, c_aux                                #     B[pc:pc+kc, jc+jr:jc+jr+nr] +
         )                                            #    βC[ic:ic+mc, jc:jc+nc]
+  sync(Weave)
 
 # ###########################################################################################
 #
@@ -162,8 +163,10 @@ proc gemm_impl[T; ukernel: static MicroKernel](
 
     # ####################################
     # 3. for ic = 0,...,m−1 in steps of mc
-    parallelFor icb in 0 ..< tiles.ic_num_tasks:
-      captures: {pc, tiles, nc, kc, alpha, beta, vA, vC, M}
+    # TODO: need a barrier for nested for loop?
+    # parallelFor icb in 0 ..< tiles.ic_num_tasks:
+    #   captures: {pc, tiles, nc, kc, alpha, beta, vA, vC, M}
+    for icb in 0 ..< tiles.ic_num_tasks:
 
       let packA = tiles.a + icb * tiles.upanelA_size
       prefetch(packA, Write, LowTemporalLocality)
