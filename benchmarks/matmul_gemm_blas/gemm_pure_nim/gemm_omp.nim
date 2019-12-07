@@ -217,6 +217,7 @@ proc gemm_strided*[T: SomeNumber](
           beta, vC,
           tiles
         )
+        deallocTiles(tiles)
         return
       if colStrideC == 1:
         const ukernel = cpu_features.x86_ukernel(T, true)

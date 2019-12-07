@@ -75,6 +75,8 @@ proc gebp_mkernel*[T; ukernel: static MicroKernel](
   # #####################################
   # 4. for jr = 0,...,nc−1 in steps of nr
   parallelForStrided jr in 0 ..< nc, stride = NR:
+    captures: {mc, nc, kc, alpha, packA, packB, beta, mcncC}
+
     let nr = min(nc - jr, NR)                        # C[ic:ic+mc, jc+jr:jc+jr+nr]
 
     # ###################################
@@ -161,6 +163,8 @@ proc gemm_impl[T; ukernel: static MicroKernel](
     # ####################################
     # 3. for ic = 0,...,m−1 in steps of mc
     parallelFor icb in 0 ..< tiles.ic_num_tasks:
+      captures: {pc, tiles, nc, kc, alpha, beta, vA, vC, M}
+
       let packA = tiles.a + icb * tiles.upanelA_size
       prefetch(packA, Write, LowTemporalLocality)
       let ic = icb * tiles.mc
@@ -192,59 +196,61 @@ proc gemm_strided*[T: SomeNumber](
       C: ptr T,
       rowStrideC, colStrideC: int) =
 
-    # TODO: shortcut alpha = 0 or K = 0
-    # TODO: elementwise epilogue fusion like relu/tanh/sigmoid
-    # TODO: shortcut for small gemm
+  # TODO: shortcut alpha = 0 or K = 0
+  # TODO: elementwise epilogue fusion like relu/tanh/sigmoid
+  # TODO: shortcut for small gemm
 
-    # Create a view to abstract deling with strides
-    # and passing those in each proc
-    let vA = A.toMatrixView(rowStrideA, colStrideA)
-    let vB = B.toMatrixView(rowStrideB, colStrideB)
-    let vC = C.toMatrixView(rowStrideC, colStrideC)
+  # Create a view to abstract deling with strides
+  # and passing those in each proc
+  let vA = A.toMatrixView(rowStrideA, colStrideA)
+  let vB = B.toMatrixView(rowStrideB, colStrideB)
+  let vC = C.toMatrixView(rowStrideC, colStrideC)
 
-    # Cache hierarchy:
-    #   - block C: mr*nr registers
-    #   - block B: kc*nr L1 cache
-    #   - block A: mc*kc L2 cache
-    #   - panel B: kc*nc L3 cache
+  # Cache hierarchy:
+  #   - block C: mr*nr registers
+  #   - block B: kc*nr L1 cache
+  #   - block A: mc*kc L2 cache
+  #   - panel B: kc*nc L3 cache
 
-    template dispatch(cpu_features: static CPUFeatureX86): untyped{.dirty.} =
-      template apply(ukernel: MicroKernel): untyped {.dirty.} =
-        let tiles = ukernel.newTiles(T, M, N, K)
-        gemm_impl[T, ukernel](
-          M, N, K,
-          alpha, vA, vB,
-          beta, vC,
-          tiles
-        )
-        return
-      if colStrideC == 1:
-        const ukernel = cpu_features.x86_ukernel(T, true)
-        apply(ukernel)
-      else:
-        const ukernel = cpu_features.x86_ukernel(T, false)
-        apply(ukernel)
+  template dispatch(cpu_features: static CPUFeatureX86): untyped{.dirty.} =
+    template apply(ukernel: MicroKernel): untyped {.dirty.} =
+      let tiles = ukernel.newTiles(T, M, N, K)
+      gemm_impl[T, ukernel](
+        M, N, K,
+        alpha, vA, vB,
+        beta, vC,
+        tiles
+      )
+      deallocTiles(tiles)
+      return
+    if colStrideC == 1:
+      const ukernel = cpu_features.x86_ukernel(T, true)
+      apply(ukernel)
+    else:
+      const ukernel = cpu_features.x86_ukernel(T, false)
+      apply(ukernel)
 
-    when defined(i386) or defined(amd64):
-      when T is float32:
-        if hasAvx512f():   dispatch(x86_AVX512)
-        elif hasFma3():   dispatch(x86_AVX_FMA)
-        elif hasAvx():  dispatch(x86_AVX)
-        elif hasSse():    dispatch(x86_SSE)
-      elif T is float64:
-        if hasAvx512f():   dispatch(x86_AVX512)
-        elif hasFma3():   dispatch(x86_AVX_FMA)
-        elif hasAvx():  dispatch(x86_AVX)
-        elif hasSse2():    dispatch(x86_SSE2)
-      elif T is int32 or T is uint32:
-        if hasAvx512f():   dispatch(x86_AVX512)
-        elif hasAvx2():   dispatch(x86_AVX2)
-        elif hasSse41():   dispatch(x86_SSE4_1)
-        elif hasSse2():   dispatch(x86_SSE2)
-      elif T is int64:
-        if hasAvx512f():   dispatch(x86_AVX512)
-        elif hasSse2():   dispatch(x86_SSE2)
-    dispatch(x86_Generic)
+  when defined(i386) or defined(amd64):
+    when T is float32:
+      if hasAvx512f():   dispatch(x86_AVX512)
+      elif hasFma3():   dispatch(x86_AVX_FMA)
+      elif hasAvx():  dispatch(x86_AVX)
+      elif hasSse():    dispatch(x86_SSE)
+    elif T is float64:
+      if hasAvx512f():   dispatch(x86_AVX512)
+      elif hasFma3():   dispatch(x86_AVX_FMA)
+      elif hasAvx():  dispatch(x86_AVX)
+      elif hasSse2():    dispatch(x86_SSE2)
+    elif T is int32 or T is uint32:
+      if hasAvx512f():   dispatch(x86_AVX512)
+      elif hasAvx2():   dispatch(x86_AVX2)
+      elif hasSse41():   dispatch(x86_SSE4_1)
+      elif hasSse2():   dispatch(x86_SSE2)
+    elif T is int64:
+      if hasAvx512f():   dispatch(x86_AVX512)
+      elif hasSse2():   dispatch(x86_SSE2)
+  dispatch(x86_Generic)
+  sync(Weave)
 
 # ############################################################
 #
@@ -254,6 +260,7 @@ proc gemm_strided*[T: SomeNumber](
 
 when isMainModule:
   # Tests
+  init(Weave)
   block:
     let a = [[1.0, 2, 3],
              [1.0, 1, 1],
@@ -505,3 +512,5 @@ when isMainModule:
 
     doAssert res_ab == ab, $res_ab
     echo "SUCCESS\n"
+
+  exit(Weave)
