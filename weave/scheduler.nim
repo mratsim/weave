@@ -179,7 +179,7 @@ proc schedulingLoop() =
       # Prio is: children, then thieves then us
       ascertain: not task.fn.isNil
       profile(run_task):
-        run(task)
+        runTask(task)
       profile(enq_deq_task):
         # The memory is reused but not zero-ed
         localCtx.taskCache.add(task)
@@ -217,7 +217,7 @@ proc schedulingLoop() =
     # 5. Work on what is left
     debug: log("Worker %2d: schedloop 5 - working on leftover\n", myID())
     profile(run_task):
-      run(task)
+      runTask(task)
     profile(enq_deq_task):
       # The memory is reused but not zero-ed
       localCtx.taskCache.add(task)
@@ -284,7 +284,7 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
     debug: log("Worker %2d: forcefut 1 - task from local deque\n", myID())
     while (let task = nextTask(childTask = true); not task.isNil):
       profile(run_task):
-        run(task)
+        runTask(task)
       profile(enq_deq_task):
         localCtx.taskCache.add(task)
       if isFutReady():
@@ -334,7 +334,7 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
 
       # Run the rest
       profile(run_task):
-        run(task)
+        runTask(task)
       profile(enq_deq_task):
         # The memory is reused but not zero-ed
         localCtx.taskCache.add(task)
