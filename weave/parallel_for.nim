@@ -180,11 +180,11 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
         doAssert supportsCopyMem(`CapturedTy`), "\n\n parallelFor" &
           " has arguments managed by GC (ref/seq/strings),\n" &
           "  they cannot be distributed across threads.\n" &
-          "  Argument types: " & $`CapturedTy` & "\n\n"
+          "  Argument types: " & $`capturedTy` & "\n\n"
 
         doAssert sizeof(`CapturedTy`) <= TaskDataSize, "\n\n parallelFor" &
           " has arguments that do not fit in the parallel tasks data buffer.\n" &
-          "  Argument types: " & `CapturedTy`.name & "\n" &
+          "  Argument types: " & `capturedTy`.name & "\n" &
           "  Current size: " & $sizeof(`CapturedTy`) & "\n" &
           "  Maximum size allowed: " & $TaskDataSize & "\n\n"
 

@@ -248,26 +248,34 @@ macro extract_pt*(ukernel: static MicroKernel): untyped =
 
 # multithreading info in [2] and https://github.com/flame/blis/blob/master/docs/Multithreading.md
 
-type Tiles*[T] = ref object
-  a*: ptr UncheckedArray[T]
-  b*: ptr UncheckedArray[T]
-  mc*, nc*, kc*: int
 
-  # Multithreaded panels
-  ic_num_tasks*: int   # For private L1-L2 and shared L3
-  upanelA_size*: int   # Each thread uses a different upanel of A
+type
+  Tiles*[T] = ptr TilesObj[T]
+  TilesObj[T] = object
+    a*: ptr UncheckedArray[T]
+    b*: ptr UncheckedArray[T]
+    mc*, nc*, kc*: int
 
-  # Allocation data
-  a_alloc_mem: pointer
-  b_alloc_mem: pointer
-  # The Tiles data structure takes 64-byte = 1 cache-line
+    # Multithreaded panels
+    ic_num_tasks*: int   # For private L1-L2 and shared L3
+    upanelA_size*: int   # Each thread uses a different upanel of A
+
+    # Allocation data
+    a_alloc_mem: pointer
+    b_alloc_mem: pointer
+    # The Tiles data structure takes 64-byte = 1 cache-line
 
 
-proc deallocTiles[T](tiles: Tiles[T]) =
+proc deallocTiles*[T](tiles: Tiles[T]) =
+  if tiles.isNil:
+    return
+
   if not tiles.a_alloc_mem.isNil:
     deallocShared tiles.a_alloc_mem
   if not tiles.b_alloc_mem.isNil:
     deallocShared tiles.b_alloc_mem
+
+  freeShared(tiles)
 
 func get_num_tiles*(dim_size, tile_size: int): int {.inline.} =
   ## Get the number of tiles along a dimension depending on the tile size
@@ -318,7 +326,8 @@ proc newTiles*(
   #   - kc * nr in L1 cache µkernel
   #   - mc * kc in L2 cache Ã
   #   - kc * nc in L3 cache ~B (no L3 in Xeon Phi ¯\_(ツ)_/¯)
-  new result, deallocTiles[T]
+  result = createSharedU(TilesObj[T])
+
   const
     nr = ukernel.nr
     mr = ukernel.mr

@@ -17,7 +17,7 @@ import
 # ----------------------------------------------------------------------------------
 
 const
-  TaskDataSize* = 192 - 96
+  TaskDataSize* = 128 # Up to 256 for the whole thing
 
 type
   # Task
