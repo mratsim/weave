@@ -110,6 +110,9 @@ macro parallelFor*(loopParams: untyped, body: untyped): untyped =
 macro parallelForStrided*(loopParams: untyped, stride: Positive, body: untyped): untyped =
   result = getAST(parallelForImpl(loopParams, stride, body))
 
+# Sanity checks
+# --------------------------------------------------------
+
 when isMainModule:
   import ./instrumentation/loggers, ./runtime
 

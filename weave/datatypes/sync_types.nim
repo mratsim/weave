@@ -40,10 +40,10 @@ type
     stop*: int
     stride*: int
     # 64 bytes
-    futures*: pointer # List of futures required by the current task
+    futures*: pointer # LinkedList of futures required by the current task
     batch*: int32 # TODO remove
     isLoop*: bool
-    hasFuture*: bool
+    hasFuture*: bool  # If a task is associated with a future, the future is stored at data[0]
     # 78 bytes
     # User data - including the FlowVar channel to send back result.
     data*: array[TaskDataSize, byte]
