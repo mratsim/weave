@@ -143,7 +143,8 @@ proc addSanityChecks*(statement, capturedTypes, capturedTypesSym: NimNode) =
 
 proc packageParallelFor*(
         procIdent, wrapperTemplate: NimNode,
-        idx, body, env: NimNode,
+        prologue, loopBody, epilogue, returnStmt: NimNode,
+        idx, env: NimNode,
         capturedVars, capturedTypes: NimNode,
         returnVal = newEmptyNode() # For-loops can return a result in the case of parallel reductions
      ): NimNode =
@@ -184,7 +185,8 @@ proc packageParallelFor*(
 
   procBody.add newCall(
     wrapperTemplate,
-    idx, body
+    idx,
+    prologue, loopBody, epilogue, returnStmt
   )
 
   result = newProc(
