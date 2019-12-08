@@ -142,15 +142,25 @@ proc newFlowvarNode*(itemSize: uint8): FlowvarNode =
   # Can we do better?
   preCondition: itemSize <= WV_MemBlockSize - sizeof(deref(FlowvarNode))
   result = myMemPool().borrow(deref(FlowvarNode))
-  LazyFV:
+  LazyFV: # 3 alloc total
+    result.lfv = myMemPool().borrow(LazyFlowVar)
     result.lfv.lazy.chan = myMemPool().borrow(ChannelSPSCSingle)
     result.lfv.lazy.chan[].initialize(itemSize)
     result.lfv.hasChannel = true
     result.lfv.isReady = false
     incCounter(futuresConverted)
-  EagerFV:
+  EagerFV: # 2 alloc total
     result.chan = myMemPool().borrow(ChannelSPSCSingle)
     result.chan[].initialize(itemSize)
+
+proc recycleFV*(fvNode: sink FlowvarNode) {.inline.} =
+  ## Deletes a flowvar node
+  ## This assumes that the channel was already recycled
+  ## by a "sync"/"forceComplete"
+  LazyFV:
+    recycle(myID(), fvNode.lfv)
+  recycle(myID(), fvNode)
+
 
 # TODO destructors for automatic management
 #      of the user-visible flowvars

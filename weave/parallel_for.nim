@@ -20,21 +20,27 @@ import
 when not compileOption("threads"):
   {.error: "This requires --threads:on compilation flag".}
 
-template parallelForWrapper(idx: untyped{ident}, body: untyped): untyped =
+template parallelForWrapper(
+    idx: untyped{ident},
+    prologue, loopBody, epilogue, returnStmt: untyped): untyped =
   ## To be called within a loop task
   ## Gets the loop bounds and iterate the over them
   ## Also poll steal requests in-between iterations
-  let this = myTask()
-  ascertain: this.isLoop
-  ascertain: this.start == this.cur
+  ##
+  ## Loop prologue, epilogue and returnStmt are unused
 
-  var idx {.inject.} = this.start
-  inc this.cur
-  while idx < this.stop:
-    body
-    idx += this.stride
+  block:
+    let this = myTask()
+    ascertain: this.isLoop
+    ascertain: this.start == this.cur
+
+    var idx {.inject.} = this.start
     this.cur += this.stride
-    loadBalance(Weave)
+    while idx < this.stop:
+      loopBody
+      idx += this.stride
+      this.cur += this.stride
+      loadBalance(Weave)
 
 macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped =
   ## Parallel for loop
@@ -78,7 +84,9 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
   let env = ident("weaveParForClosureEnv_") # typed pointer to data
   result.add packageParallelFor(
                 parForName, bindSym"parallelForWrapper",
-                idx, body, env,
+                # prologue, loopBody, epilogue, return value
+                nil, body, nil, nil,
+                idx, env,
                 captured, capturedTy
               )
 

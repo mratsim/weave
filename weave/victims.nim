@@ -275,10 +275,6 @@ proc splitAndSend*(task: Task, req: sink StealRequest) =
 
     if dup.hasFuture:
       # The task has a future so it depends on both splitted tasks.
-      #
-      # Problem: we lost the type information so we don't
-      # know the size. The type erased channel supports up to WV_MemBlockSize - 11 bytes
-      # This also prevents us from using the typed SPSC channels
       let fvNode = newFlowvarNode(dup.futureSize)
       # Redirect the result channel of the dup
       LazyFv:

@@ -20,6 +20,42 @@ import
 when not compileOption("threads"):
   {.error: "This requires --threads:on compilation flag".}
 
+template parallelReduceWrapper(idx: untyped{ident}, prologue, fold, merge, returnStmt: untyped): untyped =
+  ## To be called within a loop task
+  ## Gets the loop bounds and iterate the over them
+  ## Also poll steal requests in-between iterations
+
+  prologue
+
+  block: # Loop body
+    let this = myTask()
+    ascertain: this.isLoop
+    ascertain: this.start == this.cur
+
+    var idx {.inject.} = this.start
+    this.cur += this.stride
+    while idx < this.stop:
+      fold
+
+      idx += this.stride
+      this.cur += this.stride
+      loadBalance(Weave)
+
+  block: # Merging with flowvars from remote threads
+    let this = myTask()
+    while not this.futures.isNil:
+      let fvNode = cast[FlowvarNode](this.futures)
+      this.futures = cast[pointer](fvNode.next)
+
+      merge
+
+      # The "sync" in the merge statement should have recycled the flowvar channel already
+      # For LazyFlowVar, the LazyFlowvar itself was allocated on the heap, so we need to recycle it as well
+      # 2 deallocs for eager FV and 3 for Lazy FV
+      fvNode.recycleFV()
+
+  returnStmt
+
 macro parallelReduceImpl(loopParams: untyped, stride: int, body: untyped): untyped =
   ## Parallel for loop
   ## Syntax:
@@ -37,14 +73,34 @@ macro parallelReduceImpl(loopParams: untyped, stride: int, body: untyped): untyp
   ##         ## Merge our local reduction with reduction from remote threads
   ##         ## And return
   ##         localSum += sync(remoteSum)
-  ##         return localSum
+  ##       return localSum
   ##
   ##   # Await our result
   ##   let sum = sync(waitableSum)
   ##
+  ## The first element from the iterator (i) in the example is not available in the prologue.
+  ## Depending on multithreaded scheduling it may start at 0 or halfway or close to completion.
+  ## The accumulator set in the prologue should be set at the neutral element for your fold operation:
+  ## - 0 for addition, 1 for multiplication, +Inf for min, -Inf for max, ...
+  ##
+  ## In the fold section the iterator i is available, the number of iterations can be cut short
+  ## if scheduling the rest on other cores would be faster overall.
+  ## - This requires your operation to be associative, i.e. (a+b)+c = a+(b+c).
+  ## - It does not require your operation to be commutative (a+b = b+a is not needed).
+  ## - In particular floating-point addition is NOT associative due to rounding errors.
+  ##   and result may differ between runs.
+  ##   For inputs usually in [-1,1]
+  ##   the floating point addition error is within 1e-8 (float32) or 1e-15 (float64).
+  ##   For inputs beyond 1e^9 please evaluate the acceptable precision.
+  ##   Note: that the main benefits of "-ffast-math" is considering floating-point addition
+  ##         associative
+  ##
+  ## In the merge section, an identifier for a partial reduction from a remote core must be passed.
+  ## Its type will be a waitable Flowvar of the same type as your local partial reduction
+  ## The local partial reduction must be returned.
+  ##
   ## Variables from the external scope needs to be explicitly captured.
   ## For example, to compute the variance of a seq in parallel
-  ##
   ##
   ##    var s = newSeqWith(1000, rand(100.0))
   ##    let mean = mean(s)
@@ -61,10 +117,28 @@ macro parallelReduceImpl(loopParams: untyped, stride: int, body: untyped): untyp
   ##          localVariance += (ps[i] - mean)^2
   ##        merge(remoteVariance):
   ##          localVariance += sync(remoteVariance)
-  ##          return localVariance
+  ##        return localVariance
   ##
   ##    # Await our result
   ##    let variance = sync(waitableVariance)
+  ##
+  ## Performance note:
+  ##   For trivial floating points operations like addition/sum reduction:
+  ##   before parallelizing reductions on multiple cores
+  ##   you might try to parallelize it on a single core by
+  ##   creating multiple accumulators (between 2 and 4)
+  ##   and unrolling the accumulation loop by that amount.
+  ##
+  ##   The compiler is unable to do that (without -ffast-math)
+  ##   as floating point addition is NOT associative and changing
+  ##   order will change the result due to floating point rounding errors.
+  ##
+  ##   The performance improvement is dramatic (2x-3x) as at a low-level
+  ##   there is no data dependency between each accumulators and
+  ##   the CPU can now use instruction-level parallelism instead
+  ##   of suffer from data dependency latency (3 or 4 cycles)
+  ##   https://software.intel.com/sites/landingpage/IntrinsicsGuide/#techs=SSE&expand=158
+  ##   The reduction becomes memory-bound instead of CPU-latency-bound.
 
   result = newStmtList()
 
