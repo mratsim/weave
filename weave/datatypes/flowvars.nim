@@ -6,14 +6,14 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../channels/[channels_spsc_single_ptr, channels_spsc_single_object, channels_lazy_flowvars],
+  ../channels/[channels_spsc_single_ptr, channels_spsc_single_object, channels_spsc_single_type_erased],
   ../memory/[allocs, memory_pools],
   ../instrumentation/contracts,
   ../config, ../contexts
 
 type
   LazyChannel* {.union.} = object
-    chan*: ptr ChannelLazyFlowvar
+    chan*: ptr ChannelSPSCSingleTypeErased
     buf*: array[sizeof(pointer), byte] # for now only support pointers
 
   LazyFlowVar* = object
@@ -41,9 +41,16 @@ type
     else:
       chan: ptr ChannelSpscSingleObject[T]
 
-  FlowvarList*[T] = ptr object
-    next*: FlowvarList[T]
-    fv*: Flowvar[T]
+  FlowvarNode* = ptr object
+    # Intrusive LinkedList of flowvars
+    # Must be type erased as there is no type
+    # information within the runtime
+
+    # `next` should come before as both channel ends
+    # in an UncheckedArray of unknown size.
+
+    next*: FlowvarNode
+    chan*: ChannelSPSCSingleTypeErased
 
 func isSpawned*(fv: Flowvar): bool {.inline.}=
   ## Returns true if a future is spawned
@@ -110,7 +117,7 @@ LazyFV:
     if not lfv.hasChannel:
       lfv.hasChannel = true
       # TODO, support bigger than pointer size
-      lfv.lazy.chan = newChannelLazyFlowvar(myMemPool(), itemsize = sizeof(LazyChannel))
+      lfv.lazy.chan = newChannelSPSCSingleTypeErased(myMemPool(), itemsize = sizeof(LazyChannel))
       incCounter(futuresConverted)
 
   proc batchConvertLazyFlowvar*(task: Task) =
