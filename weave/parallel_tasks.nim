@@ -140,6 +140,7 @@ macro spawn*(funcCall: typed): untyped =
         task.parent = myTask()
         task.fn = `async_fn`
         task.has_future = true
+        task.futureSize = uint8(sizeof(`retType`))
         let `fut` = newFlowvar(myMemPool(), `freshIdent`)
         cast[ptr `futArgsTy`](task.data.addr)[] = `futArgs`
         schedule(task)

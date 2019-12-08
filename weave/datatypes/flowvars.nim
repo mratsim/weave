@@ -6,14 +6,14 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../channels/[channels_spsc_single_ptr, channels_spsc_single_object, channels_spsc_single_type_erased],
+  ../channels/channels_spsc_single,
   ../memory/[allocs, memory_pools],
   ../instrumentation/contracts,
   ../config, ../contexts
 
 type
   LazyChannel* {.union.} = object
-    chan*: ptr ChannelSPSCSingleTypeErased
+    chan*: ptr ChannelSPSCSingle
     buf*: array[sizeof(pointer), byte] # for now only support pointers
 
   LazyFlowVar* = object
@@ -35,22 +35,22 @@ type
     # A lazy flowvar has optimization to allocate on the heap only when required
 
     when defined(WV_LazyFlowvar):
-      lfv: ptr LazyFlowVar # alloca allocated
-    elif T is ptr:
-      chan: ptr ChannelSpscSinglePtr[T]
+      lfv: ptr LazyFlowVar # usually alloca allocated
     else:
-      chan: ptr ChannelSpscSingleObject[T]
+      chan: ptr ChannelSPSCSingle
 
   FlowvarNode* = ptr object
-    # Intrusive LinkedList of flowvars
+    # LinkedList of flowvars
     # Must be type erased as there is no type
     # information within the runtime
 
-    # `next` should come before as both channel ends
-    # in an UncheckedArray of unknown size.
+    # TODO: Can we avoid the 3 allocations for lazy flowvars?
 
     next*: FlowvarNode
-    chan*: ChannelSPSCSingleTypeErased
+    when defined(WV_LazyFlowvar):
+      lfv*: ptr LazyFlowVar
+    else:
+      chan*: ptr ChannelSPSCSingle
 
 func isSpawned*(fv: Flowvar): bool {.inline.}=
   ## Returns true if a future is spawned
@@ -65,7 +65,7 @@ func isSpawned*(fv: Flowvar): bool {.inline.}=
 EagerFV:
   proc newFlowVar*(pool: var TLPoolAllocator, T: typedesc): Flowvar[T] {.inline.} =
     result.chan = pool.borrow(typeof result.chan[])
-    result.chan[].initialize()
+    result.chan[].initialize(sizeof(T))
 
   proc readyWith*[T](fv: Flowvar[T], childResult: T) {.inline.} =
     ## Send the Flowvar result from the child thread processing the task
@@ -111,13 +111,16 @@ LazyFV:
   import sync_types
 
   proc convertLazyFlowvar*(task: Task) {.inline.}=
-    # Allocate the Lazy future on the heap to extend its lifetime
+    # Allocate the lazy flowvar channel on the heap to extend its lifetime
+    # Its lifetime exceed the lifetime of the task
+    # hence why the lazy flowvar itself is on the stack
     var lfv: LazyFlowvar
     copyMem(lfv.addr, task.data.addr, sizeof(LazyFlowvar))
     if not lfv.hasChannel:
       lfv.hasChannel = true
       # TODO, support bigger than pointer size
-      lfv.lazy.chan = newChannelSPSCSingleTypeErased(myMemPool(), itemsize = sizeof(LazyChannel))
+      lfv.lazy.chan = myMemPool().borrow(ChannelSPSCSingle)
+      lfv.lazy.chan[].initialize(itemsize = task.futureSize)
       incCounter(futuresConverted)
 
   proc batchConvertLazyFlowvar*(task: Task) =
@@ -126,6 +129,22 @@ LazyFV:
       if task.hasFuture:
         convertLazyFlowvar(task)
       task = task.next
+
+proc newFlowvarNode*(itemSize: uint8): FlowvarNode =
+  ## Create a linked list of flowvars
+  # Lazy flowvars unfortunately are allocated on the heap
+  # Can we do better?
+  preCondition: itemSize <= WV_MemBlockSize - sizeof(deref(FlowvarNode))
+  result = mymemPool().borrow(deref(FlowvarNode))
+  LazyFV:
+    result.lfv.lazy.chan = myMemPool().borrow(ChannelSPSCSingle)
+    result.lfv.lazy.chan[].initialize(itemSize)
+    result.lfv.hasChannel = true
+    result.lfv.isReady = false
+    incCounter(futuresConverted)
+  EagerFV:
+    result.chan = myMemPool().borrow(ChannelSPSCSingle)
+    result.chan[].initialize(itemSize)
 
 # TODO destructors for automatic management
 #      of the user-visible flowvars

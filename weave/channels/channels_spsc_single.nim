@@ -12,50 +12,60 @@ import
   ../memory/memory_pools
 
 type
-  ChannelSPSCSingleTypeErased* = object
-    ## A type-erased SPSC channel for LazyFlowvar.
+  ChannelSPSCSingle* = object
+    ## A type-erased SPSC channel.
     ##
-    ## Motivation, when LazyFlowvar needs to be converted
-    ## from stack-allocated memory to heap to extended their lifetime
-    ## we have no type information at all as the whole runtime
-    ## and especially tasks does not retain it.
+    ## Wait-free bounded single-producer single-consumer channel
+    ## that can only buffer a single item
+    ## Properties:
+    ##   - wait-free
+    ##   - supports weak memory models
+    ##   - buffers a single item
+    ##   - Padded to avoid false sharing in collections
+    ##   - No extra indirection to access the item, the buffer is inline the channel
+    ##   - Linearizable
+    ##   - Default usable size is 254 bytes (WV_MemBlockSize - 2).
+    ##     If used in an intrusive manner, it's 126 bytes due to the default 128 bytes padding.
+    ##
+    ## The channel should be the last field of an object if used in an intrusive manner
+    ##
+    ## Motivations for type erasure
+    ## - when LazyFlowvar needs to be converted
+    ##   from stack-allocated memory to heap to extended their lifetime
+    ##   we have no type information at all as the whole runtime
+    ##   and especially tasks does not retain it.
+    ##
+    ## - When a task depends on a future that was generated from lazy loop-splitting
+    ##   we don't have type information either.
+    ##
+    ## - An extra benefit is probably easier embedding, or calling
+    ##   from C or JIT code.
     full{.align: WV_CacheLinePadding.}: Atomic[bool]
     itemSize*: uint8
     buffer*{.align: 8.}: UncheckedArray[byte]
 
 proc `=`(
-    dest: var ChannelSPSCSingleTypeErased,
-    source: ChannelSPSCSingleTypeErased
+    dest: var ChannelSPSCSingle,
+    source: ChannelSPSCSingle
   ) {.error: "A channel cannot be copied".}
 
-proc newChannelSPSCSingleTypeErased*(pool: var TLPoolAllocator, itemsize: SomeInteger): ptr ChannelSPSCSingleTypeErased {.inline.} =
-  preCondition: itemsize.int in 0 .. int high(uint8)
-  preCondition: itemSize.int +
-                sizeof(result.itemsize) +
-                sizeof(result.full) <= WV_MemBlockSize
-
-  result = pool.borrow(ChannelSPSCSingleTypeErased)
-  result.itemsize = uint8(itemsize)
-  result.full.store(false, moRelaxed)
-
-  # TODO Address Sanitizer / memory poisoning
-
-proc initialize*(chan: var ChannelSPSCSingleTypeErased, itemsize: uint8) {.inline.} =
-  ## If ChannelSPSCSingleTypeErased is used intrusive another data structure
+proc initialize*(chan: var ChannelSPSCSingle, itemsize: SomeInteger) {.inline.} =
+  ## If ChannelSPSCSingle is used intrusive another data structure
   ## be aware that it should be the last part due to ending by UncheckedArray
   ## Also due to 128 bytes padding, it automatically takes half
   ## of the default WV_MemBlockSize
+  preCondition: itemsize.int in 0 .. int high(uint8)
   preCondition: itemSize.int +
                 sizeof(chan.itemsize) +
                 sizeof(chan.full) < WV_MemBlockSize
 
-  chan.itemSize = itemsize
+  chan.itemSize = uint8 itemsize
   chan.full.store(false, moRelaxed)
 
-func isEmpty*(chan: var ChannelSPSCSingleTypeErased): bool {.inline.} =
+func isEmpty*(chan: var ChannelSPSCSingle): bool {.inline.} =
   not chan.full.load(moAcquire)
 
-func tryRecv*[T](chan: var ChannelSPSCSingleTypeErased, dst: var T): bool {.inline.} =
+func tryRecv*[T](chan: var ChannelSPSCSingle, dst: var T): bool {.inline.} =
   ## Try receiving the item buffered in the channel
   ## Returns true if successful (channel was not empty)
   ##
@@ -69,7 +79,7 @@ func tryRecv*[T](chan: var ChannelSPSCSingleTypeErased, dst: var T): bool {.inli
   chan.full.store(false, moRelease)
   return true
 
-func trySend*[T](chan: var ChannelSPSCSingleTypeErased, src: sink T): bool {.inline.} =
+func trySend*[T](chan: var ChannelSPSCSingle, src: sink T): bool {.inline.} =
   ## Try sending an item into the channel
   ## Reurns true if successful (channel was empty)
   ##
@@ -90,13 +100,13 @@ when isMainModule:
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}
 
-  template sendLoop[T](chan: var ChannelSPSCSingleTypeErased,
+  template sendLoop[T](chan: var ChannelSPSCSingle,
                        data: sink T,
                        body: untyped): untyped =
     while not chan.trySend(data):
       body
 
-  template recvLoop[T](chan: var ChannelSPSCSingleTypeErased,
+  template recvLoop[T](chan: var ChannelSPSCSingle,
                        data: var T,
                        body: untyped): untyped =
     while not chan.tryRecv(data):
@@ -105,7 +115,7 @@ when isMainModule:
   type
     ThreadArgs = object
       ID: WorkerKind
-      chan: ptr ChannelSPSCSingleTypeErased
+      chan: ptr ChannelSPSCSingle
 
     WorkerKind = enum
       Sender
@@ -153,7 +163,8 @@ when isMainModule:
     var pool: TLPoolAllocator
     pool.initialize(threadID = 0)
 
-    let chan = pool.newChannelSPSCSingleTypeErased(sizeof(int))
+    var chan = pool.borrow(ChannelSPSCSingle)
+    chan[].initialize(itemSize = sizeof(int))
 
     createThread(threads[0], thread_func, ThreadArgs(ID: Receiver, chan: chan))
     createThread(threads[1], thread_func, ThreadArgs(ID: Sender, chan: chan))
