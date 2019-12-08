@@ -34,6 +34,13 @@ type
     #
     # A lazy flowvar has optimization to allocate on the heap only when required
 
+    # TODO: we can probably default to LazyFlowvar for up to 32 bytes
+    #       and fallback to eager futures otherwise.
+    #       The only place that doesn't statically know if we have a Lazy or Eager flowvar
+    #       is the "convertLazyFlowvar" but it is called seldomly (whole point of lazyness).
+    #       but we now carry the type size in the task.
+    #       Also a side benefit is LazyFlowvar for FlowvarNode requires 3 allocations,
+    #       while eager requires 2.
     when defined(WV_LazyFlowvar):
       lfv: ptr LazyFlowVar # usually alloca allocated
     else:
@@ -92,7 +99,7 @@ LazyFV:
     if not fv.lfv.hasChannel:
       # TODO: buffer the size of T
       static: doAssert sizeof(childResult) <= sizeof(fv.lfv.lazy.buf)
-      copyMem(fv.lfv.lazy.buf.addr, childResult.unsafeAddr, sizeof(childResult))
+      cast[ptr T](fv.lfv.lazy.buf.addr)[] = childResult
       fv.lfv.isReady = true
     else:
       ascertain: not fv.lfv.lazy.chan.isNil
@@ -103,7 +110,7 @@ LazyFV:
     # Reclaim memory
     if not fv.lfv.hasChannel:
       ascertain: fv.lfv.isReady
-      copyMem(parentResult.addr, fv.lfv.lazy.buf.addr, sizeof(parentResult))
+      parentResult = cast[ptr T](fv.lfv.lazy.buf.addr)[]
     else:
       ascertain: not fv.lfv.lazy.chan.isNil
       recycle(myID(), fv.lfv.lazy.chan)
@@ -114,8 +121,7 @@ LazyFV:
     # Allocate the lazy flowvar channel on the heap to extend its lifetime
     # Its lifetime exceed the lifetime of the task
     # hence why the lazy flowvar itself is on the stack
-    var lfv: LazyFlowvar
-    copyMem(lfv.addr, task.data.addr, sizeof(LazyFlowvar))
+    var lfv = cast[ptr LazyFlowvar](task.data.addr)[]
     if not lfv.hasChannel:
       lfv.hasChannel = true
       # TODO, support bigger than pointer size
@@ -135,7 +141,7 @@ proc newFlowvarNode*(itemSize: uint8): FlowvarNode =
   # Lazy flowvars unfortunately are allocated on the heap
   # Can we do better?
   preCondition: itemSize <= WV_MemBlockSize - sizeof(deref(FlowvarNode))
-  result = mymemPool().borrow(deref(FlowvarNode))
+  result = myMemPool().borrow(deref(FlowvarNode))
   LazyFV:
     result.lfv.lazy.chan = myMemPool().borrow(ChannelSPSCSingle)
     result.lfv.lazy.chan[].initialize(itemSize)

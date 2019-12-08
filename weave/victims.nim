@@ -282,9 +282,9 @@ proc splitAndSend*(task: Task, req: sink StealRequest) =
       let fvNode = newFlowvarNode(dup.futureSize)
       # Redirect the result channel of the dup
       LazyFv:
-        copyMem(dup.data.addr, fvNode.lfv.lazy.chan.addr, sizeof(pointer))
+        cast[ptr ptr ChannelSPSCSingle](dup.data.addr)[] = fvNode.lfv.lazy.chan
       EagerFv:
-        copyMem(dup.data.addr, fvNode.chan.addr, sizeof(pointer))
+        cast[ptr ptr ChannelSPSCSingle](dup.data.addr)[] = fvNode.chan
       fvNode.next = cast[FlowvarNode](myTask().futures)
       myTask().futures = cast[pointer](fvNode)
       # Don't share the required futures with the child
