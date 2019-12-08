@@ -12,41 +12,50 @@ import
   ../memory/memory_pools
 
 type
-  ChannelLazyFlowvar* = object
+  ChannelSPSCSingleTypeErased* = object
     ## A type-erased SPSC channel for LazyFlowvar.
     ##
     ## Motivation, when LazyFlowvar needs to be converted
     ## from stack-allocated memory to heap to extended their lifetime
     ## we have no type information at all as the whole runtime
     ## and especially tasks does not retain it.
-    next*{.align: WV_CacheLinePadding.}: Atomic[pointer] # Concurrent intrusive lists
-    full: Atomic[bool]
+    full{.align: WV_CacheLinePadding.}: Atomic[bool]
     itemSize*: uint8
-    totalSize*: uint8
     buffer*{.align: 8.}: UncheckedArray[byte]
 
 proc `=`(
-    dest: var ChannelLazyFlowvar,
-    source: ChannelLazyFlowvar
+    dest: var ChannelSPSCSingleTypeErased,
+    source: ChannelSPSCSingleTypeErased
   ) {.error: "A channel cannot be copied".}
 
-proc newChannelLazyFlowvar*(pool: var TLPoolAllocator, itemsize: SomeInteger): ptr ChannelLazyFlowvar {.inline.} =
+proc newChannelSPSCSingleTypeErased*(pool: var TLPoolAllocator, itemsize: SomeInteger): ptr ChannelSPSCSingleTypeErased {.inline.} =
   preCondition: itemsize.int in 0 .. int high(uint8)
   preCondition: itemSize.int +
-                sizeof(result.next) +
                 sizeof(result.itemsize) +
-                sizeof(result.full) < WV_MemBlockSize # we could use 256 but 255 is nice on "totalSize"
+                sizeof(result.full) <= WV_MemBlockSize
 
-  result = pool.borrow(ChannelLazyFlowvar)
+  result = pool.borrow(ChannelSPSCSingleTypeErased)
   result.itemsize = uint8(itemsize)
   result.full.store(false, moRelaxed)
 
   # TODO Address Sanitizer / memory poisoning
 
-func isEmpty*(chan: var ChannelLazyFlowvar): bool {.inline.} =
+proc initialize*(chan: var ChannelSPSCSingleTypeErased, itemsize: uint8) {.inline.} =
+  ## If ChannelSPSCSingleTypeErased is used intrusive another data structure
+  ## be aware that it should be the last part due to ending by UncheckedArray
+  ## Also due to 128 bytes padding, it automatically takes half
+  ## of the default WV_MemBlockSize
+  preCondition: itemSize.int +
+                sizeof(chan.itemsize) +
+                sizeof(chan.full) < WV_MemBlockSize
+
+  chan.itemSize = itemsize
+  chan.full.store(false, moRelaxed)
+
+func isEmpty*(chan: var ChannelSPSCSingleTypeErased): bool {.inline.} =
   not chan.full.load(moAcquire)
 
-func tryRecv*[T](chan: var ChannelLazyFlowvar, dst: var T): bool {.inline.} =
+func tryRecv*[T](chan: var ChannelSPSCSingleTypeErased, dst: var T): bool {.inline.} =
   ## Try receiving the item buffered in the channel
   ## Returns true if successful (channel was not empty)
   ##
@@ -60,7 +69,7 @@ func tryRecv*[T](chan: var ChannelLazyFlowvar, dst: var T): bool {.inline.} =
   chan.full.store(false, moRelease)
   return true
 
-func trySend*[T](chan: var ChannelLazyFlowvar, src: sink T): bool {.inline.} =
+func trySend*[T](chan: var ChannelSPSCSingleTypeErased, src: sink T): bool {.inline.} =
   ## Try sending an item into the channel
   ## Reurns true if successful (channel was empty)
   ##
@@ -81,13 +90,13 @@ when isMainModule:
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}
 
-  template sendLoop[T](chan: var ChannelLazyFlowvar,
+  template sendLoop[T](chan: var ChannelSPSCSingleTypeErased,
                        data: sink T,
                        body: untyped): untyped =
     while not chan.trySend(data):
       body
 
-  template recvLoop[T](chan: var ChannelLazyFlowvar,
+  template recvLoop[T](chan: var ChannelSPSCSingleTypeErased,
                        data: var T,
                        body: untyped): untyped =
     while not chan.tryRecv(data):
@@ -96,7 +105,7 @@ when isMainModule:
   type
     ThreadArgs = object
       ID: WorkerKind
-      chan: ptr ChannelLazyFlowvar
+      chan: ptr ChannelSPSCSingleTypeErased
 
     WorkerKind = enum
       Sender
@@ -144,7 +153,7 @@ when isMainModule:
     var pool: TLPoolAllocator
     pool.initialize(threadID = 0)
 
-    let chan = pool.newChannelLazyFlowvar(sizeof(int))
+    let chan = pool.newChannelSPSCSingleTypeErased(sizeof(int))
 
     createThread(threads[0], thread_func, ThreadArgs(ID: Receiver, chan: chan))
     createThread(threads[1], thread_func, ThreadArgs(ID: Sender, chan: chan))
