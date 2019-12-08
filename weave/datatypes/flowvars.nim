@@ -140,7 +140,7 @@ proc newFlowvarNode*(itemSize: uint8): FlowvarNode =
   ## Create a linked list of flowvars
   # Lazy flowvars unfortunately are allocated on the heap
   # Can we do better?
-  preCondition: itemSize <= WV_MemBlockSize - sizeof(deref(FlowvarNode))
+  preCondition: itemSize.int <= WV_MemBlockSize - sizeof(deref(FlowvarNode))
   result = myMemPool().borrow(deref(FlowvarNode))
   LazyFV: # 3 alloc total
     result.lfv = myMemPool().borrow(LazyFlowVar)
@@ -153,7 +153,7 @@ proc newFlowvarNode*(itemSize: uint8): FlowvarNode =
     result.chan = myMemPool().borrow(ChannelSPSCSingle)
     result.chan[].initialize(itemSize)
 
-proc recycleFV*(fvNode: sink FlowvarNode) {.inline.} =
+proc recycleFVN*(fvNode: sink FlowvarNode) {.inline.} =
   ## Deletes a flowvar node
   ## This assumes that the channel was already recycled
   ## by a "sync"/"forceComplete"

@@ -23,14 +23,14 @@ when not compileOption("threads"):
 template parallelForWrapper(
     idx: untyped{ident},
     prologue, loopBody, epilogue,
-    remoteAccumulator, resultTy,
+    remoteAccum, resultTy,
     returnStmt: untyped): untyped =
   ## To be called within a loop task
   ## Gets the loop bounds and iterate the over them
   ## Also poll steal requests in-between iterations
   ##
   ## Loop prologue, epilogue,
-  ## remoteAccumulator, resultTy and returnStmt
+  ## remoteAccum, resultTy and returnStmt
   ## are unused
 
   block:
@@ -90,11 +90,11 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
                 parForName, bindSym"parallelForWrapper",
                 # prologue, loopBody, epilogue,
                 nil, body, nil,
-                # remoteAccumulator, return value
+                # remoteAccum, return statement
                 nil, nil,
                 idx, env,
                 captured, capturedTy,
-                resultTy = newEmptyNode()
+                resultFvTy = newEmptyNode()
               )
 
   # Create the async function (that calls the proc that packages the loop body)
@@ -116,7 +116,8 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
   # Create the task
   # --------------------------------------------------------
   result.addLoopTask(
-    parForTask, start, stop, stride, captured, CapturedTy
+    parForTask, start, stop, stride, captured, CapturedTy,
+    futureIdent = nil, resultFutureType = nil
   )
 
 macro parallelFor*(loopParams: untyped, body: untyped): untyped =
