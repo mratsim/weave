@@ -13,7 +13,7 @@ import
   # Standard library
   macros,
   # Internal
-  ./parallel_macros,
+  ./parallel_macros, ./parallel_reduce,
   ./contexts,
   ./instrumentation/contracts
 
@@ -121,10 +121,20 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
   )
 
 macro parallelFor*(loopParams: untyped, body: untyped): untyped =
-  result = getAST(parallelForImpl(loopParams, 1, body))
+  if (body[0].kind == nnkCall and body[0][0].eqIdent"reduce") or
+     (body.len >= 2 and
+     body[1].kind == nnkCall and body[1][0].eqIdent"reduce"):
+    result = getAST(parallelReduceImpl(loopParams, 1, body))
+  else:
+    result = getAST(parallelForImpl(loopParams, 1, body))
 
 macro parallelForStrided*(loopParams: untyped, stride: Positive, body: untyped): untyped =
-  result = getAST(parallelForImpl(loopParams, stride, body))
+  if (body[0].kind == nnkCall and body[0][0].eqIdent"reduce") or
+     (body.len >= 2 and
+     body[1].kind == nnkCall and body[1][0].eqIdent"reduce"):
+    result = getAST(parallelReduceImpl(loopParams, stride, body))
+  else:
+    result = getAST(parallelForImpl(loopParams, stride, body))
 
 # Sanity checks
 # --------------------------------------------------------

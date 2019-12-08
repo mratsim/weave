@@ -9,7 +9,7 @@ import
   # Standard library
   macros, typetraits,
   # Internal
-  ./datatypes/sync_types, ./contexts,
+  ./datatypes/[sync_types, flowvars], ./contexts,
   ./instrumentation/profilers,
   ./scheduler
 

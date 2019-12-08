@@ -61,11 +61,11 @@ template parallelReduceWrapper(
       # The "sync" in the merge statement should have recycled the flowvar channel already
       # For LazyFlowVar, the LazyFlowvar itself was allocated on the heap, so we need to recycle it as well
       # 2 deallocs for eager FV and 3 for Lazy FV
-      fvNode.recycleFVN()
+      recycleFVN(fvNode)
 
   returnStmt
 
-macro parallelReduceImpl(loopParams: untyped, stride: int, body: untyped): untyped =
+macro parallelReduceImpl*(loopParams: untyped, stride: int, body: untyped): untyped =
   ## Parallel for loop
   ## Syntax:
   ##
@@ -201,7 +201,7 @@ macro parallelReduceImpl(loopParams: untyped, stride: int, body: untyped): untyp
   let parReduceTask = ident("weaveTask_ParallelReduce_")
   var fnCall = newCall(parReduceName)
   if withArgs:
-    fnCall.add(newCall(ident"addr", env))
+    fnCall.add(env)
 
   let fut = ident"future" # will be linked to the finalAccum on the other end
 
@@ -210,10 +210,11 @@ macro parallelReduceImpl(loopParams: untyped, stride: int, body: untyped): untyp
       let this = myTask()
       assert not isRootTask(this)
 
+      let `fut` = cast[ptr `FutTy`](param)
       when bool(`withArgs`):
-        let (`fut`,`env`) = cast[ptr (`FutTy`,`CapturedTy`)](param)
-      else:
-        let `fut` = cast[ptr `FutTy`](param)
+        # This requires lazy futures to have a fixed max buffer size
+        let offset = cast[pointer](cast[ByteAddress](param) +% sizeof(`FutTy`))
+        let `env` = cast[ptr `CapturedTy`](offset)
       let res = `fnCall`
       `fut`[].readyWith(res)
 
@@ -224,7 +225,7 @@ macro parallelReduceImpl(loopParams: untyped, stride: int, body: untyped): untyp
     finalAccum, FutTy
   )
 
-  # echo result.toStrLit
+  echo result.toStrLit
 
 # Sanity checks
 # --------------------------------------------------------
