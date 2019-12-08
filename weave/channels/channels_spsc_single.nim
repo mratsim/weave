@@ -75,7 +75,7 @@ func tryRecv*[T](chan: var ChannelSPSCSingle, dst: var T): bool {.inline.} =
   let full = chan.full.load(moAcquire)
   if not full:
     return false
-  copyMem(dst.addr, chan.buffer.addr, chan.itemsize)
+  dst = cast[ptr T](chan.buffer.addr)[]
   chan.full.store(false, moRelease)
   return true
 
@@ -89,7 +89,7 @@ func trySend*[T](chan: var ChannelSPSCSingle, src: sink T): bool {.inline.} =
   let full = chan.full.load(moAcquire)
   if full:
     return false
-  copyMem(chan.buffer.addr, src.addr, chan.itemsize)
+  cast[ptr T](chan.buffer.addr)[] = src
   chan.full.store(true, moRelease)
   return true
 
