@@ -10,7 +10,7 @@ import
                sparsesets, prell_deques, flowvars, binary_worker_trees],
   ./contexts, ./config,
   ./instrumentation/[contracts, profilers, loggers],
-  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_spsc_single_type_erased],
+  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_spsc_single],
   ./thieves, ./loop_splitting,
   ./memory/memory_pools
 
@@ -279,21 +279,15 @@ proc splitAndSend*(task: Task, req: sink StealRequest) =
       # Problem: we lost the type information so we don't
       # know the size. The type erased channel supports up to WV_MemBlockSize - 11 bytes
       # This also prevents us from using the typed SPSC channels
-      ascertain: dup.futureSize <= WV_MemBlockSize - sizeof(typeof(FlowvarNode()[]))
-      let fvNode = myMemPool.borrow(FlowvarNode)
-      fvNode.chan.initialize(itemsize = dup.futureSize)
-
-      # TODO: Hummm, we have a problem here, the type-erased future
-      #       may be exposed at the same level as a flowvar, but it is not one
-      #       so we probably need to delete all the fancy specializations
-      #
-      # Replace the future of the duplicate with our freshly allocated one
-      # The lifetime of fvNode exceed the duplicate task
-      # as the victim will await the thief result
-      copyMem(dup.data.addr, fvNode.chan.addr, sizeof(pointer))
+      let fvNode = newFlowvarNode(dup.futureSize)
+      # Redirect the result channel of the dup
+      LazyFv:
+        copyMem(dup.data.addr, fvNode.lfv.lazy.chan.addr, sizeof(pointer))
+      EagerFv:
+        copyMem(dup.data.addr, fvNode.chan.addr, sizeof(pointer))
       fvNode.next = cast[FlowvarNode](myTask().futures)
       myTask().futures = cast[pointer](fvNode)
-      # Don't share the required future with the child
+      # Don't share the required futures with the child
       dup.futures = nil
 
     req.send(dup)

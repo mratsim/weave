@@ -474,7 +474,6 @@ proc borrow*(pool: var TLPoolAllocator, T: typedesc): ptr T =
   #   $T & "is of size " & $sizeof(T) &
   #   ", the maximum object size supported is " &
   #   $WV_MemBlockSize & " bytes (WV_MemBlockSize)"
-
   if pool.last.meta.free.isNil:
     # Fallback to expensive slow path
     return cast[ptr T](pool.allocEx())
