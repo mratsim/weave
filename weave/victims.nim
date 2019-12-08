@@ -246,10 +246,10 @@ proc splitAndSend*(task: Task, req: sink StealRequest) =
   preCondition: req.thiefID != myID()
 
   profile(enq_deq_task):
-    let dup = newTaskFromCache()
+    let upperSplit = newTaskFromCache()
 
     # Copy the current task
-    dup[] = task[]
+    upperSplit[] = task[]
 
     # Split iteration range according to given strategy
     # [start, stop) => [start, split) + [split, end)
@@ -261,32 +261,32 @@ proc splitAndSend*(task: Task, req: sink StealRequest) =
     let split = split(task, guessThieves)
 
     # New task gets the upper half
-    dup.start = split
-    dup.cur = split
-    dup.stop = task.stop
+    upperSplit.start = split
+    upperSplit.cur = split
+    upperSplit.stop = task.stop
 
     # Current task continues with lower half
     task.stop = split
 
-  debug: log("Worker %2d: Sending [%ld, %ld) to worker %d\n", myID(), dup.start, dup.stop, req.thiefID)
+  debug: log("Worker %2d: Sending [%ld, %ld) to worker %d\n", myID(), upperSplit.start, upperSplit.stop, req.thiefID)
 
   profile(send_recv_task):
-    dup.batch = 1
+    upperSplit.batch = 1
 
-    if dup.hasFuture:
+    if upperSplit.hasFuture:
       # The task has a future so it depends on both splitted tasks.
-      let fvNode = newFlowvarNode(dup.futureSize)
-      # Redirect the result channel of the dup
+      let fvNode = newFlowvarNode(upperSplit.futureSize)
+      # Redirect the result channel of the upperSplit
       LazyFv:
-        cast[ptr ptr ChannelSPSCSingle](dup.data.addr)[] = fvNode.lfv.lazy.chan
+        cast[ptr ptr ChannelSPSCSingle](upperSplit.data.addr)[] = fvNode.lfv.lazy.chan
       EagerFv:
-        cast[ptr ptr ChannelSPSCSingle](dup.data.addr)[] = fvNode.chan
+        cast[ptr ptr ChannelSPSCSingle](upperSplit.data.addr)[] = fvNode.chan
       fvNode.next = cast[FlowvarNode](myTask().futures)
       myTask().futures = cast[pointer](fvNode)
       # Don't share the required futures with the child
-      dup.futures = nil
+      upperSplit.futures = nil
 
-    req.send(dup)
+    req.send(upperSplit)
 
   incCounter(tasksSplit)
   debug: log("Worker %2d: Continuing with [%ld, %ld)\n", myID(), task.cur, task.stop)
