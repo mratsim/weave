@@ -10,11 +10,11 @@ import
   system/ansi_c, strformat, os, strutils, cpuinfo, math,
   random,
   # Weave
-  ../../weave,
+  ../../../weave,
   # 3rd party
   cligen,
   # bench
-  ../wtime, ../resources
+  ../../wtime, ../../resources
 
 # Helpers
 # -------------------------------------------------------
@@ -120,23 +120,18 @@ proc reportBench(
   echo "# of page faults:                             ", pageFaults
   echo "Logsumexp:                                    ", logsumexp
 
-proc roundPrevMultipleOf(x, n: SomeInteger): SomeInteger =
-  x - x mod n
-
 template runBench(procName: untyped, datasetSize, batchSize, numLabels: int64) =
   let data = newMatrix[float32](datasetSize, numLabels)
   data.initialize()
-
-  # For simplicity we ignore the last few data points
-  let roundedSize = datasetSize.roundPrevMultipleOf(batchSize)
 
   let start = wtime_msec()
 
   var lse = 0'f32
   memUsage(maxRSS, runtimeRSS, pageFaults):
-    for batchIdx in countup(0'i64, roundedSize - 1, batchSize):
+    # For simplicity we ignore the last few data points
+    for batchIdx in 0 ..< datasetSize div batchSize:
       let X = data.rowView(batchIdx*batchSize, batchSize)
-      lse += procName(data)
+      lse += procName(X)
 
   let stop = wtime_msec()
 
@@ -175,35 +170,35 @@ proc maxWeave[T: SomeFloat](M: Matrix[T]) : T =
       fold:
         for j in 0 ..< M.ncols:
           localMax = max(localMax, M[i, j])
+          loadBalance(Weave)
       merge(remoteMax):
         localMax = sync(remoteMax)
       return localMax
 
   result = sync(max)
 
-import macros
 proc logsumexpWeave[T: SomeFloat](M: Matrix[T]): T =
 
   let alpha = M.maxWeave()
 
   var lse: Flowvar[T]
 
-  expandMacros:
-    parallelFor i in 0 ..< M.nrows:
-      captures:{alpha, M}
-      reduce(lse):
-        prologue:
-          var localLSE = 0.T
-        fold:
-          for j in 0 ..< M.ncols:
-            localLSE += exp(M[i, j] - alpha)
-        merge(remoteLSE):
-          localLSE += sync(remoteLSE)
-        return localLSE
+  parallelFor i in 0 ..< M.nrows:
+    captures:{alpha, M}
+    reduce(lse):
+      prologue:
+        var localLSE = 0.T
+      fold:
+        for j in 0 ..< M.ncols:
+          localLSE += exp(M[i, j] - alpha)
+          loadBalance(Weave)
+      merge(remoteLSE):
+        localLSE += sync(remoteLSE)
+      return localLSE
 
   result = alpha + ln(sync(lse))
 
-proc main(datasetSize = 20000'i64, batchSize = 256'i64, imageLabels = 10'i64, textVocabulary = 1000'i64) =
+proc main(datasetSize = 20000'i64, batchSize = 256'i64, imageLabels = 1000'i64, textVocabulary = 10000'i64) =
   echo "Note that a text vocabulary is often in the 50000-15000 words\n"
 
   var nthreads: int

@@ -227,27 +227,32 @@ proc addLoopTask*(
                     else: ident("dummy")
 
   statement.add quote do:
-    profile(enq_deq_task):
-      let task = newTaskFromCache()
-      task.parent = myTask()
-      task.fn = `asyncFn`
-      task.isLoop = true
-      task.start = `start`
-      task.cur = `start`
-      task.stop = `stop`
-      task.stride = `stride`
-      when bool(`hasFuture`):
-         task.hasFuture = true
-         task.futureSize = uint8(sizeof(`resultFutureType`.T))
-         assert not `futureIdent`.isSpawned(), "Trying to override an allocated Flowvar."
-         `futureIdent` = newFlowvar(myMemPool(), `resultFutureType`.T)
-      when bool(`withArgs`) and bool(`hasFuture`):
-        cast[ptr (`resultFutureType`, `CapturedTySym`)](task.data.addr)[] = (`futureIdent`, `capturedVars`)
-      elif bool(`withArgs`):
-        cast[ptr `CapturedTySym`](task.data.addr)[] = `capturedVars`
-      else:
-        cast[ptr `resultFutureType`](task.data.addr)[] = `futureIdent`
-      schedule(task)
+      when defined(WV_profile):
+        # TODO profiling templates visibility issue
+        timer_start(timer_enq_deq_task)
+      block enq_deq_task:
+        let task = newTaskFromCache()
+        task.parent = myTask()
+        task.fn = `asyncFn`
+        task.isLoop = true
+        task.start = `start`
+        task.cur = `start`
+        task.stop = `stop`
+        task.stride = `stride`
+        when bool(`hasFuture`):
+          task.hasFuture = true
+          task.futureSize = uint8(sizeof(`resultFutureType`.T))
+          assert not `futureIdent`.isSpawned(), "Trying to override an allocated Flowvar."
+          `futureIdent` = newFlowvar(myMemPool(), `resultFutureType`.T)
+        when bool(`withArgs`) and bool(`hasFuture`):
+          cast[ptr (`resultFutureType`, `CapturedTySym`)](task.data.addr)[] = (`futureIdent`, `capturedVars`)
+        elif bool(`withArgs`):
+          cast[ptr `CapturedTySym`](task.data.addr)[] = `capturedVars`
+        else:
+          cast[ptr `resultFutureType`](task.data.addr)[] = `futureIdent`
+        schedule(task)
+        when defined(WV_profile):
+          timer_stop(timer_enq_deq_task)
 
 template parSumExample() {.dirty.}=
   # Used for a nice error message
