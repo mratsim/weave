@@ -144,17 +144,17 @@ proc addSanityChecks*(statement, capturedTypes, capturedTypesSym: NimNode) =
 proc packageParallelFor*(
         procIdent, wrapperTemplate: NimNode,
         prologue, loopBody, epilogue,
-        remoteAccumulator, returnStmt: NimNode,
+        remoteAccum, returnStmt: NimNode,
         idx, env: NimNode,
         capturedVars, capturedTypes: NimNode,
-        resultTy: NimNode # For-loops can return a result in the case of parallel reductions
+        resultFvTy: NimNode # For-loops can return a result in the case of parallel reductions
      ): NimNode =
   # Package a parallel for loop into a proc, it requires:
   # - a proc ident that can be used to call the proc package
   # - a wrapper template, to handle runtime metadata
   # - the loop index and loop body
   # - The captured variables and their types
-  # - The return value of the for loop for reductions
+  # - The flowvar wrapped return value of the for loop for reductions
   #   or an EmptyNode
   let pragmas = nnkPragma.newTree(
                   ident"nimcall",
@@ -162,7 +162,7 @@ proc packageParallelFor*(
                   ident"inline"
                 )
 
-  var params = @[resultTy]
+  var params = @[resultFvTy]
   var procBody = newStmtList()
 
   if capturedVars.len > 0:
@@ -188,7 +188,7 @@ proc packageParallelFor*(
     wrapperTemplate,
     idx,
     prologue, loopBody, epilogue,
-    remoteAccumulator, resultTy, returnStmt
+    remoteAccum, resultFvTy, returnStmt
   )
 
   result = newProc(
@@ -198,7 +198,12 @@ proc packageParallelFor*(
     pragmas = pragmas
   )
 
-proc addLoopTask*(statement, asyncFn, start, stop, stride, capturedVars, CapturedTySym: NimNode) =
+proc addLoopTask*(
+    statement, asyncFn,
+    start, stop, stride,
+    capturedVars, CapturedTySym: NimNode,
+    futureIdent, resultFutureType: NimNode
+  ) =
   ## Add a loop task
 
   statement.expectKind nnkStmtList
@@ -211,6 +216,10 @@ proc addLoopTask*(statement, asyncFn, start, stop, stride, capturedVars, Capture
     CapturedTySym.expectKind nnkIdent
     assert capturedVars.len > 0
 
+  let hasFuture = futureIdent != nil
+  let futureIdent = if hasFuture: futureIdent
+                    else: ident("dummy")
+
   statement.add quote do:
     profile(enq_deq_task):
       let task = newTaskFromCache()
@@ -221,6 +230,130 @@ proc addLoopTask*(statement, asyncFn, start, stop, stride, capturedVars, Capture
       task.cur = `start`
       task.stop = `stop`
       task.stride = `stride`
-      when bool(`withArgs`):
+      when bool(`hasFuture`):
+         task.hasFuture = true
+         task.futureSize = uint8(sizeof(`resultFutureType`.T))
+         let `futureIdent` = newFlowvar(myMemPool(), `resultFutureType`.T)
+      when bool(`withArgs`) and bool(`hasFuture`):
+        cast[ptr (`resultFutureType`, `CapturedTySym`)](task.data.addr)[] = (`futureIdent`, `capturedVars`)
+      elif bool(`withArgs`):
         cast[ptr `CapturedTySym`](task.data.addr)[] = `capturedVars`
+      else:
+        cast[ptr `resultFutureType`](task.data.addr)[] = `futureIdent`
       schedule(task)
+
+template parSumExample() {.dirty.}=
+  # Used for a nice error message
+
+  proc parallelSumExample(n: int): int =
+
+    ## First declare the future/flowvar that will
+    ## hold the reduction result
+    var waitableSum: Flowvar[int]
+
+    ## Then describe the reduction loop
+    parallelFor i in 0 ..< n, stride = 1:
+      ## stride is optional
+      reduce(waitableSum):
+        prologue:
+          ## Declare your local reduction variable(s) here
+          ## It should be initialize with the neutral element
+          ## corresponding to your fold operation.
+          ## (0 for addition, 1 for multiplication, -Inf for max, +Inf for min, ...)
+          var localSum = 0
+        fold:
+          ## This is the reduction loop
+          localSum += i
+        merge(remoteSum):
+          ## Define how to merge with partial reduction from remote threads
+          localSum += sync(remoteSum)
+        ## Return your local partial reduction
+        return localSum
+
+    ## Await the parallel reduction
+    return sync(waitableSum)
+
+proc printExampleSyntax() =
+  let example = getAst(parSumExample())
+  echo example.toStrLit
+
+proc testKind(nn: NimNode, nnk: NimNodeKind) =
+  if nn.kind != nnk:
+    printExampleSyntax()
+    nn.expectKind(nnk) # Gives nice line numbers
+
+proc extractReduceConfig(body: NimNode, withArgs: bool): tuple[
+    prologue, fold, merge,
+    remoteAccum, resultFlowvarType,
+    returnStmt, finalAccum: NimNode
+  ] =
+  # The body tree representation is
+  #
+  # StmtList
+  #   Call
+  #     Ident "reduce"
+  #     Ident "waitableSum"
+  #     StmtList
+  #       Call
+  #         Ident "prologue"
+  #         StmtList
+  #           VarSection
+  #             IdentDefs
+  #               Ident "localSum"
+  #               Empty
+  #               IntLit 0
+  #       Call
+  #         Ident "fold"
+  #         StmtList
+  #           Infix
+  #             Ident "+="
+  #             Ident "localSum"
+  #             Ident "i"
+  #       Call
+  #         Ident "merge"
+  #         Ident "remoteSum"
+  #         StmtList
+  #           Infix
+  #             Ident "+="
+  #             Ident "localSum"
+  #             Call
+  #               Ident "sync"
+  #               Ident "remoteSum"
+  #       ReturnStmt
+  #         Ident "localSum"
+  let config = if withArgs: body[1] else: body[0]
+  doAssert config[0].eqident"reduce"
+
+  config.testKind(nnkCall)
+  config[1].testKind(nnkIdent)
+  config[2].testKind(nnkStmtList)
+
+  if config[2].len != 4:
+    printExampleSyntax()
+    error "A reduction should have 4 sections named: prologue, fold, merge and a return statement"
+
+  let
+    finalAccum = config[1]
+    resultFvTy = newCall(ident"typeof", finalAccum)
+    prologue = config[2][0]
+    fold = config[2][1]
+    merge = config[2][2]
+    remoteAccum = config[2][2][1]
+    returnStmt = config[2][3]
+
+  # Sanity checks
+  prologue.testKind(nnkCall)
+  fold.testKind(nnkCall)
+  merge.testKind(nnkCall)
+  remoteAccum.testKind(nnkIdent)
+  returnStmt.testKind(nnkReturnStmt)
+  if not (prologue[0].eqIdent"prologue" and fold[0].eqIdent"fold" and merge[0].eqIdent"merge"):
+    printExampleSyntax()
+    error "A reduction should have 4 sections named: prologue, fold, merge and a return statement"
+  prologue[1].testKind(nnkStmtList)
+  fold[1].testKind(nnkStmtList)
+  merge[1].testKind(nnkStmtList)
+
+  result = (prologue[1], fold[1], merge[1],
+            remoteAccum, resultFvTy,
+            returnStmt, finalAccum)

@@ -23,7 +23,7 @@ when not compileOption("threads"):
 template parallelReduceWrapper(
   idx: untyped{ident},
   prologue, fold, merge,
-  remoteAccumulator, resultTy,
+  remoteAccum, resultFlowvarType,
   returnStmt: untyped): untyped =
   ## To be called within a loop task
   ## Gets the loop bounds and iterate the over them
@@ -52,16 +52,16 @@ template parallelReduceWrapper(
       this.futures = cast[pointer](fvNode.next)
 
       LazyFV:
-        let remoteAccumulator = cast[Flowvar[resultTy]](fvNode.lfv)
+        let remoteAccum = cast[resultFlowvarType](fvNode.lfv)
       EagerFV:
-        let remoteAccumulator = cast[Flowvar[resultTy]](fvNode.chan)
+        let remoteAccum = cast[resultFlowvarType](fvNode.chan)
 
       merge
 
       # The "sync" in the merge statement should have recycled the flowvar channel already
       # For LazyFlowVar, the LazyFlowvar itself was allocated on the heap, so we need to recycle it as well
       # 2 deallocs for eager FV and 3 for Lazy FV
-      fvNode.recycleFV()
+      fvNode.recycleFVN()
 
   returnStmt
 
@@ -172,68 +172,54 @@ macro parallelReduceImpl(loopParams: untyped, stride: int, body: untyped): untyp
 
   # Extract the reduction configuration
   # --------------------------------------------------------
-  # The body tree representation is
-  #
-  # StmtList
-  #   Call
-  #     Ident "reduce"
-  #     Ident "waitableSum"
-  #     StmtList
-  #       Call
-  #         Ident "prologue"
-  #         StmtList
-  #           VarSection
-  #             IdentDefs
-  #               Ident "localSum"
-  #               Empty
-  #               IntLit 0
-  #       Call
-  #         Ident "fold"
-  #         StmtList
-  #           Infix
-  #             Ident "+="
-  #             Ident "localSum"
-  #             Ident "i"
-  #       Call
-  #         Ident "merge"
-  #         Ident "remoteSum"
-  #         StmtList
-  #           Infix
-  #             Ident "+="
-  #             Ident "localSum"
-  #             Call
-  #               Ident "sync"
-  #               Ident "remoteSum"
-  #           ReturnStmt
-  #             Ident "localSum"
+  let (prologue, fold, merge,
+      remoteAccum, resultFlowvarType,
+      returnStmt, finalAccum) = extractReduceConfig(body, withArgs)
 
+  result.add quote do:
+    static: doAssert `finalAccum` is Flowvar
 
-  let config = if withArgs: body[1] else: body[0]
+  # Package the body in a proc
+  # --------------------------------------------------------
+  let parReduceName = ident"weaveParallelReduceSection"
+  let env = ident("weaveParReduceClosureEnv_") # typed pointer to data
+  result.add packageParallelFor(
+                parReduceName, bindSym"parallelReduceWrapper",
+                # prologue, loopBody, epilogue,
+                prologue, fold, merge,
+                # remoteAccum, return statement
+                remoteAccum, returnStmt,
+                idx, env,
+                captured, capturedTy,
+                resultFlowvarType
+              )
 
-  config.expectKind(nnkCall)
-  doAssert config[0].eqident"reduce"
-  config[1].expectKind(nnkIdent)
-  config[2].expectKind(nnkStmtList)
-  doAssert config[2].len == 3
+  # Create the async function (that calls the proc that packages the loop body)
+  # --------------------------------------------------------
+  let parReduceTask = ident("weaveTask_ParallelReduce_")
+  var fnCall = newCall(parReduceName)
+  if withArgs:
+    fnCall.add(newCall(ident"addr", env))
 
-  let
-    prologue = config[2][0]
-    fold = config[2][1]
-    merge = config[2][2]
-    remoteAccumulator = config[2][2][1]
+  let fut = ident"future"
 
-  # Sanity checks
-  prologue.expectKind(nnkCall)
-  fold.expectKind(nnkCall)
-  merge.expectKind(nnkCall)
-  remoteAccumulator.expectKind(nnkIdent)
-  doAssert prologue[0].eqIdent"prologue"
-  doAssert fold[0].eqIdent"fold"
-  doAssert merge[0].eqIdent"merge"
-  prologue[1].expectKind(nnkStmtList)
-  fold[1].expectKind(nnkStmtList)
-  merge[1].expectKind(nnkStmtList)
+  result.add quote do:
+    proc `parReduceTask`(param: pointer) {.nimcall, gcsafe.} =
+      let this = myTask()
+      assert not isRootTask(this)
 
+      when bool(`withArgs`):
+        let (`fut`,`env`) = cast[ptr (`resultFlowvarType`,`CapturedTy`)](param)
+      else:
+        let `fut` = cast[ptr `resultFlowvarType`](param)
+      let res = `fnCall`
+      `fut`.readyWith(res)
+
+  # Create the task
+  # --------------------------------------------------------
+  result.addLoopTask(
+    parForTask, start, stop, stride, captured, CapturedTy
+  )
 
 when isMainModule:
   var waitableSum: Flowvar[int]
@@ -246,4 +232,6 @@ when isMainModule:
         localSum += i
       merge(remoteSum):
         localSum += sync(remoteSum)
-        return localSum
+      return localSum
+
+  let sum = sync(waitableSum)
