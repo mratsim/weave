@@ -20,7 +20,11 @@ import
 when not compileOption("threads"):
   {.error: "This requires --threads:on compilation flag".}
 
-template parallelReduceWrapper(idx: untyped{ident}, prologue, fold, merge, returnStmt: untyped): untyped =
+template parallelReduceWrapper(
+  idx: untyped{ident},
+  prologue, fold, merge,
+  remoteAccumulator, resultTy,
+  returnStmt: untyped): untyped =
   ## To be called within a loop task
   ## Gets the loop bounds and iterate the over them
   ## Also poll steal requests in-between iterations
@@ -46,6 +50,11 @@ template parallelReduceWrapper(idx: untyped{ident}, prologue, fold, merge, retur
     while not this.futures.isNil:
       let fvNode = cast[FlowvarNode](this.futures)
       this.futures = cast[pointer](fvNode.next)
+
+      LazyFV:
+        let remoteAccumulator = cast[Flowvar[resultTy]](fvNode.lfv)
+      EagerFV:
+        let remoteAccumulator = cast[Flowvar[resultTy]](fvNode.chan)
 
       merge
 
@@ -213,6 +222,7 @@ macro parallelReduceImpl(loopParams: untyped, stride: int, body: untyped): untyp
     merge = config[2][2]
     remoteAccumulator = config[2][2][1]
 
+  # Sanity checks
   prologue.expectKind(nnkCall)
   fold.expectKind(nnkCall)
   merge.expectKind(nnkCall)

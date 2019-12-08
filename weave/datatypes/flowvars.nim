@@ -64,9 +64,9 @@ func isSpawned*(fv: Flowvar): bool {.inline.}=
   ## This may be useful for recursive algorithms that
   ## may or may not spawn a future depending on a condition.
   ## This is similar to Option or Maybe types
-  when defined(WV_LazyFlowvar):
+  LazyFV:
     return not fv.lfv.isNil
-  else:
+  EagerFV:
     return not fv.chan.isNil
 
 EagerFV:

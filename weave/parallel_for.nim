@@ -22,12 +22,16 @@ when not compileOption("threads"):
 
 template parallelForWrapper(
     idx: untyped{ident},
-    prologue, loopBody, epilogue, returnStmt: untyped): untyped =
+    prologue, loopBody, epilogue,
+    remoteAccumulator, resultTy,
+    returnStmt: untyped): untyped =
   ## To be called within a loop task
   ## Gets the loop bounds and iterate the over them
   ## Also poll steal requests in-between iterations
   ##
-  ## Loop prologue, epilogue and returnStmt are unused
+  ## Loop prologue, epilogue,
+  ## remoteAccumulator, resultTy and returnStmt
+  ## are unused
 
   block:
     let this = myTask()
@@ -84,10 +88,13 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
   let env = ident("weaveParForClosureEnv_") # typed pointer to data
   result.add packageParallelFor(
                 parForName, bindSym"parallelForWrapper",
-                # prologue, loopBody, epilogue, return value
-                nil, body, nil, nil,
+                # prologue, loopBody, epilogue,
+                nil, body, nil,
+                # remoteAccumulator, return value
+                nil, nil,
                 idx, env,
-                captured, capturedTy
+                captured, capturedTy,
+                resultTy = newEmptyNode()
               )
 
   # Create the async function (that calls the proc that packages the loop body)
