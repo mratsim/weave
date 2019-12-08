@@ -74,10 +74,10 @@ proc recv*(req: var StealRequest): bool {.inline.} =
   profile(send_recv_req):
     result = myThieves().tryRecv(req)
 
-    debug:
-      if result:
-        log("Worker %2d: receives request 0x%.08x from %d with %d potential victims. (Channel: 0x%.08x)\n",
-              myID(), cast[ByteAddress](req), req.thiefID, req.victims.len, myThieves().addr)
+    # debug:
+    #   if result:
+    #     log("Worker %2d: receives request 0x%.08x from %d with %d potential victims. (Channel: 0x%.08x)\n",
+    #           myID(), cast[ByteAddress](req), req.thiefID, req.victims.len, myThieves().addr)
 
     # We treat specially the case where children fail to steal
     # and defer to the current worker (their parent)
@@ -127,13 +127,13 @@ proc declineOwn(req: sink StealRequest) =
   # TODO: how to prevent cascading sleep
   # preCondition: req.victims.isEmpty()
 
-  debug:
-    log("Worker %2d: received own request (req.state: %s, left (%d): %s, right (%d): %s)\n",
-      myID(), $req.state,
-      myWorker().left,
-      if myWorker().leftIsWaiting: "waiting" else: "not waiting",
-      myWorker().right,
-      if myWorker().rightIsWaiting: "waiting" else: "not waiting")
+  # debug:
+  #   log("Worker %2d: received own request (req.state: %s, left (%d): %s, right (%d): %s)\n",
+  #     myID(), $req.state,
+  #     myWorker().left,
+  #     if myWorker().leftIsWaiting: "waiting" else: "not waiting",
+  #     myWorker().right,
+  #     if myWorker().rightIsWaiting: "waiting" else: "not waiting")
 
   if req.state == Stealing and myWorker().leftIsWaiting and myWorker().rightIsWaiting:
     when WV_MaxConcurrentStealPerWorker == 1:

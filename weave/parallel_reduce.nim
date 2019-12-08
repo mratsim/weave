@@ -12,7 +12,7 @@ import
   # Standard library
   macros, typetraits,
   # Internal
-  ./parallel_macros,
+  ./parallel_macros, ./config,
   ./scheduler, ./runtime, ./contexts,
   ./datatypes/[sync_types, flowvars],
   ./instrumentation/[contracts, profilers]
@@ -163,7 +163,7 @@ macro parallelReduceImpl(loopParams: untyped, stride: int, body: untyped): untyp
 
   let withArgs = capturedTy.len > 0
 
-  let CapturedTy = ident"CapturedTy"
+  let CapturedTy = ident"CapturedTy" # workaround for GC-safe check
   if withArgs:
     result.add quote do:
       type `CapturedTy` = `capturedTy`
@@ -176,8 +176,10 @@ macro parallelReduceImpl(loopParams: untyped, stride: int, body: untyped): untyp
       remoteAccum, resultFlowvarType,
       returnStmt, finalAccum) = extractReduceConfig(body, withArgs)
 
+  let FutTy = ident"FutTy" # workaround for GC-safe check
   result.add quote do:
     static: doAssert `finalAccum` is Flowvar
+    type `FutTy` = `resultFlowvarType`
 
   # Package the body in a proc
   # --------------------------------------------------------
@@ -191,7 +193,7 @@ macro parallelReduceImpl(loopParams: untyped, stride: int, body: untyped): untyp
                 remoteAccum, returnStmt,
                 idx, env,
                 captured, capturedTy,
-                resultFlowvarType
+                FutTy
               )
 
   # Create the async function (that calls the proc that packages the loop body)
@@ -201,7 +203,7 @@ macro parallelReduceImpl(loopParams: untyped, stride: int, body: untyped): untyp
   if withArgs:
     fnCall.add(newCall(ident"addr", env))
 
-  let fut = ident"future"
+  let fut = ident"future" # will be linked to the finalAccum on the other end
 
   result.add quote do:
     proc `parReduceTask`(param: pointer) {.nimcall, gcsafe.} =
@@ -209,29 +211,45 @@ macro parallelReduceImpl(loopParams: untyped, stride: int, body: untyped): untyp
       assert not isRootTask(this)
 
       when bool(`withArgs`):
-        let (`fut`,`env`) = cast[ptr (`resultFlowvarType`,`CapturedTy`)](param)
+        let (`fut`,`env`) = cast[ptr (`FutTy`,`CapturedTy`)](param)
       else:
-        let `fut` = cast[ptr `resultFlowvarType`](param)
+        let `fut` = cast[ptr `FutTy`](param)
       let res = `fnCall`
-      `fut`.readyWith(res)
+      `fut`[].readyWith(res)
 
   # Create the task
   # --------------------------------------------------------
   result.addLoopTask(
-    parForTask, start, stop, stride, captured, CapturedTy
+    parReduceTask, start, stop, stride, captured, CapturedTy,
+    finalAccum, FutTy
   )
 
+  # echo result.toStrLit
+
+# Sanity checks
+# --------------------------------------------------------
+
+
 when isMainModule:
-  var waitableSum: Flowvar[int]
+  block:
+    proc sumReduce(n: int): int =
+      var waitableSum: Flowvar[int]
 
-  parallelReduceImpl i in 0 ..< 100, stride = 1:
-    reduce(waitableSum):
-      prologue:
-        var localSum = 0
-      fold:
-        localSum += i
-      merge(remoteSum):
-        localSum += sync(remoteSum)
-      return localSum
+      # expandMacros:
+      parallelReduceImpl i in 0 .. n, stride = 1:
+        reduce(waitableSum):
+          prologue:
+            var localSum = 0
+          fold:
+            localSum += i
+          merge(remoteSum):
+            localSum += sync(remoteSum)
+          return localSum
 
-  let sum = sync(waitableSum)
+      result = sync(waitableSum)
+
+    init(Weave)
+    let sum1M = sumReduce(1000000)
+    echo "Sum reduce(0..1000000): ", sum1M
+    doAssert sum1M == 500_000_500_000
+    exit(Weave)
