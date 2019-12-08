@@ -152,5 +152,5 @@ proc newFlowvarNode*(itemSize: uint8): FlowvarNode =
 # Public
 # -------------------------------------------
 
-proc sync*[T](fv: FlowVar[T]): T =
+proc sync*[T](fv: FlowVar[T]): T {.inline.} =
   fv.forceComplete(result)
