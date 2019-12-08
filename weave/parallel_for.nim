@@ -94,7 +94,7 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
                 nil, nil,
                 idx, env,
                 captured, capturedTy,
-                resultFvTy = newEmptyNode()
+                resultFvTy = nil
               )
 
   # Create the async function (that calls the proc that packages the loop body)

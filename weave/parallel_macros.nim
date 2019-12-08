@@ -162,7 +162,12 @@ proc packageParallelFor*(
                   ident"inline"
                 )
 
-  var params = @[resultFvTy]
+  var params: seq[NimNode]
+  if resultFvTy.isNil:
+    params.add newEmptyNode()
+  else: # Unwrap the flowvar
+    params.add nnkDotExpr.newTree(resultFvTy, ident"T")
+
   var procBody = newStmtList()
 
   if capturedVars.len > 0:
@@ -205,6 +210,7 @@ proc addLoopTask*(
     futureIdent, resultFutureType: NimNode
   ) =
   ## Add a loop task
+  ## futureIdent is the final reduction accuulator
 
   statement.expectKind nnkStmtList
   asyncFn.expectKind nnkIdent
@@ -224,7 +230,7 @@ proc addLoopTask*(
     profile(enq_deq_task):
       let task = newTaskFromCache()
       task.parent = myTask()
-      task.fn = `async_fn`
+      task.fn = `asyncFn`
       task.isLoop = true
       task.start = `start`
       task.cur = `start`
@@ -233,7 +239,8 @@ proc addLoopTask*(
       when bool(`hasFuture`):
          task.hasFuture = true
          task.futureSize = uint8(sizeof(`resultFutureType`.T))
-         let `futureIdent` = newFlowvar(myMemPool(), `resultFutureType`.T)
+         assert not `futureIdent`.isSpawned(), "Trying to override an allocated Flowvar."
+         `futureIdent` = newFlowvar(myMemPool(), `resultFutureType`.T)
       when bool(`withArgs`) and bool(`hasFuture`):
         cast[ptr (`resultFutureType`, `CapturedTySym`)](task.data.addr)[] = (`futureIdent`, `capturedVars`)
       elif bool(`withArgs`):
@@ -282,7 +289,7 @@ proc testKind(nn: NimNode, nnk: NimNodeKind) =
     printExampleSyntax()
     nn.expectKind(nnk) # Gives nice line numbers
 
-proc extractReduceConfig(body: NimNode, withArgs: bool): tuple[
+proc extractReduceConfig*(body: NimNode, withArgs: bool): tuple[
     prologue, fold, merge,
     remoteAccum, resultFlowvarType,
     returnStmt, finalAccum: NimNode
@@ -338,7 +345,7 @@ proc extractReduceConfig(body: NimNode, withArgs: bool): tuple[
     prologue = config[2][0]
     fold = config[2][1]
     merge = config[2][2]
-    remoteAccum = config[2][2][1]
+    remoteAccum = merge[1]
     returnStmt = config[2][3]
 
   # Sanity checks
@@ -352,8 +359,8 @@ proc extractReduceConfig(body: NimNode, withArgs: bool): tuple[
     error "A reduction should have 4 sections named: prologue, fold, merge and a return statement"
   prologue[1].testKind(nnkStmtList)
   fold[1].testKind(nnkStmtList)
-  merge[1].testKind(nnkStmtList)
+  merge[2].testKind(nnkStmtList)
 
-  result = (prologue[1], fold[1], merge[1],
+  result = (prologue[1], fold[1], merge[2],
             remoteAccum, resultFvTy,
             returnStmt, finalAccum)

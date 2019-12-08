@@ -51,7 +51,7 @@ proc rawSend(victimID: WorkerID, req: sink StealRequest) {.inline.}=
 proc relaySteal(victimID: WorkerID, req: sink StealRequest) {.inline.} =
   rawSend(victimID, req)
 
-proc sendSteal(victimID: WorkerID, req: sink StealRequest) =
+proc sendSteal(victimID: WorkerID, req: sink StealRequest) {.inline.} =
   ## Send a steal request
   victimID.rawSend(req)
 
@@ -65,7 +65,7 @@ proc sendSteal(victimID: WorkerID, req: sink StealRequest) =
       else:
         incCounter(stealOne)
 
-proc sendShare*(req: sink StealRequest) =
+proc sendShare*(req: sink StealRequest) {.inline.} =
   ## Send a work sharing request to parent
   myWorker().parent.rawSend(req)
 
@@ -79,7 +79,7 @@ proc sendShare*(req: sink StealRequest) =
       else:
         incCounter(shareOne)
 
-proc findVictimAndSteal(req: sink StealRequest) =
+proc findVictimAndSteal(req: sink StealRequest) {.inline.} =
   # Note:
   #   Nim manual guarantees left-to-right function evaluation.
   #   Hence in the following:
@@ -94,7 +94,7 @@ proc findVictimAndSteal(req: sink StealRequest) =
     myID(), target, globalCtx.com.thefts[target].addr)
   target.sendSteal(req)
 
-proc findVictimAndRelaySteal*(req: sink StealRequest) =
+proc findVictimAndRelaySteal*(req: sink StealRequest) {.inline.} =
   # Note:
   #   Nim manual guarantees left-to-right function evaluation.
   #   Hence in the following:
@@ -105,11 +105,8 @@ proc findVictimAndRelaySteal*(req: sink StealRequest) =
   #   and debugging that in a multithreading runtime
   #   would probably be very painful.
   let target = findVictim(req)
-  debug: log("Worker %2d: relay steal request from %d to %d (Channel 0x%.08x)\n",
-    myID(), req.thiefID, target, globalCtx.com.thefts[target].addr)
-  # TODO there seem to be a livelock here with the new queue and 16+ workers.
-  #      activating the log above solves it.
-  # The runtime gets stuck in declineAll/trySteal
+  # debug: log("Worker %2d: relay steal request from %d to %d (Channel 0x%.08x)\n",
+  #   myID(), req.thiefID, target, globalCtx.com.thefts[target].addr)
   target.relaySteal(req)
 
 # Stealing logic
