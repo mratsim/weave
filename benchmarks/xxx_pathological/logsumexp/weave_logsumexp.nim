@@ -259,10 +259,10 @@ proc main(datasetSize = 20000'i64, batchSize = 256'i64, imageLabels = 1000'i64, 
   echo '\n'
   wv_free(sanityM.buffer)
 
-  reportConfig("Sequential", 1, datasetSize, batchSize, imageLabels, textVocabulary)
+  # reportConfig("Sequential", 1, datasetSize, batchSize, imageLabels, textVocabulary)
 
-  block:
-    runBench(logsumexpSerial, datasetSize, batchSize, imageLabels)
+  # block:
+  #   runBench(logsumexpSerial, datasetSize, batchSize, imageLabels)
   # block:
   #   runBench(logsumexpSerial, datasetSize, batchSize, textVocabulary)
 
@@ -277,9 +277,9 @@ proc main(datasetSize = 20000'i64, batchSize = 256'i64, imageLabels = 1000'i64, 
   # block:
   #   runBench(logsumexpWeave, datasetSize, batchSize, textVocabulary)
 
-  reportConfig("Weave (Collapsed)" & config, nthreads, datasetSize, batchSize, imageLabels, textVocabulary)
-  block:
-    runBench(logsumexpWeaveCollapsed, datasetSize, batchSize, imageLabels)
+  # reportConfig("Weave (Collapsed)" & config, nthreads, datasetSize, batchSize, imageLabels, textVocabulary)
+  # block:
+  #   runBench(logsumexpWeaveCollapsed, datasetSize, batchSize, imageLabels)
 
   exit(Weave)
 
