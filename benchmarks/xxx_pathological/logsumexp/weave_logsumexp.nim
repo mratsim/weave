@@ -8,7 +8,7 @@
 import
   # Stdlib
   system/ansi_c, strformat, os, strutils, cpuinfo, math,
-  random,
+  random, locks,
   # Weave
   ../../../weave,
   # 3rd party
@@ -94,7 +94,7 @@ template memUsage(maxRSS, runtimeRSS, pageFaults: untyped{ident}, body: untyped)
 
 proc reportConfig(
     scheduler: string,
-    nthreads: int32, datasetSize, batchSize, imageLabels, textVocabulary: int64
+    nthreads: int, datasetSize, batchSize, imageLabels, textVocabulary: int64
   ) =
 
   echo "--------------------------------------------------------------------------"
@@ -137,7 +137,7 @@ template runBench(procName: untyped, datasetSize, batchSize, numLabels: int64) =
 
   reportBench(batchSize, numlabels, stop-start, maxRSS, runtimeRSS, pageFaults, lse)
 
-# Algo
+# Algo - Serial
 # -------------------------------------------------------
 
 proc maxSerial[T: SomeFloat](M: Matrix[T]) : T =
@@ -159,6 +159,9 @@ proc logsumexpSerial[T: SomeFloat](M: Matrix[T]): T =
 
   result = alpha + ln(result)
 
+# Algo - parallel reduction
+# -------------------------------------------------------
+
 proc maxWeave[T: SomeFloat](M: Matrix[T]) : T =
   var max: Flowvar[T]
 
@@ -170,9 +173,9 @@ proc maxWeave[T: SomeFloat](M: Matrix[T]) : T =
       fold:
         for j in 0 ..< M.ncols:
           localMax = max(localMax, M[i, j])
-          loadBalance(Weave)
+          # loadBalance(Weave)
       merge(remoteMax):
-        localMax = sync(remoteMax)
+        localMax = max(localMax, sync(remoteMax))
       return localMax
 
   result = sync(max)
@@ -191,12 +194,53 @@ proc logsumexpWeave[T: SomeFloat](M: Matrix[T]): T =
       fold:
         for j in 0 ..< M.ncols:
           localLSE += exp(M[i, j] - alpha)
-          loadBalance(Weave)
+          # loadBalance(Weave)
       merge(remoteLSE):
         localLSE += sync(remoteLSE)
       return localLSE
 
   result = alpha + ln(sync(lse))
+
+# Algo - parallel reduction collapsed
+# -------------------------------------------------------
+
+proc maxWeaveCollapsed[T: SomeFloat](M: Matrix[T]) : T =
+  var max: Flowvar[T]
+
+  parallelFor ij in 0 ..< M.nrows * M.ncols:
+    captures:{M}
+    reduce(max):
+      prologue:
+        var localMax = T(-Inf)
+      fold:
+        localMax = max(localMax, M.buffer[ij])
+      merge(remoteMax):
+        localMax = max(localMax, sync(remoteMax))
+      return localMax
+
+  result = sync(max)
+
+proc logsumexpWeaveCollapsed[T: SomeFloat](M: Matrix[T]): T =
+
+  let alpha = M.maxWeave()
+
+  var lse: Flowvar[T]
+
+  parallelFor ij in 0 ..< M.nrows * M.ncols:
+    captures:{alpha, M}
+    reduce(lse):
+      prologue:
+        var localLSE = 0.T
+      fold:
+        localLSE += exp(M.buffer[ij] - alpha)
+      merge(remoteLSE):
+        localLSE += sync(remoteLSE)
+      return localLSE
+
+  result = alpha + ln(sync(lse))
+
+# Main
+# -------------------------------------------------------
 
 proc main(datasetSize = 20000'i64, batchSize = 256'i64, imageLabels = 1000'i64, textVocabulary = 10000'i64) =
   echo "Note that a text vocabulary is often in the 50000-15000 words\n"
@@ -219,18 +263,24 @@ proc main(datasetSize = 20000'i64, batchSize = 256'i64, imageLabels = 1000'i64, 
 
   block:
     runBench(logsumexpSerial, datasetSize, batchSize, imageLabels)
-  block:
-    runBench(logsumexpSerial, datasetSize, batchSize, textVocabulary)
+  # block:
+  #   runBench(logsumexpSerial, datasetSize, batchSize, textVocabulary)
 
   const lazy = defined(WV_LazyFlowvar)
   const config = if lazy: " (lazy flowvars)"
                  else: " (eager flowvars)"
-  reportConfig("Weave" & config, 1, datasetSize, batchSize, imageLabels, textVocabulary)
+  reportConfig("Weave" & config, nthreads, datasetSize, batchSize, imageLabels, textVocabulary)
   init(Weave)
+
   block:
     runBench(logsumexpWeave, datasetSize, batchSize, imageLabels)
+  # block:
+  #   runBench(logsumexpWeave, datasetSize, batchSize, textVocabulary)
+
+  reportConfig("Weave (Collapsed)" & config, nthreads, datasetSize, batchSize, imageLabels, textVocabulary)
   block:
-    runBench(logsumexpWeave, datasetSize, batchSize, textVocabulary)
+    runBench(logsumexpWeaveCollapsed, datasetSize, batchSize, imageLabels)
+
   exit(Weave)
 
 dispatch(main)
