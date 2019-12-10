@@ -100,7 +100,7 @@ proc nqueens_ser(n, j: int32, a: CharArray): int32 =
     if example_solution.isNil:
       example_solution = wv_alloc(char, n)
       copyMem(example_solution, a, n * sizeof(char))
-      return 1
+    return 1
 
   # Try each possible position for queen `j`
   for i in 0 ..< n:
