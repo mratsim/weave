@@ -76,10 +76,6 @@ template myMetrics*: untyped =
   metrics:
     localCtx.counters
 
-# Backoff is deactivated, see
-# - https://github.com/mratsim/weave/issues/27
-# - https://github.com/mratsim/weave/pull/28
-#
 template myParking*: EventNotifier =
   globalCtx.com.parking[localCtx.worker.ID]
 

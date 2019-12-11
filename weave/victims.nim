@@ -340,7 +340,7 @@ proc shareWork*() {.inline.} =
       else:
         ascertain: myWorker().rightIsWaiting
         myWorker().rightIsWaiting = false
-      wakeup(req.thiefID) # - backoff is deactivated
+      wakeup(req.thiefID)
 
       # Now we can dequeue as we found work
       # We cannot access the steal request anymore or

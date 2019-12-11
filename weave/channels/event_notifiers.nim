@@ -48,9 +48,7 @@ import
   ../config
 
 type
-  # Need to workaround Enum not being Atomics, pending: https://github.com/nim-lang/Nim/issues/12812
-  # so we enforce its size and will cast before use
-  ConsumerState {.size: sizeof(uint8).}= enum
+  ConsumerState = enum
     # We need 4 states to solve a race condition, see (https://github.com/mratsim/weave/issues/27)
     # A child signals its parent that it goes to sleep via a steal request.
     # Its parent tries to wake it up but the child is not sleeping
@@ -76,20 +74,7 @@ type
     ## On Windows: ManuallyResetEvent and AutoResetEvent
     cond{.align: WV_CacheLinePadding.}: Cond
     lock: Lock # The lock is never used, it's just there for the condition variable
-    consumerState: ConsumerState
-
-template load(c: ConsumerState, mo: MemoryOrder): ConsumerState =
-  cast[ConsumerState](cast[var Atomic[uint8]](c.addr).load(mo))
-
-template store(c: var ConsumerState, val: ConsumerState, mo: MemoryOrder) =
-  cast[var Atomic[uint8]](c.addr).store(cast[uint8](val), mo)
-
-template compareExchange(dst, expected: var ConsumerState, target: ConsumerState, mo: MemoryOrder): bool =
-  compareExchange(
-    cast[var Atomic[uint8]](dst.addr),
-    cast[var uint8](expected.addr),
-    cast[uint8](target), mo
-  )
+    consumerState: Atomic[ConsumerState]
 
 func initialize*(en: var EventNotifier) =
   en.cond.initCond()
@@ -109,7 +94,6 @@ func intendToSleep*(en: var EventNotifier) {.inline.} =
   fence(moRelease)
   en.consumerState.store(IntendToSleep, moRelaxed)
 
-
 func wait*(en: var EventNotifier) {.inline.} =
   ## Wait until we are signaled of an event
   ## Thread is parked and does not consume CPU resources
@@ -126,10 +110,6 @@ func wait*(en: var EventNotifier) {.inline.} =
   fence(moRelease)
   en.consumerState.store(Busy, moRelaxed)
 
-# TODO there is a deadlock at the moment as a worker sending a
-#      WAITING steal request and then actually waiting is not atomic
-# see https://github.com/mratsim/weave/issues/27
-# and https://github.com/mratsim/weave/pull/28
 func notify*(en: var EventNotifier) {.inline.} =
   ## Signal a thread that it can be unparked
 
