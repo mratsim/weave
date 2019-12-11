@@ -69,7 +69,7 @@ proc globalCleanup() =
     joinThread(globalCtx.threadpool[i])
 
   discard pthread_barrier_destroy(globalCtx.barrier)
-  deallocShared(globalCtx.threadpool)
+  wv_free(globalCtx.threadpool)
 
   # Channels, each thread cleaned its channels
   # We just need to reclaim the memory
