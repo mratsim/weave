@@ -140,7 +140,7 @@ proc cacheMaintenanceEx[T](lal: ptr LookAsideList[T]) =
 
 proc setCacheMaintenanceEx*[T](hook: var tuple[onHeartbeat: proc(env: pointer){.nimcall.}, env: pointer],
                  lal: var LookAsideList[T]) {.inline.} =
-  hook.onHeartbeat = cast[proc(env: pointer) {.nimcall.}](cacheMaintenanceEx[T])
+  hook.onHeartbeat = cast[typeof hook.onHeartbeat](cacheMaintenanceEx[T])
   hook.env = lal.addr
 
   lal.registeredAt = hook.addr
