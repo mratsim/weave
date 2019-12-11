@@ -36,7 +36,7 @@ type
     # Theft channels are bounded to "NumWorkers * WV_MaxConcurrentStealPerWorker"
     thefts*: ptr UncheckedArray[ChannelMpscUnboundedBatch[StealRequest]]
     tasks*: ptr UncheckedArray[Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]]]
-    # parking*: ptr UncheckedArray[EventNotifier]
+    parking*: ptr UncheckedArray[EventNotifier]
     # Backoff is deactivated, see
     # - https://github.com/mratsim/weave/issues/27
     # - https://github.com/mratsim/weave/pull/28

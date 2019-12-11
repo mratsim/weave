@@ -199,4 +199,4 @@ proc lastStealAttemptFailure*(req: sink StealRequest) =
     sendShare(req)
     ascertain: not myWorker().isWaiting
     myWorker().isWaiting = true
-    # myParking().wait() # Thread is blocked here until woken up.
+    myParking().wait() # Thread is blocked here until woken up.

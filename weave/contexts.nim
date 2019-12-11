@@ -80,16 +80,16 @@ template myMetrics*: untyped =
 # - https://github.com/mratsim/weave/issues/27
 # - https://github.com/mratsim/weave/pull/28
 #
-# template myParking*: EventNotifier =
-#   globalCtx.com.parking[localCtx.worker.ID]
-#
-# template wakeup*(target: WorkerID) =
-#   mixin notify
-#   debugTermination:
-#     log("Worker %2d: waking up child %2d\n", localCtx.worker.ID, target)
-#   globalCtx.com.parking[target].notify()
-#
-# export event_notifiers.wait
+template myParking*: EventNotifier =
+  globalCtx.com.parking[localCtx.worker.ID]
+
+template wakeup*(target: WorkerID) =
+  mixin notify
+  debugTermination:
+    log("Worker %2d: waking up child %2d\n", localCtx.worker.ID, target)
+  globalCtx.com.parking[target].notify()
+
+export event_notifiers.wait
 
 # Task caching
 # ----------------------------------------------------------------------------------

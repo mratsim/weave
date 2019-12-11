@@ -139,7 +139,7 @@ iterator traverseBreadthFirst*(start, maxID: WorkerID): WorkerID =
   ## - O(1) space, O(n) operations
   ## - traversal can start from any subtrees
 
-  assert start in 0 .. maxID
+  preCondition: start in 0 .. maxID
 
   var
     levelStart = start # Index of the node starting the current depth

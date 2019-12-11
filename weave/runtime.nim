@@ -40,7 +40,7 @@ proc init*(_: type Weave) =
   globalCtx.threadpool = wv_alloc(Thread[WorkerID], workforce())
   globalCtx.com.thefts = wv_alloc(ChannelMpscUnboundedBatch[StealRequest], workforce())
   globalCtx.com.tasks = wv_alloc(Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]], workforce())
-  # globalCtx.com.parking = wv_alloc(EventNotifier, workforce())
+  globalCtx.com.parking = wv_alloc(EventNotifier, workforce())
   discard pthread_barrier_init(globalCtx.barrier, nil, workforce())
 
   # Lead thread - pinned to CPU 0
@@ -216,9 +216,9 @@ proc loadBalance*(_: type Weave) {.gcsafe.} =
   shareWork()
 
   # Check also channels on behalf of the children workers that are managed.
-  if myThieves().peek() != 0:
-    #  myWorker().leftIsWaiting and hasThievesProxy(myWorker().left) or
-    #  myWorker().rightIsWaiting and hasThievesProxy(myWorker().right):
+  if myThieves().peek() != 0 or
+      myWorker().leftIsWaiting and hasThievesProxy(myWorker().left) or
+      myWorker().rightIsWaiting and hasThievesProxy(myWorker().right):
     var req: StealRequest
     while recv(req):
       dispatchTasks(req)

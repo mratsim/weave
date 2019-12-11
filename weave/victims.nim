@@ -53,10 +53,11 @@ proc approxNumThieves(): int32 {.inline.} =
   #   - We already read 1 steal request before trying to split so need to add it back.
   #   - Workers may send steal requests before actually running out-of-work
   result = 1 + myThieves().peek()
-  debug: log("Worker %2d: has %ld steal requests\n", myID(), approxNumThieves)
+  debug: log("Worker %2d: has %ld steal requests\n", myID(), result)
 
 proc approxNumThievesProxy(worker: WorkerID): int32 =
   # Estimate the number of idle workers of a worker subtree
+  if worker == Not_a_worker: return 0
   result = 0
   for w in traverseBreadthFirst(worker, maxID()):
     result += getThievesOf(w).peek()
@@ -108,13 +109,13 @@ proc recv*(req: var StealRequest): bool {.inline.} =
       # Check the next steal request
       result = myThieves().tryRecv(req)
 
-    # # When a child thread backs off, it is parked by the OS
-    # # We need to handle steal requests on its behalf to avoid latency
-    # if not result and myWorker().leftIsWaiting:
-    #   result = recvProxy(req, myWorker().left)
+    # When a child thread backs off, it is parked by the OS
+    # We need to handle steal requests on its behalf to avoid latency
+    if not result and myWorker().leftIsWaiting:
+      result = recvProxy(req, myWorker().left)
 
-    # if not result and myWorker().rightIsWaiting:
-    #   result = recvProxy(req, myWorker().right)
+    if not result and myWorker().rightIsWaiting:
+      result = recvProxy(req, myWorker().right)
 
   postCondition: not result or (result and req.state != Waiting)
 
@@ -254,10 +255,10 @@ proc splitAndSend*(task: Task, req: sink StealRequest) =
     # Split iteration range according to given strategy
     # [start, stop) => [start, split) + [split, end)
     var guessThieves = approxNumThieves()
-    # if myWorker().leftIsWaiting:
-    #   guessThieves += approxNumThievesProxy(myWorker().left)
-    # if myWorker().rightIsWaiting:
-    #   guessThieves += approxNumThievesProxy(myWorker().right)
+    if myWorker().leftIsWaiting:
+      guessThieves += approxNumThievesProxy(myWorker().left)
+    if myWorker().rightIsWaiting:
+      guessThieves += approxNumThievesProxy(myWorker().right)
     let split = split(task, guessThieves)
 
     # New task gets the upper half
@@ -339,7 +340,7 @@ proc shareWork*() {.inline.} =
       else:
         ascertain: myWorker().rightIsWaiting
         myWorker().rightIsWaiting = false
-      # wakeup(req.thiefID) - backoff is deactivated
+      wakeup(req.thiefID) # - backoff is deactivated
 
       # Now we can dequeue as we found work
       # We cannot access the steal request anymore or
