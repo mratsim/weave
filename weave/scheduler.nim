@@ -9,7 +9,7 @@ import
   ./instrumentation/[contracts, profilers, loggers],
   ./primitives/barriers,
   ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars, sparsesets, binary_worker_trees, bounded_queues],
-  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_spsc_single, event_notifiers],
+  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_spsc_single],
   ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
   ./contexts, ./config,
   ./victims, ./loop_splitting,
@@ -84,7 +84,8 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
   myWorker().deque.initialize()
   myWorker().workSharingRequests.initialize()
 
-  # myParking().initialize() - Backoff deactivated
+  Backoff:
+    myParking().initialize()
 
   myTodoBoxes().initialize()
   for i in 0 ..< myTodoBoxes().len:
@@ -232,7 +233,8 @@ proc threadLocalCleanup*() {.gcsafe.} =
     ascertain: myTodoBoxes().access(i).isEmpty()
     localCtx.stealCache.access(i).victims.delete()
   myTodoBoxes().delete()
-  # `=destroy`(myParking()) # Backoff deactivated
+  Backoff:
+    `=destroy`(myParking())
 
   # The task cache is full of tasks
   delete(localCtx.taskCache)

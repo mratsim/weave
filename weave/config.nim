@@ -50,6 +50,11 @@ const WV_StealEarly* {.intdefine.} = 0
   ## steal requests in advance. This might help hide stealing latencies
   ## or worsen message overhead.
 
+const WV_EnableBackoff* {.booldefine.} = true
+  ## Workers that fail to find work will sleep. This saves CPU at the price
+  ## of slight latency as the workers' parent nodes need to manage their
+  ## steal requests queues when they sleep and there is latency to wake up.
+
 type
   StealKind* {.pure.}= enum
     one
@@ -93,6 +98,10 @@ template LazyFV*(body: untyped): untyped =
 
 template EagerFV*(body: untyped): untyped =
   when not defined(WV_LazyFlowvar):
+    body
+
+template Backoff*(body: untyped): untyped =
+  when WV_EnableBackoff:
     body
 
 # Dynamic defines

@@ -9,7 +9,7 @@ import
   ./datatypes/[sparsesets, sync_types, context_thread_local, binary_worker_trees],
   ./contexts, ./targets,
   ./instrumentation/[contracts, profilers, loggers],
-  ./channels/[channels_mpsc_unbounded_batch, event_notifiers],
+  ./channels/channels_mpsc_unbounded_batch,
   ./memory/persistacks,
   ./config, ./signals,
   std/atomics
@@ -195,7 +195,10 @@ proc lastStealAttemptFailure*(req: sink StealRequest) =
     req.state = Waiting
     debugTermination:
       log("Worker %2d: sends state passively WAITING to its parent worker %d\n", myID(), myWorker().parent)
+    Backoff:
+      myParking().intendToSleep()
     sendShare(req)
     ascertain: not myWorker().isWaiting
     myWorker().isWaiting = true
-    # myParking().wait() # Thread is blocked here until woken up.
+    Backoff: # Thread is blocked here until woken up.
+      myParking().wait()
