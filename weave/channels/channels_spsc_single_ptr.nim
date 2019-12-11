@@ -13,7 +13,7 @@ import
 
 
 type
-  ChannelSpscSinglePtr*[T: ptr] = ChannelRaw
+  ChannelSpscSinglePtr*[T: ptr] = object
     ## Wait-free bounded single-producer single-consumer channel
     ## that can only buffer a single item (a Picasso task)
     ## Properties:
@@ -26,11 +26,6 @@ type
     ##   - No extra indirection to access the item, the buffer is inline the channel
     ##   - Linearizable
     ##   - Specialized for pointers
-    ##     Using different ptr subtypes will be type-safe
-    ##     but internally they are voided to avoid code duplication
-    ##     due to generics: https://github.com/nim-lang/Nim/issues/12630
-    ##     It is expected though that the compiler inlines (and so duplicates)
-    ##     everything as the code is very small.
     ##
     ## Usage:
     ##   - Requires a pointer type
@@ -49,39 +44,7 @@ type
     ## - Messages are guaranteed to be delivered
     ## - Messages will be delivered exactly once
     ## - Linearizability
-  ChannelRaw = object
     buffer {.align:WV_CacheLinePadding.}: Atomic[pointer] # Ensure proper padding if used in sequence of channels
-
-# Internal type-erased implementation
-# ---------------------------------------------------------------
-
-proc `=`(dest: var ChannelRaw,source: ChannelRaw) {.error: "A channel cannot be copied".}
-
-func clearImpl(chan: var ChannelRaw) {.inline.} =
-  chan.buffer.store(nil, moRelaxed)
-
-func tryRecvImpl(chan: var ChannelRaw, dst: var pointer): bool {.inline, nodestroy.} =
-  let p = chan.buffer.load(moAcquire)
-  if p.isNil:
-    return false
-  # need atomic "move" - https://github.com/nim-lang/Nim/issues/12631
-  dst = p
-  chan.buffer.store(nil, moRelease)
-  return true
-
-func trySendImpl(chan: var ChannelRaw, src: sink pointer): bool {.inline, nodestroy.} =
-  preCondition:
-    not src.isNil
-
-  let p = chan.buffer.load(moAcquire)
-  if not p.isNil:
-    return false
-  # need atomic "sink" - https://github.com/nim-lang/Nim/issues/12631
-  chan.buffer.store(src, moRelease)
-  return true
-
-# Public well-typed implementation
-# ------------------------------------------------------------------------------
 
 func initialize*[T](chan: var ChannelSpscSinglePtr[T]) {.inline.} =
   ## Creates a new Shared Memory Single Producer Single Consumer Bounded channel
@@ -98,13 +61,13 @@ func initialize*[T](chan: var ChannelSpscSinglePtr[T]) {.inline.} =
   ## in arrays.
 
   # We don't need to zero-mem the padding
-  clearImpl(chan)
+  chan.buffer.store(nil, moRelaxed)
 
 func clear*[T](chan: var ChannelSpscSinglePtr[T]) {.inline.} =
   ## Reinitialize the data in the channel
   ##
   ## This is not thread-safe.
-  clearImpl(chan)
+  chan.buffer.store(nil, moRelaxed)
 
 func tryRecv*[T](chan: var ChannelSpscSinglePtr[T], dst: var T): bool {.inline.} =
   ## Try receiving the item buffered in the channel
@@ -117,7 +80,13 @@ func tryRecv*[T](chan: var ChannelSpscSinglePtr[T], dst: var T): bool {.inline.}
     if not data.isNil:
       log("Channel SPSC 0x%.08x: receiving     0x%.08x\n", chan.addr, data)
 
-  chan.tryRecvImpl(cast[var pointer](dst.addr))
+  let p = chan.buffer.load(moAcquire)
+  if p.isNil:
+    return false
+  # need atomic "move" - https://github.com/nim-lang/Nim/issues/12631
+  dst = cast[T](p)
+  chan.buffer.store(nil, moRelease)
+  return true
 
 func trySend*[T](chan: var ChannelSpscSinglePtr[T], src: sink T): bool {.inline.} =
   ## Try sending an item into the channel
@@ -129,7 +98,15 @@ func trySend*[T](chan: var ChannelSpscSinglePtr[T], src: sink T): bool {.inline.
     if not data.isNil:
       log("Channel SPSC 0x%.08x: sending       0x%.08x\n", chan.addr, src)
 
-  chan.trySendImpl(src)
+  preCondition:
+    not src.isNil
+
+  let p = chan.buffer.load(moAcquire)
+  if not p.isNil:
+    return false
+  # need atomic "sink" - https://github.com/nim-lang/Nim/issues/12631
+  chan.buffer.store(src, moRelease)
+  return true
 
 func isEmpty*[T](chan: var ChannelSpscSinglePtr[T]): bool {.inline.} =
   chan.buffer.load(moRelaxed).isNil
