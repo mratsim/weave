@@ -200,4 +200,4 @@ when isMainModule:
 
       echo f
 
-    # main2()
+    main2()

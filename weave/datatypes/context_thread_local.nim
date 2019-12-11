@@ -75,9 +75,9 @@ type
     stealCache*: Persistack[WV_MaxConcurrentStealPerWorker, deref(StealRequest)]
     # Leader thread only - Whole runtime is quiescent
     runtimeIsQuiescent*: bool
+    signaledTerminate*: bool
     when defined(WV_Metrics):
       counters*: Counters
-    signaledTerminate*: bool
 
   Counters* = object
     tasksExec*: int
@@ -106,5 +106,9 @@ func initialize*(w: var Worker, maxID: WorkerID) {.inline.} =
 
   if w.left == Not_a_worker:
     w.leftIsWaiting = true
+  else:
+    w.leftIsWaiting = false
   if w.right == Not_a_worker:
     w.rightIsWaiting = true
+  else:
+    w.rightIsWaiting = false

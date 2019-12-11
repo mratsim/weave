@@ -8,7 +8,7 @@
 import
   ./instrumentation/[contracts, profilers, loggers],
   ./primitives/barriers,
-  ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars, sparsesets, binary_worker_trees],
+  ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars, sparsesets, binary_worker_trees, bounded_queues],
   ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_spsc_single, event_notifiers],
   ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
   ./contexts, ./config,
@@ -16,75 +16,73 @@ import
   ./thieves, ./workers,
   ./random/rng
 
-
-# Public routines
-# ----------------------------------------------------------------------------------
-
-
 # Local context
 # ----------------------------------------------------------------------------------
 
+# Caching description:
+#
+# Thread-local objects, with a lifetime equal to the thread lifetime
+# are allocated directly with no caching.
+#
+# Short-lived synchronization objects are allocated depending on their characteristics
+#
+# - Steal requests:
+#   are bounded, exchanged between threads but by design
+#   a thread knows when its steal request is unused:
+#   - either it received a corresponding task
+#   - or the steal request was return
+#
+#   So caching is done via a ``Persistack``, a simple stack
+#   that can either recycle an object or be notified that object is unused.
+#   I.e. even after lending an object its reference persists in the stack.
+#
+# - Task channels:
+#   Similarly, everytime a steal request is created
+#   a channel to receive the task must be with the exact same lifetime.
+#   A persistack is used as well.
+#
+# - Flowvars / Futures:
+#   are unbounded, visible to users.
+#   In the usual case the thread that allocated them, collect them,
+#   if the flowvar is awaited in the proc that spawned it.
+#   A flowvar may be stolen by another thread if it is returned (not tested at the moment).
+#   Tree and recursive algorithms might spawn a huge number of flowvars initially.
+#
+#   Caching is done via a ``thread-safe memory pool``.
+#   If WV_LazyFlowvar, they are allocated on the stack until we have
+#   to extend their lifetime beyond the task stack.
+#
+# - Tasks:
+#   are unbounded and either exchanged between threads in case of imbalance
+#   or stay within their threads.
+#   Tree and recursive algorithms might create a huge number of tasks initially.
+#
+#   Caching is done via a ``look-aside list`` that cooperate with the memory pool
+#   to adaptatively store/release tasks to it.
+#
+# Note that the memory pool for flowvars and tasks is able to release memory back to the OS
+# The memory pool provides a deterministic heartbeat, every ~N allocations (N depending on the arena size)
+# expensive pool maintenance is done and amortized.
+# The lookaside list hooks in into this heartbeat for its own adaptative processing
+
+# The mempool is initialized in worker_entry_fn
+# as the main thread needs it for the root task
 proc init*(ctx: var TLContext) {.gcsafe.} =
   ## Initialize the thread-local context of a worker (including the lead worker)
+  metrics:
+    zeroMem(ctx.counters.addr, sizeof(ctx.counters))
+  zeroMem(ctx.thefts.addr, sizeof(ctx.thefts))
+  ctx.runtimeIsQuiescent = false
+  ctx.signaledTerminate = false
 
-  # Memory
-  # -----------------------------------------------------------
-
-  # Caching description:
-  #
-  # Thread-local objects, with a lifetime equal to the thread lifetime
-  # are allocated directly with no caching.
-  #
-  # Short-lived synchronization objects are allocated depending on their characteristics
-  #
-  # - Steal requests:
-  #   are bounded, exchanged between threads but by design
-  #   a thread knows when its steal request is unused:
-  #   - either it received a corresponding task
-  #   - or the steal request was return
-  #
-  #   So caching is done via a ``Persistack``, a simple stack
-  #   that can either recycle an object or be notified that object is unused.
-  #   I.e. even after lending an object its reference persists in the stack.
-  #
-  # - Task channels:
-  #   Similarly, everytime a steal request is created
-  #   a channel to receive the task must be with the exact same lifetime.
-  #   A persistack is used as well.
-  #
-  # - Flowvars / Futures:
-  #   are unbounded, visible to users.
-  #   In the usual case the thread that allocated them, collect them,
-  #   if the flowvar is awaited in the proc that spawned it.
-  #   A flowvar may be stolen by another thread if it is returned (not tested at the moment).
-  #   Tree and recursive algorithms might spawn a huge number of flowvars initially.
-  #
-  #   Caching is done via a ``thread-safe memory pool``.
-  #   If WV_LazyFlowvar, they are allocated on the stack until we have
-  #   to extend their lifetime beyond the task stack.
-  #
-  # - Tasks:
-  #   are unbounded and either exchanged between threads in case of imbalance
-  #   or stay within their threads.
-  #   Tree and recursive algorithms might create a huge number of tasks initially.
-  #
-  #   Caching is done via a ``look-aside list`` that cooperate with the memory pool
-  #   to adaptatively store/release tasks to it.
-  #
-  # Note that the memory pool for flowvars and tasks is able to release memory back to the OS
-  # The memory pool provides a deterministic heartbeat, every ~N allocations (N depending on the arena size)
-  # expensive pool maintenance is done and amortized.
-  # The lookaside list hooks in into this heartbeat for its own adaptative processing
-
-  # The mempool is initialized in worker_entry_fn
-  # as the main thread needs it for the root task
   ctx.taskCache.initialize(tID = myID(), freeFn = memory_pools.recycle)
   myMemPool.hook.setCacheMaintenanceEx(ctx.taskCache)
 
   # Worker
   # -----------------------------------------------------------
-  myWorker().deque.initialize()
   myWorker().initialize(maxID())
+  myWorker().deque.initialize()
+  myWorker().workSharingRequests.initialize()
 
   # myParking().initialize() - Backoff deactivated
 
@@ -115,6 +113,10 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
     let (sStart, sStop) = localCtx.stealCache.reservedMemRange()
     log("Worker %2d: steal requests cache range 0x%.08x-0x%.08x\n",
       myID(), sStart, sStop)
+
+  postCondition: myWorker().workSharingRequests.isEmpty()
+  postCondition: not ctx.signaledTerminate
+  postCondition: not myWorker().isWaiting
 
   # Thread-Local Profiling
   # -----------------------------------------------------------

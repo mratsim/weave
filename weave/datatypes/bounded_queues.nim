@@ -32,6 +32,13 @@ type
     # When they are the same the queue is empty.
     # When the difference in absolute value is capacity, the queue is full.
 
+func initialize*(q: var BoundedQueue) {.inline.} =
+  ## Zero out the index
+  # Necessary for the master thread as the queue would not be restored to
+  # a fresh state in between runtime init/exit
+  q.front = 0
+  q.back = 0
+
 func len*(q: BoundedQueue): int {.inline.} =
   result = q.back - q.front
   if result < 0:

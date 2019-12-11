@@ -153,7 +153,7 @@ when isMainModule:
 
     echo "Simple parallel for"
     echo "-------------------------"
-    # main()
+    main()
     echo "-------------------------"
 
   block: # Capturing outside scope
@@ -172,7 +172,7 @@ when isMainModule:
 
     echo "\n\nCapturing outside variables"
     echo "-------------------------"
-    # main2()
+    main2()
     echo "-------------------------"
 
 
@@ -189,7 +189,7 @@ when isMainModule:
 
     echo "\n\nNested loops"
     echo "-------------------------"
-    # main3()
+    main3()
     echo "-------------------------"
 
 
