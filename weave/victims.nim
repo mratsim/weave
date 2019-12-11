@@ -28,19 +28,20 @@ proc hasThievesProxy*(worker: WorkerID): bool =
       return true
   return false
 
-proc recvProxy(req: var StealRequest, worker: WorkerID): bool =
-  ## Receives steal requests on behalf of child workers
-  ## Note that on task reception, children are waken up
-  ## and tasks are sent to them before thieves so this should happen rarely
-  if worker == Not_a_worker:
-    return false
+Backoff:
+  proc recvProxy(req: var StealRequest, worker: WorkerID): bool =
+    ## Receives steal requests on behalf of child workers
+    ## Note that on task reception, children are waken up
+    ## and tasks are sent to them before thieves so this should happen rarely
+    if worker == Not_a_worker:
+      return false
 
-  profile(send_recv_req):
-    for w in traverseBreadthFirst(worker, maxID()):
-      result = getThievesOf(w).tryRecv(req)
-      if result:
-        return true
-  return false
+    profile(send_recv_req):
+      for w in traverseBreadthFirst(worker, maxID()):
+        result = getThievesOf(w).tryRecv(req)
+        if result:
+          return true
+    return false
 
 # Victims - Adaptative task splitting
 # ----------------------------------------------------------------------------------
@@ -55,13 +56,14 @@ proc approxNumThieves(): int32 {.inline.} =
   result = 1 + myThieves().peek()
   debug: log("Worker %2d: has %ld steal requests\n", myID(), result)
 
-proc approxNumThievesProxy(worker: WorkerID): int32 =
-  # Estimate the number of idle workers of a worker subtree
-  if worker == Not_a_worker: return 0
-  result = 0
-  for w in traverseBreadthFirst(worker, maxID()):
-    result += getThievesOf(w).peek()
-  debug: log("Worker %2d: found %ld steal requests addressed to its child %d and grandchildren\n", myID(), result, worker)
+Backoff:
+  proc approxNumThievesProxy(worker: WorkerID): int32 =
+    # Estimate the number of idle workers of a worker subtree
+    if worker == Not_a_worker: return 0
+    result = 0
+    for w in traverseBreadthFirst(worker, maxID()):
+      result += getThievesOf(w).peek()
+    debug: log("Worker %2d: found %ld steal requests addressed to its child %d and grandchildren\n", myID(), result, worker)
 
 # Victims - Steal requests handling
 # ----------------------------------------------------------------------------------
@@ -109,13 +111,14 @@ proc recv*(req: var StealRequest): bool {.inline.} =
       # Check the next steal request
       result = myThieves().tryRecv(req)
 
-    # When a child thread backs off, it is parked by the OS
-    # We need to handle steal requests on its behalf to avoid latency
-    if not result and myWorker().leftIsWaiting:
-      result = recvProxy(req, myWorker().left)
+    Backoff:
+      # When a child thread backs off, it is parked by the OS
+      # We need to handle steal requests on its behalf to avoid latency
+      if not result and myWorker().leftIsWaiting:
+        result = recvProxy(req, myWorker().left)
 
-    if not result and myWorker().rightIsWaiting:
-      result = recvProxy(req, myWorker().right)
+      if not result and myWorker().rightIsWaiting:
+        result = recvProxy(req, myWorker().right)
 
   postCondition: not result or (result and req.state != Waiting)
 
@@ -255,10 +258,11 @@ proc splitAndSend*(task: Task, req: sink StealRequest) =
     # Split iteration range according to given strategy
     # [start, stop) => [start, split) + [split, end)
     var guessThieves = approxNumThieves()
-    if myWorker().leftIsWaiting:
-      guessThieves += approxNumThievesProxy(myWorker().left)
-    if myWorker().rightIsWaiting:
-      guessThieves += approxNumThievesProxy(myWorker().right)
+    Backoff:
+      if myWorker().leftIsWaiting:
+        guessThieves += approxNumThievesProxy(myWorker().left)
+      if myWorker().rightIsWaiting:
+        guessThieves += approxNumThievesProxy(myWorker().right)
     let split = split(task, guessThieves)
 
     # New task gets the upper half
@@ -340,7 +344,8 @@ proc shareWork*() {.inline.} =
       else:
         ascertain: myWorker().rightIsWaiting
         myWorker().rightIsWaiting = false
-      wakeup(req.thiefID)
+      Backoff:
+        wakeup(req.thiefID)
 
       # Now we can dequeue as we found work
       # We cannot access the steal request anymore or

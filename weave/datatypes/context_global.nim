@@ -8,11 +8,13 @@
 import
   ../channels/channels_mpsc_unbounded_batch,
   ../channels/channels_spsc_single_ptr,
-  ../channels/event_notifiers,
   ../memory/[persistacks, memory_pools],
   ../config,
   ../primitives/barriers,
   ./sync_types, ./binary_worker_trees
+
+when WV_EnableBackoff:
+  import ../channels/event_notifiers
 
 # Global / inter-thread communication channels
 # ----------------------------------------------------------------------------------
@@ -36,7 +38,8 @@ type
     # Theft channels are bounded to "NumWorkers * WV_MaxConcurrentStealPerWorker"
     thefts*: ptr UncheckedArray[ChannelMpscUnboundedBatch[StealRequest]]
     tasks*: ptr UncheckedArray[Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]]]
-    parking*: ptr UncheckedArray[EventNotifier]
+    when static(WV_EnableBackoff):
+      parking*: ptr UncheckedArray[EventNotifier]
 
   GlobalContext* = object
     com*: ComChannels

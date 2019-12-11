@@ -49,11 +49,12 @@ proc signalTerminate*(_: pointer) {.gcsafe.} =
   if myWorker().left != Not_a_worker:
     # Send the terminate signal
     asyncSignal(signalTerminate, globalCtx.com.tasks[myWorker().left].access(0))
-    # Wake the worker up so that it can process the terminate signal
-    wakeup(myWorker().left)
+    Backoff: # Wake the worker up so that it can process the terminate signal
+      wakeup(myWorker().left)
   if myWorker().right != Not_a_worker:
     asyncSignal(signalTerminate, globalCtx.com.tasks[myWorker().right].access(0))
-    wakeup(myWorker().right)
+    Backoff:
+      wakeup(myWorker().right)
 
   Worker:
     # When processing this signal for our queue, it was counted
