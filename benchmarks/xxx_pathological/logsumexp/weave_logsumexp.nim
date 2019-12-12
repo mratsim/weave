@@ -254,7 +254,7 @@ proc maxWeaveStaged[T: SomeFloat](M: Matrix[T]) : T =
     loop:
       for j in 0 ..< M.ncols:
         localMax = max(localMax, M[i, j])
-        # loadBalance(Weave)
+        loadBalance(Weave)
     epilogue:
       lockAddr[].acquire()
       maxAddr[] = max(maxAddr[], localMax)
@@ -284,7 +284,7 @@ proc logsumexpWeaveStaged[T: SomeFloat](M: Matrix[T]): T =
     loop:
       for j in 0 ..< M.ncols:
         localLSE += exp(M[i, j] - alpha)
-        # loadBalance(Weave)
+        loadBalance(Weave)
     epilogue:
       lockAddr[].acquire()
       lseAddr[] += localLSE
@@ -314,12 +314,12 @@ proc main(datasetSize = 20000'i64, batchSize = 256'i64, imageLabels = 1000'i64, 
   echo '\n'
   wv_free(sanityM.buffer)
 
-  reportConfig("Sequential", 1, datasetSize, batchSize, imageLabels, textVocabulary)
+  # reportConfig("Sequential", 1, datasetSize, batchSize, imageLabels, textVocabulary)
 
-  block:
-    runBench(logsumexpSerial, datasetSize, batchSize, imageLabels)
-  block:
-    runBench(logsumexpSerial, datasetSize, batchSize, textVocabulary)
+  # block:
+  #   runBench(logsumexpSerial, datasetSize, batchSize, imageLabels)
+  # block:
+  #   runBench(logsumexpSerial, datasetSize, batchSize, textVocabulary)
 
   const lazy = defined(WV_LazyFlowvar)
   const config = if lazy: " (lazy flowvars)"
@@ -341,8 +341,8 @@ proc main(datasetSize = 20000'i64, batchSize = 256'i64, imageLabels = 1000'i64, 
   reportConfig("Weave (Staged)" & config, nthreads, datasetSize, batchSize, imageLabels, textVocabulary)
   block:
     runBench(logsumexpWeaveStaged, datasetSize, batchSize, imageLabels)
-  block:
-    runBench(logsumexpWeaveStaged, datasetSize, batchSize, textVocabulary)
+  # block:
+  #   runBench(logsumexpWeaveStaged, datasetSize, batchSize, textVocabulary)
 
   exit(Weave)
 
