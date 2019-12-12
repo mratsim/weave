@@ -228,6 +228,7 @@ proc addLoopTask*(
 
   if hasFuture:
     statement.add quote do:
+      if likely(`stop`-`start` != 0):
         when defined(WV_profile):
           # TODO profiling templates visibility issue
           timer_start(timer_enq_deq_task)
@@ -253,6 +254,7 @@ proc addLoopTask*(
             timer_stop(timer_enq_deq_task)
   else:
     statement.add quote do:
+      if likely(`stop`-`start` != 0):
         when defined(WV_profile):
           # TODO profiling templates visibility issue
           timer_start(timer_enq_deq_task)
