@@ -238,7 +238,7 @@ proc barrierWorkerThread() {.gcsafe.} =
 
   # Execution continues but the runtime is quiescent until new tasks
   # are created
-  postCondition: localCtx.SignaledContinue
+  postCondition: localCtx.signaled == SignaledContinue
 
   debugTermination:
     log(">>> Worker %2d leaves barrier <<<\n", myID())

@@ -40,7 +40,7 @@ proc asyncSignal(fn: proc (_: pointer) {.nimcall, gcsafe.}, chan: var ChannelSps
     postCondition: signalSent
 
 proc signalTerminate*(_: pointer) {.gcsafe.} =
-  preCondition: localCtx.signaled == NotSignaled
+  preCondition: localCtx.signaled != SignaledTerminate
 
   # 1. Terminating means everyone ran out of tasks
   #    so their cache for task channels should be full

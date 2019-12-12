@@ -116,7 +116,7 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
       myID(), sStart, sStop)
 
   postCondition: myWorker().workSharingRequests.isEmpty()
-  postCondition: not ctx.signaledTerminate
+  postCondition: ctx.signaled == NotSignaled
   postCondition: not myWorker().isWaiting
 
   # Thread-Local Profiling
