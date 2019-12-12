@@ -66,7 +66,7 @@ template parallelReduceWrapper(
   returnStmt
 
 macro parallelReduceImpl*(loopParams: untyped, stride: int, body: untyped): untyped =
-  ## Parallel for loop
+  ## Parallel reduce loop
   ## Syntax:
   ##
   ##   var waitableSum: Flowvar[int]
@@ -148,6 +148,7 @@ macro parallelReduceImpl*(loopParams: untyped, stride: int, body: untyped): unty
   ##   of suffer from data dependency latency (3 or 4 cycles)
   ##   https://software.intel.com/sites/landingpage/IntrinsicsGuide/#techs=SSE&expand=158
   ##   The reduction becomes memory-bound instead of CPU-latency-bound.
+  {.warning: "Parallel reduction is experimental. Speedup compared to serial execution is not guaranteed. It is recommended to use parallelForStaged instead.".}
 
   result = newStmtList()
 
@@ -225,7 +226,7 @@ macro parallelReduceImpl*(loopParams: untyped, stride: int, body: untyped): unty
     finalAccum, FutTy
   )
 
-  echo result.toStrLit
+  # echo result.toStrLit
 
 # Sanity checks
 # --------------------------------------------------------

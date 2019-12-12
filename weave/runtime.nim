@@ -223,3 +223,13 @@ proc loadBalance*(_: type Weave) {.gcsafe.} =
     var req: StealRequest
     while recv(req):
       dispatchTasks(req)
+
+proc getThreadId*(_: type Weave): int {.inline.} =
+  ## Returns the Weave ID of the current executing thread
+  ## ID is in the range 0 ..< WEAVE_NUM_THREADS
+  ## With 0 being the lead thread and WEAVE_NUM_THREADS = min(countProcessors, getEnv"WEAVE_NUM_THREADS")
+  myID().int
+
+proc getNumThreads*(_: type Weave): int {.inline.} =
+  ## Returns the number of threads available in Weave threadpool
+  workforce().int

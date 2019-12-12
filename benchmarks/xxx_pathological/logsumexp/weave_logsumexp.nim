@@ -162,7 +162,7 @@ proc logsumexpSerial[T: SomeFloat](M: Matrix[T]): T =
 # Algo - parallel reduction
 # -------------------------------------------------------
 
-proc maxWeave[T: SomeFloat](M: Matrix[T]) : T =
+proc maxWeaveReduce[T: SomeFloat](M: Matrix[T]) : T =
   var max: Flowvar[T]
 
   parallelFor i in 0 ..< M.nrows:
@@ -173,16 +173,16 @@ proc maxWeave[T: SomeFloat](M: Matrix[T]) : T =
       fold:
         for j in 0 ..< M.ncols:
           localMax = max(localMax, M[i, j])
-          # loadBalance(Weave)
+          loadBalance(Weave)
       merge(remoteMax):
         localMax = max(localMax, sync(remoteMax))
       return localMax
 
   result = sync(max)
 
-proc logsumexpWeave[T: SomeFloat](M: Matrix[T]): T =
+proc logsumexpWeaveReduce[T: SomeFloat](M: Matrix[T]): T =
 
-  let alpha = M.maxWeave()
+  let alpha = M.maxWeaveReduce()
 
   var lse: Flowvar[T]
 
@@ -194,7 +194,7 @@ proc logsumexpWeave[T: SomeFloat](M: Matrix[T]): T =
       fold:
         for j in 0 ..< M.ncols:
           localLSE += exp(M[i, j] - alpha)
-          # loadBalance(Weave)
+          loadBalance(Weave)
       merge(remoteLSE):
         localLSE += sync(remoteLSE)
       return localLSE
@@ -222,7 +222,7 @@ proc maxWeaveCollapsed[T: SomeFloat](M: Matrix[T]) : T =
 
 proc logsumexpWeaveCollapsed[T: SomeFloat](M: Matrix[T]): T =
 
-  let alpha = M.maxWeave()
+  let alpha = M.maxWeaveCollapsed()
 
   var lse: Flowvar[T]
 
@@ -238,6 +238,61 @@ proc logsumexpWeaveCollapsed[T: SomeFloat](M: Matrix[T]): T =
       return localLSE
 
   result = alpha + ln(sync(lse))
+
+proc maxWeaveStaged[T: SomeFloat](M: Matrix[T]) : T =
+  var max = T(-Inf)
+  let maxAddr = max.addr
+
+  var lock: Lock
+  lock.initLock()
+  let lockAddr = lock.addr
+
+  parallelForStaged i in 0 ..< M.nrows:
+    captures:{maxAddr, lockAddr, M}
+    prologue:
+      var localMax = T(-Inf)
+    loop:
+      for j in 0 ..< M.ncols:
+        localMax = max(localMax, M[i, j])
+        loadBalance(Weave)
+    epilogue:
+      lockAddr[].acquire()
+      maxAddr[] = max(maxAddr[], localMax)
+      lockAddr[].release()
+
+  sync(Weave)
+  lock.deinitLock()
+
+proc logsumexpWeaveStaged[T: SomeFloat](M: Matrix[T]): T =
+
+  let alpha = M.maxWeaveStaged()
+
+  var lse = T(0)
+  let lseAddr = lse.addr
+
+  # Atomic increment for float is done with a Compare-And-Swap loop usually.
+  # Due to lazy splitting, load distribution is unbalanced between threads so they shouldn't
+  # finish at the same time in general and lock contention would be low
+  var lock: Lock
+  lock.initLock()
+  let lockAddr = lock.addr
+
+  parallelForStaged i in 0 ..< M.nrows:
+    captures:{lseAddr, lockAddr, alpha, M}
+    prologue:
+      var localLSE = 0.T
+    loop:
+      for j in 0 ..< M.ncols:
+        localLSE += exp(M[i, j] - alpha)
+        loadBalance(Weave)
+    epilogue:
+      lockAddr[].acquire()
+      lseAddr[] += localLSE
+      lockAddr[].release()
+
+  sync(Weave)
+  result = alpha + ln(lse)
+  lock.deinitLock()
 
 # Main
 # -------------------------------------------------------
@@ -269,17 +324,25 @@ proc main(datasetSize = 20000'i64, batchSize = 256'i64, imageLabels = 1000'i64, 
   const lazy = defined(WV_LazyFlowvar)
   const config = if lazy: " (lazy flowvars)"
                  else: " (eager flowvars)"
-  reportConfig("Weave" & config, nthreads, datasetSize, batchSize, imageLabels, textVocabulary)
   init(Weave)
 
-  block:
-    runBench(logsumexpWeave, datasetSize, batchSize, imageLabels)
+  # reportConfig("Weave" & config, nthreads, datasetSize, batchSize, imageLabels, textVocabulary)
+  # block:
+  #   runBench(logsumexpWeaveReduce, datasetSize, batchSize, imageLabels)
   # block:
   #   runBench(logsumexpWeave, datasetSize, batchSize, textVocabulary)
 
   # reportConfig("Weave (Collapsed)" & config, nthreads, datasetSize, batchSize, imageLabels, textVocabulary)
   # block:
   #   runBench(logsumexpWeaveCollapsed, datasetSize, batchSize, imageLabels)
+  # block:
+  #   runBench(logsumexpWeave, datasetSize, batchSize, textVocabulary)
+
+  reportConfig("Weave (Staged)" & config, nthreads, datasetSize, batchSize, imageLabels, textVocabulary)
+  block:
+    runBench(logsumexpWeaveStaged, datasetSize, batchSize, imageLabels)
+  # block:
+  #   runBench(logsumexpWeaveStaged, datasetSize, batchSize, textVocabulary)
 
   exit(Weave)
 

@@ -387,3 +387,58 @@ proc extractReduceConfig*(body: NimNode, withArgs: bool): tuple[
   result = (prologue[1], fold[1], merge[2],
             remoteAccum, resultFvTy,
             returnStmt, finalAccum)
+
+proc extractStagedConfig*(body: NimNode, withArgs: bool): tuple[
+    prologue, loopBody, epilogue: NimNode
+  ] =
+  # The body tree representation is
+  #
+  # StmtList
+  #   Call
+  #     Ident "prologue"
+  #     StmtList
+  #       VarSection
+  #         IdentDefs
+  #           Ident "localSum"
+  #           Empty
+  #           IntLit 0
+  #   Call
+  #     Ident "loop"
+  #     StmtList
+  #       Infix
+  #         Ident "+="
+  #         Ident "localSum"
+  #         Ident "i"
+  #   Call
+  #     Ident "epilogue"
+  #     StmtList
+  #       Infix
+  #         Ident "+="
+  #         Ident "localSum"
+  #         Call
+  #           Ident "sync"
+  #           Ident "remoteSum"
+  let idx = int(withArgs) # if arguments, we have a capture section at index 0
+
+
+  if body.len != idx + 3:
+    printExampleSyntax()
+    error "A staged for loop should have 3 sections named: prologue, loop and epilogue"
+
+  let
+    prologue = body[idx]
+    loop = body[idx+1]
+    epilogue = body[idx+2]
+
+  # Sanity checks
+  prologue.testKind(nnkCall)
+  loop.testKind(nnkCall)
+  epilogue.testKind(nnkCall)
+  if not (prologue[0].eqIdent"prologue" and loop[0].eqIdent"loop" and epilogue[0].eqIdent"epilogue"):
+    printExampleSyntax()
+    error "A staged for loop should have 3 sections named: prologue, loop and epilogue"
+  prologue[1].testKind(nnkStmtList)
+  loop[1].testKind(nnkStmtList)
+  epilogue[1].testKind(nnkStmtList)
+
+  result = (prologue[1], loop[1], epilogue[1])
