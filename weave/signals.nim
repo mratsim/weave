@@ -40,7 +40,7 @@ proc asyncSignal(fn: proc (_: pointer) {.nimcall, gcsafe.}, chan: var ChannelSps
     postCondition: signalSent
 
 proc signalTerminate*(_: pointer) {.gcsafe.} =
-  preCondition: not localCtx.signaledTerminate
+  preCondition: localCtx.signaled == NotSignaled
 
   # 1. Terminating means everyone ran out of tasks
   #    so their cache for task channels should be full
@@ -61,4 +61,24 @@ proc signalTerminate*(_: pointer) {.gcsafe.} =
     # as a normal task
     decCounter(tasksExec)
 
-  localCtx.signaledTerminate = true
+  localCtx.signaled = SignaledTerminate
+
+proc signalContinue*(_: pointer) {.gcsafe.} =
+  preCondition: localCtx.signaled == NotSignaled
+
+  if myWorker().left != Not_a_worker:
+    # Send the terminate signal
+    asyncSignal(signalContinue, globalCtx.com.tasks[myWorker().left].access(0))
+    Backoff: # Wake the worker up so that it can process the terminate signal
+      wakeup(myWorker().left)
+  if myWorker().right != Not_a_worker:
+    asyncSignal(signalContinue, globalCtx.com.tasks[myWorker().right].access(0))
+    Backoff:
+      wakeup(myWorker().right)
+
+  Worker:
+    # When processing this signal for our queue, it was counted
+    # as a normal task
+    decCounter(tasksExec)
+
+  localCtx.signaled = SignaledContinue

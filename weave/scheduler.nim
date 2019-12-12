@@ -73,7 +73,7 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
     zeroMem(ctx.counters.addr, sizeof(ctx.counters))
   zeroMem(ctx.thefts.addr, sizeof(ctx.thefts))
   ctx.runtimeIsQuiescent = false
-  ctx.signaledTerminate = false
+  ctx.signaled = NotSignaled
 
   ctx.taskCache.initialize(tID = myID(), freeFn = memory_pools.recycle)
   myMemPool.hook.setCacheMaintenanceEx(ctx.taskCache)
@@ -170,7 +170,7 @@ proc declineAll*() =
 proc schedulingLoop() =
   ## Each worker thread execute this loop over and over
 
-  while not localCtx.signaledTerminate:
+  while localCtx.signaled != SignaledTerminate:
     # Global state is intentionally minimized,
     # It only contains the communication channels and read-only environment variables
     # There is still the global barrier to ensure the runtime starts or stops only

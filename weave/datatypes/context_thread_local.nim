@@ -67,6 +67,11 @@ type
     recentTasks*: int32
     recentThefts*: int32
 
+  Signaled* = enum
+    NotSignaled
+    SignaledTerminate
+    SignaledContinue
+
   TLContext* = object
     ## Thread-Local context
     worker*: Worker
@@ -75,7 +80,7 @@ type
     stealCache*: Persistack[WV_MaxConcurrentStealPerWorker, deref(StealRequest)]
     # Leader thread only - Whole runtime is quiescent
     runtimeIsQuiescent*: bool
-    signaledTerminate*: bool
+    signaled*: Signaled
     when defined(WV_Metrics):
       counters*: Counters
 

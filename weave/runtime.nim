@@ -11,7 +11,7 @@ import
   # Internal
   ./instrumentation/[contracts, profilers, loggers],
   ./contexts, ./config,
-  ./datatypes/[sync_types, prell_deques, binary_worker_trees],
+  ./datatypes/[sync_types, prell_deques, binary_worker_trees, context_thread_local],
   ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch],
   ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
   ./scheduler, ./signals, ./workers, ./thieves, ./victims,
@@ -91,22 +91,19 @@ proc globalCleanup() =
   metrics:
     log("+========================================+\n")
 
-proc sync*(_: type Weave) {.gcsafe.} =
-  ## Global barrier for the Picasso runtime
-  ## This is only valid in the root task
-  Worker: return
+proc barrierLeadThread() {.gcsafe.} =
+  ## Barrier. Threads will be stopped here
+  ## and help other threads until every thread has an empty task queue
+  preCondition: myID() == LeaderID
 
   debugTermination:
     log(">>> Worker %2d enters barrier <<<\n", myID())
-
-  preCondition: myTask().isRootTask()
 
   block EmptyLocalQueue:
     ## Empty all the tasks and before leaving the barrier
     while true:
       debug: log("Worker %2d: globalsync 1 - task from local deque\n", myID())
       while (let task = nextTask(childTask = false); not task.isNil):
-        # TODO: duplicate schedulingLoop
         profile(run_task):
           runTask(task)
         profile(enq_deq_task):
@@ -133,9 +130,8 @@ proc sync*(_: type Weave) {.gcsafe.} =
           ascertain: myThefts().outstanding > 0
           declineAll()
           if localCtx.runtimeIsQuiescent:
-            # Goto breaks profiling, but the runtime is still idle
+            profile_stop(idle)
             break EmptyLocalQueue
-
 
       # 3. We stole some task(s)
       debug: log("Worker %2d: globalsync 3 - stoled tasks\n", myID())
@@ -173,10 +169,101 @@ proc sync*(_: type Weave) {.gcsafe.} =
   debugTermination:
     log(">>> Worker %2d leaves barrier <<<\n", myID())
 
+proc barrierWorkerThread() {.gcsafe.} =
+  ## Barrier. Threads will be stopped here
+  ## and help other threads until every thread has an empty task queue
+  preCondition: myID() != LeaderID
+
+  debugTermination:
+    log(">>> Worker %2d enters barrier <<<\n", myID())
+
+  block EmptyLocalQueue:
+    ## Empty all the tasks and before leaving the barrier
+    while true:
+      debug: log("Worker %2d: globalsync 1 - task from local deque\n", myID())
+      while (let task = nextTask(childTask = false); not task.isNil):
+        profile(run_task):
+          runTask(task)
+        profile(enq_deq_task):
+          # The memory is reused but not zero-ed
+          localCtx.taskCache.add(task)
+
+      if localCtx.signaled == SignaledContinue:
+        break EmptyLocalQueue
+
+      # 2. Run out-of-task, become a thief and help other threads
+      #    to reach the barrier faster
+      debug: log("Worker %2d: globalsync 2 - becoming a thief\n", myID())
+      trySteal(isOutOfTasks = true)
+      ascertain: myThefts().outstanding > 0
+
+      var task: Task
+      profile(idle):
+        while not recv(task, isOutOfTasks = true):
+          ascertain: myWorker().deque.isEmpty()
+          ascertain: myThefts().outstanding > 0
+          declineAll()
+          if localCtx.signaled == SignaledContinue:
+            profile_stop(idle)
+            break EmptyLocalQueue
+
+      # 3. We stole some task(s)
+      debug: log("Worker %2d: globalsync 3 - stoled tasks\n", myID())
+      ascertain: not task.fn.isNil
+
+      let loot = task.batch
+      if loot > 1:
+        profile(enq_deq_task):
+          # Add everything
+          myWorker().deque.addListFirst(task, loot)
+          # And then only use the last
+          task = myWorker().deque.popFirst()
+
+      StealAdaptative:
+        myThefts().recentThefts += 1
+
+      # 4. Share loot with children
+      debug: log("Worker %2d: globalsync 4 - sharing work\n", myID())
+      shareWork()
+
+      # 5. Work on what is left
+      debug: log("Worker %2d: globalsync 5 - working on leftover\n", myID())
+      profile(run_task):
+        runTask(task)
+      profile(enq_deq_task):
+        # The memory is reused but not zero-ed
+        localCtx.taskCache.add(task)
+
+    # Restart the loop
+
+  # Execution continues but the runtime is quiescent until new tasks
+  # are created
+  postCondition: localCtx.SignaledContinue
+
+  debugTermination:
+    log(">>> Worker %2d leaves barrier <<<\n", myID())
+
+type
+  BarrierSignal = enum
+    Terminate # Signal worker threads to shutdown
+    Continue  # Signal worker threads that they can restart working
+
+proc syncImpl(signal: static BarrierSignal){.inline.} =
+  Leader:
+    barrierLeadThread()
+    when signal == Terminate: signalTerminate(nil)
+    elif signal == Continue:  signalContinue(nil)
+    else: {.error: "Unreachable".}
+  Worker:
+    barrierWorkerThread()
+    localCtx.signaled = NotSignaled
+
+proc sync*(_: type Weave) =
+  syncImpl(signal = Continue)
+
 proc exit*(_: type Weave) =
-  sync(_)
+  barrierLeadThread()
   signalTerminate(nil)
-  localCtx.signaledTerminate = true
 
   # 1 matching barrier in worker_entry_fn
   discard globalCtx.barrier.wait()
