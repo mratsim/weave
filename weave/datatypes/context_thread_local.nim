@@ -117,3 +117,9 @@ func initialize*(w: var Worker, maxID: WorkerID) {.inline.} =
     w.rightIsWaiting = true
   else:
     w.rightIsWaiting = false
+
+func reload*(t: var Thefts) {.inline.} =
+  t.outstanding = 0
+  t.dropped = 0
+  t.recentTasks = 0
+  t.recentThefts = 0

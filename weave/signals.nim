@@ -70,6 +70,7 @@ proc signalContinue*(_: pointer) {.gcsafe.} =
   # Reset our steal request cache and empty our worksharing queues
   localCtx.stealCache.reload()
   myWorker().workSharingRequests.initialize()
+  myThefts().reload()
 
   if myWorker().left != Not_a_worker:
     myWorker().leftIsWaiting = false
