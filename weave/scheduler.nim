@@ -104,7 +104,7 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
 
   # Debug
   # -----------------------------------------------------------
-  debug: # TODO debugMem
+  when false: # TODO debugMem
     let (tStart, tStop) = myTodoBoxes().reservedMemRange()
     log("Worker %2d: tasks channels range       0x%.08x-0x%.08x\n",
       myID(), tStart, tStop
@@ -345,7 +345,8 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
 proc schedule*(task: sink Task) =
   ## Add a new task to be scheduled in parallel
   preCondition: not task.fn.isNil
-  debug: log("Worker %2d: scheduling task.fn 0x%.08x\n", myID(), task.fn)
+  debug: log("Worker %2d: scheduling task.fn 0x%.08x (isLoop: %s [%d, %d)) \n",
+           myID(), task.fn, if task.isLoop: "true" else: "false", task.start, task.stop)
 
   myWorker().deque.addFirst task
 

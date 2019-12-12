@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./datatypes/[context_thread_local, sync_types, binary_worker_trees],
+  ./datatypes/[context_thread_local, sync_types, binary_worker_trees, bounded_queues],
   ./contexts, ./config,
   ./instrumentation/[contracts, loggers, profilers],
   ./memory/persistacks,
@@ -35,9 +35,10 @@ proc asyncSignal(fn: proc (_: pointer) {.nimcall, gcsafe.}, chan: var ChannelSps
     dummy.batch = 1
     # TODO: StealLastVictim
 
-    let signalSent = chan.trySend(dummy)
+    while not chan.trySend(dummy):
+      cpuRelax()
     debugTermination: log("Worker %2d: sending asyncSignal\n", myID())
-    postCondition: signalSent
+    # postCondition: signalSent
 
 proc signalTerminate*(_: pointer) {.gcsafe.} =
   preCondition: localCtx.signaled != SignaledTerminate
@@ -64,14 +65,19 @@ proc signalTerminate*(_: pointer) {.gcsafe.} =
   localCtx.signaled = SignaledTerminate
 
 proc signalContinue*(_: pointer) {.gcsafe.} =
-  preCondition: localCtx.signaled == NotSignaled
+  preCondition: localCtx.signaled != SignaledTerminate
+
+  # Reset our steal request cache and empty our worksharing queues
+  localCtx.stealCache.reload()
+  myWorker().workSharingRequests.initialize()
 
   if myWorker().left != Not_a_worker:
-    # Send the terminate signal
+    myWorker().leftIsWaiting = false
     asyncSignal(signalContinue, globalCtx.com.tasks[myWorker().left].access(0))
-    Backoff: # Wake the worker up so that it can process the terminate signal
+    Backoff: # Wake the worker up so that it can process the continue signal
       wakeup(myWorker().left)
   if myWorker().right != Not_a_worker:
+    myWorker().rightIsWaiting = false
     asyncSignal(signalContinue, globalCtx.com.tasks[myWorker().right].access(0))
     Backoff:
       wakeup(myWorker().right)

@@ -44,8 +44,8 @@ proc recv*(task: var Task, isOutOfTasks: bool): bool =
       if result:
         myTodoBoxes().nowAvailable(i)
         localCtx.stealCache.nowAvailable(i)
-        debug: log("Worker %2d: received a task with function address 0x%.08x (Channel 0x%.08x)\n",
-          myID(), task.fn, myTodoBoxes().access(i).addr)
+        debug: log("Worker %2d: received a task with function address 0x%.08x (isLoop: %s [%d, %d)) (Channel 0x%.08x)\n",
+          myID(), task.fn, if task.isLoop: "true" else: "false", task.start, task.stop, myTodoBoxes().access(i).addr)
         break
 
   if not result:

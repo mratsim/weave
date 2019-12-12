@@ -73,6 +73,12 @@ proc initialize*[N: static int8, T](ps: var Persistack[N, T]) =
     ps.stack[i] = ps.rawMem[i].addr
   ps.len = N
 
+func reload*[N: static int8, T](ps: var Persistack[N, T]) =
+  ## Reload the persistack in pristine state, reusng the allocated buffer
+  for i in 0 ..< N:
+    ps.stack[i] = ps.rawMem[i].addr
+  ps.len = N
+
 func borrow*[N: static int8, T](ps: var Persistack[N, T]): ptr T {.inline.} =
   ## Provides a reference from the persistack
   ## This reference will not be provided anymore

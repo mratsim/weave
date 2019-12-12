@@ -256,7 +256,7 @@ proc syncImpl(signal: static BarrierSignal){.inline.} =
     else: {.error: "Unreachable".}
   Worker:
     barrierWorkerThread()
-    localCtx.signaled = NotSignaled
+  localCtx.signaled = NotSignaled
 
 proc sync*(_: type Weave) =
   syncImpl(signal = Continue)
