@@ -6,16 +6,17 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  weave/[parallel_tasks, parallel_for, runtime],
+  weave/[parallel_tasks, parallel_for, parallel_for_staged, runtime],
   weave/datatypes/flowvars
 
 export
   Flowvar, Weave,
   spawn, sync,
-  parallelFor, parallelForStrided,
+  parallelFor, parallelForStrided, parallelForStaged, parallelForStagedStrided,
   init, exit,
   loadBalance,
-  isSpawned
+  isSpawned,
+  getThreadId
 
 # TODO, those are workaround for not binding symbols in spawn macro
 import weave/contexts

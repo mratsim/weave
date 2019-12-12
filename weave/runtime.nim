@@ -229,3 +229,7 @@ proc getThreadId*(_: type Weave): int {.inline.} =
   ## ID is in the range 0 ..< WEAVE_NUM_THREADS
   ## With 0 being the lead thread and WEAVE_NUM_THREADS = min(countProcessors, getEnv"WEAVE_NUM_THREADS")
   myID().int
+
+proc getNumThreads*(_: type Weave): int {.inline.} =
+  ## Returns the number of threads available in Weave threadpool
+  workforce().int
