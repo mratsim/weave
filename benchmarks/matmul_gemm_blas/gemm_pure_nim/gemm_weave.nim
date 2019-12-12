@@ -164,9 +164,8 @@ proc gemm_impl[T; ukernel: static MicroKernel](
     # ####################################
     # 3. for ic = 0,...,m−1 in steps of mc
     # TODO: need a barrier for nested for loop?
-    # parallelFor icb in 0 ..< tiles.ic_num_tasks:
-    #   captures: {pc, tiles, nc, kc, alpha, beta, vA, vC, M}
-    for icb in 0 ..< tiles.ic_num_tasks:
+    parallelFor icb in 0 ..< tiles.ic_num_tasks:
+      captures: {pc, tiles, nc, kc, alpha, beta, vA, vC, M}
 
       let packA = tiles.a + icb * tiles.upanelA_size
       prefetch(packA, Write, LowTemporalLocality)
@@ -175,12 +174,14 @@ proc gemm_impl[T; ukernel: static MicroKernel](
 
       let mckcA = vA.stride(ic, pc)                   # A[ic:ic+mc, pc:pc+kc]
       pack_A_mc_kc[T, ukernel](packA, mc, kc, mckcA)  # PackA block [mc, kc]
+      sync(Weave) # Ensure all A panels are ready before continuing
 
       gebp_mkernel[T, ukernel](                       # GEBP macrokernel:
           mc, nc, kc,                                 #   C[ic:ic+mc, jc:jc+nc] =
           alpha, packA, tiles.b,                      #    αA[ic:ic+mc, pc:pc+kc] * B[pc:pc+kc, jc:jc+nc] +
           beta, vC.stride(ic, 0)                      #    βC[ic:ic+mc, jc:jc+nc]
         )
+    sync(Weave) # Ensure everyone finished processing the B panel before continuing
 
 # ############################################################
 #

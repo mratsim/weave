@@ -57,7 +57,6 @@ proc pack_A_mc_kc*[T; ukernel: static MicroKernel](
         offBuf[k*MR + i] = 0.T
 
   sync(Weave)
-
 # ############################################################
 #
 #                    Packing B
