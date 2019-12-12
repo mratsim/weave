@@ -68,13 +68,19 @@ macro assertContract(
               "\n    The following values are contrary to expectations:" &
               "\n        "
   let values = inspectInfix(strippedPredicate)
+  let myID = quote do:
+    when declared(myID):
+      $myID()
+    else:
+      "N/A"
 
   result = quote do:
-    when compileOption("assertions"):
-      assert(`predicate`, `debug` & $`values` & '\n')
-    elif defined(WV_Asserts):
-      if unlikely(not(`predicate`)):
-        raise newException(AssertionError, `debug` & $`values` & '\n')
+    {.noSideEffect.}:
+      when compileOption("assertions"):
+        assert(`predicate`, `debug` & $`values` & "  [Worker "& `myID` & "]\n")
+      elif defined(WV_Asserts):
+        if unlikely(not(`predicate`)):
+          raise newException(AssertionError, `debug` & $`values` & '\n')
 
 # A way way to get the caller function would be nice.
 
