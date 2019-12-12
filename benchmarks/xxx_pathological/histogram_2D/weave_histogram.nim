@@ -14,7 +14,7 @@ import
   # 3rd party
   cligen,
   # bench
-  ../../wtime
+  ../../wtime, ../../resources
 
 # Helpers
 # -------------------------------------------------------
@@ -55,6 +55,14 @@ template `[]=`(hist: Histogram, idx: Natural, value: int32) =
   assert idx in 0 ..< hist.len
   hist.buffer[idx] = value
 
+proc wv_alloc*(T: typedesc): ptr T {.inline.}=
+  cast[ptr T](c_malloc(csize_t sizeof(T)))
+
+proc wv_alloc*(T: typedesc, len: SomeInteger): ptr UncheckedArray[T] {.inline.} =
+  cast[type result](c_malloc(csize_t len*sizeof(T)))
+
+proc wv_free*[T: ptr](p: T) {.inline.} =
+  c_free(p)
 
 # -------------------------------------------------------
 
@@ -70,7 +78,67 @@ proc newHistogram(bins: int32): Histogram =
   result.buffer = wv_alloc(int32, bins)
   result.len = bins
 
-proc generateHistogram[T](matrix: Matrix[T], hist: Histogram): T =
+# Reports
+# -------------------------------------------------------
+
+template memUsage(maxRSS, runtimeRSS, pageFaults: untyped{ident}, body: untyped) =
+  var maxRSS, runtimeRSS, pageFaults: int32
+  block:
+    var ru: Rusage
+    getrusage(RusageSelf, ru)
+    runtimeRSS = ru.ru_maxrss
+    pageFaults = ru.ru_minflt
+
+    body
+
+    getrusage(RusageSelf, ru)
+    runtimeRSS = ru.ru_maxrss - runtimeRSS
+    pageFaults = ru.ru_minflt - pageFaults
+    maxRss = ru.ru_maxrss
+
+proc reportConfig(
+    scheduler: string,
+    nthreads, N, bins: int
+  ) =
+
+  echo "--------------------------------------------------------------------------"
+  echo "Scheduler:                                    ", scheduler
+  echo "Benchmark:                                    Histogram 2D "
+  echo "Threads:                                      ", nthreads
+  echo "Matrix:                                       ", N, " x ", N
+  echo "Histogram bins:                               ", bins
+
+proc reportBench(
+    time: float64, maxRSS, runtimeRss, pageFaults: int32, max: SomeFloat
+  ) =
+  echo "--------------------------------------------------------------------------"
+  echo "Time(ms):                                     ", round(time, 3)
+  echo "Max RSS (KB):                                 ", maxRss
+  echo "Runtime RSS (KB):                             ", runtimeRSS
+  echo "# of page faults:                             ", pageFaults
+  echo "Max (from histogram):                         ", max
+
+template runBench(procName: untyped, matrix: Matrix, bins: int, parallel: static bool = true) =
+  var hist = newHistogram(bins)
+
+
+  block:
+    var max: matrix.T
+    let start = wtime_msec()
+    memUsage(maxRSS, runtimeRSS, pageFaults):
+      when parallel:
+        init(Weave)
+      max = procName(matrix, hist)
+      when parallel:
+        exit(Weave)
+    let stop = wtime_msec()
+
+    reportBench(stop-start, maxRSS, runtimeRSS, pageFaults, max)
+
+# Algo
+# -------------------------------------------------------
+
+proc generateHistogramSerial[T](matrix: Matrix[T], hist: Histogram): T =
 
   # zero-ing the histogram
   for i in 0 ..< hist.len:
@@ -92,7 +160,7 @@ proc generateHistogram[T](matrix: Matrix[T], hist: Histogram): T =
       if sum > result:
         result = sum
 
-proc generateHistogramWeave[T](matrix: Matrix[T], hist: Histogram): T =
+proc generateHistogramWeaveReduce[T](matrix: Matrix[T], hist: Histogram): T =
 
   # We await reduce max only, sending the histogram across threads
   # is too costly so the temporary histogram are freed in their allocating threads
@@ -133,20 +201,23 @@ proc generateHistogramWeave[T](matrix: Matrix[T], hist: Histogram): T =
 
 proc main(matrixSize = 25000'i32, boxes = 1000'i32) =
 
-  var matrix: Matrix[float32]
-  var hist1 = newHistogram(boxes)
-  var hist2 = newHistogram(boxes)
+  var nthreads: int
+  if existsEnv"WEAVE_NUM_THREADS":
+    nthreads = getEnv"WEAVE_NUM_THREADS".parseInt()
+  else:
+    nthreads = countProcessors()
 
+  const lazy = defined(WV_LazyFlowvar)
+  const config = if lazy: " (lazy flowvars)"
+                 else: " (eager flowvars)"
+
+  var matrix: Matrix[float32]
   # The reference code zero-out the histogram in the bench as well
   prepareMatrix(matrix, matrixSize)
 
-  let start = wtime_msec()
-  init(Weave)
-  let max2 = generateHistogramWeave(matrix, hist2)
-  exit(Weave)
-  let stop = wtime_msec()
-
-  echo "Time(ms)                                      ", round(stop - start, 3)
-  echo "Max:                                          ", max2
+  reportConfig("Sequential", 1, matrixSize, boxes)
+  runBench(generateHistogramSerial, matrix, boxes, parallel = false)
+  reportConfig("Weave" & config, nthreads, matrixSize, boxes)
+  runBench(generateHistogramWeaveReduce, matrix, boxes)
 
 dispatch(main)

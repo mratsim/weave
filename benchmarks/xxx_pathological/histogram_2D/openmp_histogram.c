@@ -143,11 +143,11 @@ int main() {
     }
     double dtime;
 
-    // dtime = omp_get_wtime();
-    // float_t max1 = generate_histogram(matrix, histogram1, N, boxes);
-    // dtime = omp_get_wtime() - dtime;
-    // printf("time serial: %f\n", dtime);
-    // printf("max  serial: %f\n", max1);
+    dtime = omp_get_wtime();
+    float_t max1 = generate_histogram(matrix, histogram1, N, boxes);
+    dtime = omp_get_wtime() - dtime;
+    printf("time serial: %f\n", dtime);
+    printf("max  serial: %f\n", max1);
 
     dtime = omp_get_wtime();
     float_t max2 = generate_histogram_omp(matrix, histogram2, N, boxes);
