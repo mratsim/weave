@@ -94,3 +94,5 @@ proc pack_B_kc_nc*[T; ukernel: static MicroKernel](
         offBuf[k*NR + j] = B[k, unroll_stop+j]
       for j in remainder ..< NR: # Pad with 0 if packing over the edge
         offBuf[k*NR + j] = 0.T
+
+  sync(Weave)

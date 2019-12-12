@@ -166,9 +166,6 @@ proc barrierLeadThread() {.gcsafe.} =
   # are created
   postCondition: localCtx.runtimeIsQuiescent
 
-  debugTermination:
-    log(">>> Worker %2d leaves barrier <<<\n", myID())
-
 proc barrierWorkerThread() {.gcsafe.} =
   ## Barrier. Threads will be stopped here
   ## and help other threads until every thread has an empty task queue
@@ -240,8 +237,7 @@ proc barrierWorkerThread() {.gcsafe.} =
   # are created
   postCondition: localCtx.signaled == SignaledContinue
 
-  debugTermination:
-    log(">>> Worker %2d leaves barrier <<<\n", myID())
+
 
 type
   BarrierSignal = enum
@@ -258,12 +254,17 @@ proc syncImpl(signal: static BarrierSignal){.inline.} =
     barrierWorkerThread()
   localCtx.signaled = NotSignaled
 
+  debugTermination:
+    log(">>> Worker %2d leaves barrier <<<\n", myID())
+
 proc sync*(_: type Weave) =
   syncImpl(signal = Continue)
 
 proc exit*(_: type Weave) =
   barrierLeadThread()
   signalTerminate(nil)
+  debugTermination:
+    log(">>> Worker %2d leaves barrier after terminated other threads <<<\n", myID())
 
   # 1 matching barrier in worker_entry_fn
   discard globalCtx.barrier.wait()
