@@ -245,7 +245,7 @@ proc maxWeaveStaged[T: SomeFloat](M: Matrix[T]) : T =
 
   var lock: Lock
   lock.initLock()
-  var lockAddr = lock.addr
+  let lockAddr = lock.addr
 
   parallelForStaged i in 0 ..< M.nrows:
     captures:{maxAddr, lockAddr, M}
@@ -268,14 +268,14 @@ proc logsumexpWeaveStaged[T: SomeFloat](M: Matrix[T]): T =
   let alpha = M.maxWeaveStaged()
 
   var lse = T(0)
-  var lseAddr = lse.addr
+  let lseAddr = lse.addr
 
   # Atomic increment for float is done with a Compare-And-Swap loop usually.
   # Due to lazy splitting, load distribution is unbalanced between threads so they shouldn't
   # finish at the same time in general and lock contention would be low
   var lock: Lock
   lock.initLock()
-  var lockAddr = lock.addr
+  let lockAddr = lock.addr
 
   parallelForStaged i in 0 ..< M.nrows:
     captures:{lseAddr, lockAddr, alpha, M}

@@ -199,6 +199,50 @@ proc generateHistogramWeaveReduce[T](matrix: Matrix[T], hist: Histogram): T =
 
   return sync(distributedMax)
 
+proc generateHistogramWeaveStaged[T](matrix: Matrix[T], hist: Histogram): T =
+
+  var max = T(-Inf)
+  let maxAddr = max.addr
+
+  var lock: Lock
+  lock.initLock()
+  let lockAddr = lock.addr
+
+  let boxes = hist.len
+
+  for i in 0 ..< boxes:
+    hist[i] = 0
+
+  # Parallel reduction
+  parallelForStaged i in 1 ..< matrix.ld-1:
+    captures: {maxAddr, lockAddr, hist, matrix, boxes}
+    prologue:
+      let threadHist = newHistogram(boxes)
+      var threadMax = T(-Inf)
+    loop:
+      # with inner for loop
+      for j in 1 ..< matrix.ld-1:
+        let sum = abs(matrix[i, j] - matrix[i-1, j]) + abs(matrix[i,j] - matrix[i+1, j]) +
+                  abs(matrix[i, j] - matrix[i, j-1] + abs(matrix[i, j] - matrix[i, j+1]))
+        let k = int32(sum * T(matrix.ld))
+
+        threadHist[k] += 1
+        if sum > threadMax:
+          threadMax = sum
+    epilogue:
+      lockAddr[].acquire()
+      maxAddr[] = max(maxAddr[], threadMax)
+      if threadMax > maxAddr[]:
+        maxAddr[] = threadMax
+      for k in 0 ..< boxes:
+        hist[k] += threadHist[k]
+      lockAddr[].release()
+      wv_free(threadHist.buffer)
+
+  sync(Weave)
+  lock.deinitLock()
+  return max
+
 proc main(matrixSize = 25000'i32, boxes = 1000'i32) =
 
   var nthreads: int
@@ -219,5 +263,6 @@ proc main(matrixSize = 25000'i32, boxes = 1000'i32) =
   runBench(generateHistogramSerial, matrix, boxes, parallel = false)
   reportConfig("Weave" & config, nthreads, matrixSize, boxes)
   runBench(generateHistogramWeaveReduce, matrix, boxes)
+  runBench(generateHistogramWeaveStaged, matrix, boxes)
 
 dispatch(main)
