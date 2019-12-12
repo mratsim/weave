@@ -143,7 +143,7 @@ func addListFirst*[T](dq: var PrellDeque[T], head: sink T, len: int32) =
       index += 1
 
   when compileOption("boundChecks"):
-    postCondition: index == len
+    postCondition: index + 1 == len
   dq.addListFirst(head, tail, len)
 
 # Task-specific routines

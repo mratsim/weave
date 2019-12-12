@@ -40,13 +40,13 @@ func newMatrixNxN[T](n: int): Matrix[T] {.inline.} =
 
 template `[]`[T](mat: Matrix[T], row, col: Natural): T =
   # row-major storage
-  assert row < mat.ld
-  assert col < mat.ld
+  assert row < mat.ld, $i & " < " & $mat.ld
+  assert col < mat.ld, $i & " < " & $mat.ld
   mat.buffer[row * mat.ld + col]
 
 template `[]=`[T](mat: Matrix[T], row, col: Natural, value: T) =
-  assert row < mat.ld
-  assert col < mat.ld
+  assert row < mat.ld, $i & " < " & $mat.ld
+  assert col < mat.ld, $i & " < " & $mat.ld
   mat.buffer[row * mat.ld + col] = value
 
 func stride*[T](mat: Matrix[T], row, col: Natural): Matrix[T]{.inline.}=
@@ -143,6 +143,7 @@ proc matmul[T](A, B, C: Matrix[T], m, n, p: int, add: bool): bool =
   discard sync(h1)
 
 proc main() =
+  echo, "Warning the benchmark seems to not be correct."
   var
     n = 3000
     nthreads: int
