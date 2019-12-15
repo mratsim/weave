@@ -147,7 +147,7 @@ steps:
 
   - bash: |
       nimble refresh
-      nimble install cligen
+      nimble install cligen || true
     displayName: 'Building the package dependencies'
 
   - bash: |
