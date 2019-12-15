@@ -37,11 +37,11 @@
 
 import
   # Stdlib
-  system/ansi_c, strformat, os, strutils,
+  system/ansi_c, strformat, os, strutils, cpuinfo,
   # Weave
   ../../weave,
   # bench
-  ../wtime
+  ../wtime, ../resources
 
 # Nim helpers
 # -------------------------------------------------
@@ -157,22 +157,44 @@ proc verifyQueens(n, res: int32) =
     echo &"N-Queens failure: {res} is different from expected {solutions[n-1]}"
 
 proc main() =
-  if paramCount() != 1:
-    let exeName = getAppFilename().extractFilename()
-    echo &"Usage: {exeName} <n: number of queens on a nxn board>"
-    quit 0
+  var
+    n = 11'i32
+    nthreads: int
 
-  let n = paramStr(1).parseInt.int32
+  if existsEnv"WEAVE_NUM_THREADS":
+    nthreads = getEnv"WEAVE_NUM_THREADS".parseInt()
+  else:
+    nthreads = countProcessors()
+
+  if paramCount() == 0:
+    let exeName = getAppFilename().extractFilename()
+    echo &"Usage: {exeName} <N:{n}>"
+    echo &"Running with default config N = {n}\n"
+
+  if paramCount() >= 1:
+    n = paramStr(1).parseInt.int32
 
   if n notin 1 .. solutions.len:
     echo &"The number of queens N (on a NxN board) must be in the range [1, {solutions.len}]"
     quit 1
+
+  var ru: Rusage
+  getrusage(RusageSelf, ru)
+  var
+    rss = ru.ru_maxrss
+    flt = ru.ru_minflt
 
   init(Weave)
 
   let start = wtime_msec()
   let count = nqueens_par(n, 0, alloca(char, n))
   let stop = wtime_msec()
+
+  getrusage(RusageSelf, ru)
+  rss = ru.ru_maxrss - rss
+  flt = ru.ru_minflt - flt
+
+  exit(Weave)
 
   verifyQueens(n, count)
 
@@ -182,8 +204,20 @@ proc main() =
       c_printf("%2d ", example_solution[i])
     stdout.write('\n')
 
-  echo &"Elapsed wall time: {stop-start:2.4f} ms"
+  const lazy = defined(WV_LazyFlowvar)
+  const config = if lazy: " (lazy flowvars)"
+                 else: " (eager flowvars)"
 
-  exit(Weave)
+  echo "Scheduler:            Weave", config
+  echo "Benchmark:            N-queens"
+  echo "Threads:              ", nthreads
+  echo "Time(us)              ", stop - start
+  echo "Max RSS (KB):         ", ru.ru_maxrss
+  echo "Runtime RSS (KB):     ", rss
+  echo "# of page faults:     ", flt
+  echo "Problem size:         ", n,"x",n, " board with ",n, " queens"
+  echo "Solutions found:      ", count
+
+  quit 0
 
 main()
