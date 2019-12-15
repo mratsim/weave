@@ -20,6 +20,29 @@ proc test(flags, path: string, lang = "c") =
   exec "nim " & lang & " " & flags & " --verbosity:0 --hints:off --warnings:off --threads:on -d:release --outdir:build -r " & path
 
 task test, "Run Weave tests":
+  test "", "weave/channels/channels_spsc_single.nim"
+  test "", "weave/channels/channels_spsc_single_ptr.nim"
+  test "", "weave/channels/channels_mpsc_unbounded_batch.nim"
+
+  test "", "weave/datatypes/binary_worker_trees.nim"
+  test "", "weave/datatypes/bounded_queues.nim"
+  test "", "weave/datatypes/prell_deques.nim"
+  test "", "weave/datatypes/sparsesets.nim"
+
+  test "", "weave/memory/lookaside_lists.nim"
+  test "", "weave/memory/memory_pools.nim"
+  test "", "weave/memory/persistacks.nim"
+
+  test "", "weave/parallel_tasks.nim"
+  test "", "weave/parallel_for.nim"
+  test "", "weave/parallel_for_staged.nim"
+  test "", "weave/parallel_reduce.nim"
+
+  test "-d:WV_LazyFlowvar", "weave/parallel_tasks.nim"
+  test "-d:WV_LazyFlowvar", "weave/parallel_for.nim"
+  test "-d:WV_LazyFlowvar", "weave/parallel_for_staged.nim"
+  # test "-d:WV_LazyFlowvar", "weave/parallel_reduce.nim" # Experimental
+
   test "", "benchmarks/dfs/weave_dfs.nim"
   test "", "benchmarks/fibonacci/weave_fib.nim"
   test "", "benchmarks/heat/weave_heat.nim"

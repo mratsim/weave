@@ -145,21 +145,21 @@ macro parallelForStagedStrided*(loopParams: untyped, stride: Positive, body: unt
 
 when isMainModule:
   block:
-    expandMacros:
-      proc sumReduce(n: int): int =
-        # expandMacros:
-        let res = result.addr
-        parallelForStaged i in 0 .. n:
-          captures: {res}
-          prologue:
-            var localSum = 0
-          loop:
-            localSum += i
-          epilogue:
-            echo "Thread ", getThreadID(Weave), ": localsum = ", localSum
-            res[].atomicInc(localSum)
+    # expandMacros:
+    proc sumReduce(n: int): int =
+      # expandMacros:
+      let res = result.addr
+      parallelForStaged i in 0 .. n:
+        captures: {res}
+        prologue:
+          var localSum = 0
+        loop:
+          localSum += i
+        epilogue:
+          echo "Thread ", getThreadID(Weave), ": localsum = ", localSum
+          res[].atomicInc(localSum)
 
-        sync(Weave)
+      sync(Weave)
 
     init(Weave)
     let sum1M = sumReduce(1000000)
