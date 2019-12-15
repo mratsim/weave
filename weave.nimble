@@ -36,7 +36,7 @@ task test, "Run Weave tests":
   test "", "weave/parallel_tasks.nim"
   test "", "weave/parallel_for.nim"
   test "", "weave/parallel_for_staged.nim"
-  test "", "weave/parallel_reduce.nim"
+  # test "", "weave/parallel_reduce.nim"
 
   test "-d:WV_LazyFlowvar", "weave/parallel_tasks.nim"
   test "-d:WV_LazyFlowvar", "weave/parallel_for.nim"
