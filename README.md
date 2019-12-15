@@ -91,7 +91,9 @@ proc main() =
   var output = newSeq[float32](N*M)
   let bufOut = cast[ptr UncheckedArray[float32]](output[0].addr)
 
+  init(Weave)
   transpose(M, N, bufIn, bufOut)
+  exit(Weave)
 
 main()
 ```
