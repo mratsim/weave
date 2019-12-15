@@ -41,7 +41,6 @@ strategy:
       VM: 'ubuntu-16.04'
       PLATFORM: x86
       ucpu: i686
-      PLATFORM: x86
       CHANNEL: devel
       WEAVE_TEST_LANG: c
 
