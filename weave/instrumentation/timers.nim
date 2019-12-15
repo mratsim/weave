@@ -71,7 +71,8 @@ when defined(i386) or defined(amd64):
       lfence()
       return rdtsc()
 else:
-  {.error: "getticks is not supported on this CPU architecture".}
+  when defined(WV_profile):
+    {.error: "getticks is not supported on this CPU architecture".}
 
 template timer_new*(timer: var Timer, ghzClock: float64) =
   timer.elapsed = 0
