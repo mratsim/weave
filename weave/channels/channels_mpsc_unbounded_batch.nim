@@ -147,6 +147,7 @@ proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var
   ## Returns the number of items received
   ##
   ## If no items are returned bFirst and bLast are undefined
+  ## and should not be used.
   ##
   ## ⚠️ This leaks the next item
   ##   nil or overwrite it for further use in linked lists
@@ -172,9 +173,10 @@ proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var
     # We lose the competition, bail out
     chan.front.next.store(front, moRelaxed)
     discard chan.count.fetchSub(result, moRelaxed)
-    postCondition: chan.count.load(moRelaxed) >= 0
+    postCondition: chan.count.load(moRelaxed) >= 0 # TODO: somehow it can be negative
     return
 
+  # front == last
   chan.front.next.store(nil, moRelaxed)
   if compareExchange(chan.back, last, chan.front.addr, moAcquireRelease):
     # We won and replaced the last node with the channel front
@@ -190,19 +192,22 @@ proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var
   # we assume that consumer has plenty of work to do with the
   # already retrived batch
   next = cast[T](front.next.load(moRelaxed))
-  if not next.isNil:
-    # Extra node after this one, no competition with producers
-    prefetch(front)
-    result += 1
-    discard chan.count.fetchSub(result, moRelaxed)
-    chan.front.next.store(next, moRelaxed)
-    fence(moAcquire)
-    bLast = front
-    postCondition: chan.count.load(moRelaxed) >= 0
-    return
+  while next.isNil:
+    # We spinlock, unfortunately there seems to be a livelock potential
+    # or contention issue if we don't use cpuRelax
+    # at least twice or just bail out if next is nil.
+    # Replace this spinlock by "if not next.isNil" and run the "memory pool" bench
+    # or fibonacci and the program will get stuck.
+    # The queue should probably be model checked and/or run through Relacy
+    cpuRelax()
+    next = cast[T](front.next.load(moRelaxed))
 
-  # The last item wasn't linked to the list yet, bail out
+  prefetch(front)
+  result += 1
   discard chan.count.fetchSub(result, moRelaxed)
+  chan.front.next.store(next, moRelaxed)
+  fence(moAcquire)
+  bLast = front
   postCondition: chan.count.load(moRelaxed) >= 0
 
 func peek*(chan: var ChannelMpscUnboundedBatch): int32 {.inline.} =

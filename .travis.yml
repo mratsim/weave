@@ -12,21 +12,32 @@ matrix:
     # Build and test using both gcc and clang
     # Build and test on both x86-64 and ARM64
     - os: linux
-      env: CHANNEL=devel
+      arch: amd64
+      env:
+        - ARCH=amd64
+        - CHANNEL=devel
       compiler: gcc
 
     - os: linux
       arch: arm64
-      env: CHANNEL=devel
+      env:
+        - ARCH=arm64
+        - CHANNEL=devel
       compiler: gcc
 
     - os: linux
-      env: CHANNEL=devel
+      arch: amd64
+      env:
+        - ARCH=amd64
+        - CHANNEL=devel
       compiler: clang
 
     # On OSX we only test against clang (gcc is mapped to clang by default)
     - os: osx
-      env: CHANNEL=devel
+      arch: amd64
+      env:
+        - ARCH=amd64
+        - CHANNEL=devel
       compiler: clang
   fast_finish: true
 
@@ -66,7 +77,7 @@ before_script:
     - export PATH="nim-${CHANNEL}/bin${PATH:+:$PATH}"
 script:
     - nimble refresh
-    - nimble install cligen
+    - nimble install cligen || true
     - nimble test
 branches:
   except:
