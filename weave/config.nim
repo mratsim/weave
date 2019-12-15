@@ -50,7 +50,7 @@ const WV_StealEarly* {.intdefine.} = 0
   ## steal requests in advance. This might help hide stealing latencies
   ## or worsen message overhead.
 
-const WV_EnableBackoff* {.booldefine.} = true
+const WV_EnableBackoff* {.booldefine.} = false
   ## Workers that fail to find work will sleep. This saves CPU at the price
   ## of slight latency as the workers' parent nodes need to manage their
   ## steal requests queues when they sleep and there is latency to wake up.
