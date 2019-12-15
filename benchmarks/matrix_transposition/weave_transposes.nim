@@ -250,7 +250,7 @@ template runBench(transposeName: typed, reorderCompute, isSequential: bool): unt
 # Interface
 # ---------------------------------------------------
 
-proc main(M = 400, N = 4000, nrounds = 10000, transposeStrat = TiledNested, reorderCompute=false) =
+proc main(M = 400, N = 4000, nrounds = 1000, transposeStrat = TiledNested, reorderCompute=false) =
   echo "Inverting the transpose order may favor one transposition heavily for non-tiled strategies"
 
   let isSequential = transposeStrat == Sequential
