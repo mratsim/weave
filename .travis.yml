@@ -12,21 +12,28 @@ matrix:
     # Build and test using both gcc and clang
     # Build and test on both x86-64 and ARM64
     - os: linux
-      env: CHANNEL=devel
+      env:
+        - CHANNEL=devel
+        - ARCH=amd64
       compiler: gcc
 
     - os: linux
       arch: arm64
-      env: CHANNEL=devel
+        - CHANNEL=devel
+        - ARCH=arm64
       compiler: gcc
 
     - os: linux
-      env: CHANNEL=devel
+      arch:
+        - CHANNEL=devel
+        - ARCH=amd64
       compiler: clang
 
     # On OSX we only test against clang (gcc is mapped to clang by default)
     - os: osx
-      env: CHANNEL=devel
+      arch:
+        - CHANNEL=devel
+        - ARCH=amd64
       compiler: clang
   fast_finish: true
 
