@@ -167,11 +167,8 @@ when isMainModule:
       echo "Sanity check 1: Printing 123456 654321 in parallel"
 
       init(Weave)
-
       spawn display_int(123456)
       spawn display_int(654321)
-
-      sync(Weave)
       exit(Weave)
 
     main()
@@ -192,10 +189,7 @@ when isMainModule:
       echo "Sanity check 2: fib(20)"
 
       init(Weave)
-
       let f = async_fib(20)
-
-      sync(Weave)
       exit(Weave)
 
       echo f
