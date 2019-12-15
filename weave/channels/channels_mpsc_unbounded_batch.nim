@@ -147,6 +147,7 @@ proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var
   ## Returns the number of items received
   ##
   ## If no items are returned bFirst and bLast are undefined
+  ## and should not be used.
   ##
   ## ⚠️ This leaks the next item
   ##   nil or overwrite it for further use in linked lists
@@ -172,9 +173,10 @@ proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var
     # We lose the competition, bail out
     chan.front.next.store(front, moRelaxed)
     discard chan.count.fetchSub(result, moRelaxed)
-    postCondition: chan.count.load(moRelaxed) >= 0
+    postCondition: chan.count.load(moRelaxed) >= 0 # TODO: somehow it can be negative
     return
 
+  # front == last
   chan.front.next.store(nil, moRelaxed)
   if compareExchange(chan.back, last, chan.front.addr, moAcquireRelease):
     # We won and replaced the last node with the channel front
