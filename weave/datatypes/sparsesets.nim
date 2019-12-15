@@ -138,11 +138,12 @@ when isMainModule:
   S.refill()
   echo S
 
-  var rng = 123'u32
+  var rngState: RngState
+  rngState.seed(123)
   var picked: seq[int32]
 
   for _ in 0 ..< Picked:
-    let p = S.randomPick(rng)
+    let p = S.randomPick(rngState)
     picked.add p
     S.excl p
     echo "---"

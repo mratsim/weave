@@ -162,10 +162,10 @@ when isMainModule:
 
       var a = 100
       var b = 10
-      expandMacros:
-        parallelFor i in 0 ..< 10:
-          captures: {a, b}
-          log("a+b+i = %d (thread %d)\n", a+b+i, myID())
+      # expandMacros:
+      parallelFor i in 0 ..< 10:
+        captures: {a, b}
+        log("a+b+i = %d (thread %d)\n", a+b+i, myID())
 
       exit(Weave)
 
@@ -197,11 +197,11 @@ when isMainModule:
     proc main4() =
       init(Weave)
 
-      expandMacros:
-        parallelForStrided i in 0 ..< 100, stride = 30:
-          parallelForStrided j in 0 ..< 200, stride = 60:
-            captures: {i}
-            log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
+      # expandMacros:
+      parallelForStrided i in 0 ..< 100, stride = 30:
+        parallelForStrided j in 0 ..< 200, stride = 60:
+          captures: {i}
+          log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
 
       exit(Weave)
 
