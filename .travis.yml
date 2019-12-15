@@ -66,6 +66,7 @@ before_script:
     - export PATH="nim-${CHANNEL}/bin${PATH:+:$PATH}"
 script:
     - nimble refresh
+    - nimble install cligen
     - nimble test
 branches:
   except:
