@@ -98,16 +98,25 @@ template alloca*(T: typedesc): ptr T =
 template alloca*(T: typedesc, len: Natural): ptr UncheckedArray[T] =
   cast[ptr UncheckedArray[T]](alloca(sizeof(T) * len))
 
-# TODO: IIRC Windows requires _aligned_alloc
-proc aligned_alloc(alignment, size: csize_t): pointer {.sideeffect,importc, header:"<stdlib.h>".}
+when defined(windows):
+  proc aligned_alloc(alignment, size: csize_t): pointer {.sideeffect,importc:"_aligned_malloc", header:"<malloc.h>".}
+  proc wv_freeAligned*[T](p: ptr T){.sideeffect,importc:"_aligned_free", header:"<malloc.h>".}
+elif defined(osx):
+  proc posix_memalign(mem: var pointer, alignment, size: csize_t){.sideeffect,importc, header:"<stdlib.h>".}
+  proc aligned_alloc(alignment, size: csize_t): pointer {.inline.} =
+    posix_memalign(result, alignment, size)
+  proc wv_freeAligned*[T](p: ptr T){.inline.} =
+    c_free(p)
+else:
+  proc aligned_alloc(alignment, size: csize_t): pointer {.sideeffect,importc, header:"<stdlib.h>".}
+  proc wv_freeAligned*[T](p: ptr T){.inline.} =
+    c_free(p)
 
 proc wv_allocAligned*(T: typedesc, alignment: static Natural): ptr T {.inline.} =
+  ## aligned_alloc requires allocating in multiple of the alignment.
   static:
     assert alignment.isPowerOfTwo()
   let # TODO - cannot use a const due to https://github.com/nim-lang/Nim/issues/12726
     size = sizeof(T)
     requiredMem = size.roundNextMultipleOf(alignment)
   cast[ptr T](aligned_alloc(csize_t alignment, csize_t requiredMem))
-
-proc wv_freeAligned*[T](p: ptr T){.inline.} =
-  c_free(p)
