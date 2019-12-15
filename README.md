@@ -1,5 +1,5 @@
 # Weave, a state-of-the-art multithreading runtime
-[![Build Status: Travis](https://img.shields.io/travis/com/mratsim/weave?label=Travis%20%28Linux%2FMac%20-%20x86_64%2FARM64%29)](https://travis-ci.com/mratsim/weave)
+[![Build Status: Travis](https://img.shields.io/travis/com/mratsim/weave?label=Travis%20%28Linux%20x86_64%2FARM64%20-%20OSX%20optional%29)](https://travis-ci.com/mratsim/weave)
 [![Build Status: Azure](https://img.shields.io/azure-devops/build/numforge/69bc2700-4fa7-4292-a0b3-331ddb721640/2?label=Azure%20%28C%2FC%2B%2B%20Linux%2032-bit%2F64-bit%29)](https://dev.azure.com/numforge/Weave/_build?definitionId=2&branchName=master)
 [![License: Apache](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)

@@ -7,11 +7,14 @@
 
 import strutils
 
-# With C++ we need C++11
+# Platform support
 # ----------------------------------------------------------------------------------
 
 when defined(cpp):
   {.passC:"-std=c++11".}
+
+when defined(tlsEmulation):
+  {.warning: "TLS Emulation (default on MacOS due to old iOS requiring it) is not supported. Please run Weave tests to ensure some degree of correctness.".}
 
 # Static configuration & compile-time options
 # ----------------------------------------------------------------------------------
