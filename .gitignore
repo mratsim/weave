@@ -6,3 +6,9 @@ build/*
 
 # C / C++
 *.out
+
+# TLA
+formal_verification/*.dvi
+formal_verification/*.tex
+formal_verification/*.old
+formal_verification/states

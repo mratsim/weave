@@ -89,7 +89,7 @@ Backoff:
       log("Worker %2d: waking up child %2d\n", localCtx.worker.ID, target)
     globalCtx.com.parking[target].notify()
 
-  export event_notifiers.wait, event_notifiers.intendToSleep, event_notifiers.initialize, event_notifiers.EventNotifier
+  export event_notifiers.park, event_notifiers.prepareToPark, event_notifiers.initialize, event_notifiers.EventNotifier
 
 # Task caching
 # ----------------------------------------------------------------------------------
