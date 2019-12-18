@@ -196,9 +196,9 @@ proc lastStealAttemptFailure*(req: sink StealRequest) =
     debugTermination:
       log("Worker %2d: sends state passively WAITING to its parent worker %d\n", myID(), myWorker().parent)
     Backoff:
-      myParking().intendToSleep()
+      myParking().prepareToPark()
     sendShare(req)
     ascertain: not myWorker().isWaiting
     myWorker().isWaiting = true
     Backoff: # Thread is blocked here until woken up.
-      myParking().wait()
+      myParking().park()

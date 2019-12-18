@@ -22,7 +22,7 @@
 #   in Weave it may wake up with 10 steal requests queued.
 #
 # As each thread as a parent, a thread that backed off can temporarily give up ownership
-# of it's steal request channel to its parent instead
+# of its steal request channel to its parent instead
 #
 # ------------------------------------------------------------------
 # Backoff strategies
@@ -36,10 +36,13 @@
 # - Augment the relevant channels with a companion MPSC
 #   event signaling system.
 #   This completely removes spurious wakeups but only applicable
-#   for shared memory system.
+#   for shared memory systems.
 #
 # Extensive research details on distributed backoff
 # are provided in the corresponding markdown file
+#
+# The current file has been formally specified and verified
+# Formal specification is available at project_root/formal_verification/event_notifiers.tla
 
 import
   # Standard library
@@ -48,86 +51,61 @@ import
   ../config
 
 type
-  ConsumerState = enum
-    # We need 4 states to solve a race condition, see (https://github.com/mratsim/weave/issues/27)
-    # A child signals its parent that it goes to sleep via a steal request.
-    # Its parent tries to wake it up but the child is not sleeping
-    # The child goes to sleep and system is deadlocked.
-    # Instead, before signaling via the channel it should also notify
-    # its intent to sleep, and then commit/rollback its intent once it has sent its message.
-    Busy
-    IntendToSleep
-    Parked
-    ShouldWakeup
-
   EventNotifier* = object
     ## Multi Producers, Single Consumer event notification
-    ## This is wait-free for producers and avoid spending time
-    ## in expensive kernel land.
+    ## This is can be seen as a wait-free condition variable for producers
+    ## that avoids them spending time in expensive kernel land due to mutexes.
     ##
     ## This data structure should be associated with a MPSC channel
     ## to notify that an "event" happened in the channel.
     ## It avoid spurious polling of empty channels,
     ## and allow parking of threads to save on CPU power.
     ##
-    ## See also: binary semaphores, eventcount
+    ## See also: binary semaphores, eventcounts
     ## On Windows: ManuallyResetEvent and AutoResetEvent
-    cond{.align: WV_CacheLinePadding.}: Cond
-    lock: Lock # The lock is never used, it's just there for the condition variable
-    consumerState: Atomic[ConsumerState]
+    # ---- Consumer specific ----
+    lock{.align: WV_CacheLinePadding.}: Lock # The lock is never used, it's just there for the condition variable
+    ticket: uint8                            # A ticket for the consumer to sleep in a phase
+    # ---- Contention ---- no real need for padding as cache line should be reloaded in case of contention anyway
+    cond: Cond                               # Allow parking of threads
+    phase: Atomic[uint8]                     # A binary timestamp, toggles between 0 and 1 (but there is no atomic "not")
+    signaled: Atomic[bool]                   # Signaling condition
 
 func initialize*(en: var EventNotifier) =
   en.cond.initCond()
   en.lock.initLock()
-  en.consumerState.store(Busy, moRelaxed)
+  en.ticket = 0
+  en.phase.store(0, moRelaxed)
+  en.signaled.store(false, moRelaxed)
 
 func `=destroy`*(en: var EventNotifier) =
   en.cond.deinitCond()
   en.lock.deinitLock()
 
-func intendToSleep*(en: var EventNotifier) {.inline.} =
+func prepareToPark*(en: var EventNotifier) {.inline.} =
   ## The consumer intends to sleep soon.
   ## This must be called before the formal notification
   ## via a channel.
-  assert en.consumerState.load(moRelaxed) == Busy
+  if not en.signaled.load(moRelaxed):
+    en.ticket = en.phase.load(moRelaxed)
 
-  fence(moRelease)
-  en.consumerState.store(IntendToSleep, moRelaxed)
-
-func wait*(en: var EventNotifier) {.inline.} =
+func park*(en: var EventNotifier) {.inline.} =
   ## Wait until we are signaled of an event
   ## Thread is parked and does not consume CPU resources
-
-  var expected = IntendToSleep
-  if compareExchange(en.consumerState, expected, Parked, moAcquireRelease):
-    while en.consumerState.load(moRelaxed) == Parked:
-      # We only used the lock for the condition variable, we protect via atomics otherwise
-      fence(moAcquire)
-      en.cond.wait(en.lock)
-
-  # If we failed to sleep or just woke up
-  # we return to the busy state
-  fence(moRelease)
-  en.consumerState.store(Busy, moRelaxed)
+  ## This may wakeup spuriously.
+  if not en.signaled.load(moRelaxed):
+    if en.ticket == en.phase.load(moRelaxed):
+      en.cond.wait(en.lock) # Spurious wakeup are not a problem
+  en.signaled.store(false, moRelaxed)
+  # We still hold the lock but it's not used anyway.
 
 func notify*(en: var EventNotifier) {.inline.} =
   ## Signal a thread that it can be unparked
 
-  # No thread waiting, return
-  let consumerState = en.consumerState.load(moRelaxed)
-  if consumerState in {Busy, ShouldWakeup}:
-    fence(moAcquire)
+  if en.signaled.load(moRelaxed):
+    # Another producer is signaling
     return
-
+  en.signaled.store(true, moRelaxed)
   fence(moRelease)
-  en.consumerState.store(ShouldWakeup, moRelaxed)
-  while true:
-    # We might signal "ShouldWakeUp" after the consumer check
-    # and just before it waits so we need to loop the signal
-    # until it's sure the consumer is back to busy.
-    fence(moAcquire)
-    en.cond.signal()
-    if en.consumerState.load(moAcquire) != Busy:
-      cpuRelax()
-    else:
-      break
+  discard en.phase.fetchXor(1, moRelaxed)
+  en.cond.signal()
