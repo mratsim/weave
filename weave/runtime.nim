@@ -94,7 +94,7 @@ proc sync*(_: type Weave) {.gcsafe.} =
   debugTermination:
     log(">>> Worker %2d enters barrier <<<\n", myID())
 
-  preCondition: myID() == LeaderID and myTask().isRootTask()
+  preCondition: myTask().isRootTask()
 
   block EmptyLocalQueue:
     ## Empty all the tasks and before leaving the barrier
@@ -169,12 +169,9 @@ proc sync*(_: type Weave) {.gcsafe.} =
     log(">>> Worker %2d leaves barrier <<<\n", myID())
 
 proc exit*(_: type Weave) =
-  preCondition: myID() == LeaderID and myTask().isRootTask()
   sync(_)
-  # There should be no steal requests left otherwise the termination signal that we send will
-  # be forward to the thief and the worker will sleep again and deadlock the runtime
-  ascertain: not hasThievesProxy(myID())
   signalTerminate(nil)
+  localCtx.signaledTerminate = true
 
   # 1 matching barrier in worker_entry_fn
   discard pthread_barrier_wait(globalCtx.barrier)

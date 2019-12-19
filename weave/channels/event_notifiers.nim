@@ -108,10 +108,4 @@ func notify*(en: var EventNotifier) {.inline.} =
   en.signaled.store(true, moRelaxed)
   fence(moRelease)
   discard en.phase.fetchXor(1, moRelaxed)
-  while en.signaled.load(moRelaxed):
-    # This loop shouldn't be needed according to formal verification
-    # And locking here and befor parking doesn't prevent a rare deadlock on runtime exit
-    # see https://github.com/mratsim/weave/pull/55
-    # Is pthread having spurious no wakeups? (like descheduling the waiter so lost signal?)
-    en.cond.signal()
-    cpuRelax()
+  en.cond.signal()
