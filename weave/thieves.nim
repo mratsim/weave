@@ -94,20 +94,25 @@ proc findVictimAndSteal(req: sink StealRequest) {.inline.} =
     myID(), target, globalCtx.com.thefts[target].addr)
   target.sendSteal(req)
 
-proc findVictimAndRelaySteal*(req: sink StealRequest) {.inline.} =
-  # Note:
-  #   Nim manual guarantees left-to-right function evaluation.
-  #   Hence in the following:
-  #     `req.findVictim().relaySteal(req)`
-  #   findVictim request update should be done before relaySteal
-  #
-  #   but C and C++ do not provides that guarantee
-  #   and debugging that in a multithreading runtime
-  #   would probably be very painful.
+proc forget*(req: sink StealRequest) {.gcsafe.}
+
+proc findVictimAndRelaySteal*(req: sink StealRequest) {.inline, gcsafe.} =
+  req.victims.excl(myID())
   let target = findVictim(req)
-  # debug: log("Worker %2d: relay steal request from %d to %d (Channel 0x%.08x)\n",
-  #   myID(), req.thiefID, target, globalCtx.com.thefts[target].addr)
-  target.relaySteal(req)
+  if target != myID():
+    # debug: log("Worker %2d: relay steal request from %d to %d (Channel 0x%.08x)\n",
+    #   myID(), req.thiefID, target, globalCtx.com.thefts[target].addr)
+    target.relaySteal(req)
+  else:
+    # A worker may receive its own steal request in "Working" state
+    # in that case, it's a signal to call "lastAttemptFailure"/defer to "declineOwn"
+    # but with termination detection.
+    # but is it safe? in any case, we need to forget it to prevent a livelock
+    # where a worker constantly retrieves its own steal request from one of its child channels
+    # see: https://github.com/mratsim/weave/issues/43
+    # Also victims.nim imports thieves.nim so we can't import victims.declineOwn here.
+    ascertain: req.state == Working
+    forget(req)
 
 # Stealing logic
 # ----------------------------------------------------------------------------------
@@ -152,7 +157,7 @@ proc trySteal*(isOutOfTasks: bool) =
       # TODO LastVictim/LastThief
       req.findVictimAndSteal()
 
-proc forget*(req: sink StealRequest) =
+proc forget*(req: sink StealRequest) {.gcsafe.} =
   ## Removes a steal request from circulation
   ## Re-increment the worker quota
 

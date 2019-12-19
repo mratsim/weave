@@ -160,10 +160,9 @@ proc declineOwn(req: sink StealRequest) =
     ascertain: req.victims.capacity.int32 == workforce()
     req.retry = 0
     req.victims.refill()
-    req.victims.excl(myID())
     req.findVictimAndRelaySteal()
 
-proc decline*(req: sink StealRequest) =
+proc decline*(req: sink StealRequest) {.gcsafe.} =
   ## Pass steal request to another worker
   ## or the manager if it's our own that came back
   preCondition: req.retry <= WV_MaxRetriesPerSteal
@@ -175,7 +174,6 @@ proc decline*(req: sink StealRequest) =
     if req.thiefID == myID():
       req.declineOwn()
     else: # Not our own request
-      req.victims.excl(myID())
       req.findVictimAndRelaySteal()
 
 template receivedOwn(req: sink StealRequest) =

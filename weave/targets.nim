@@ -8,7 +8,6 @@
 import
   ./datatypes/[sparsesets, sync_types, context_thread_local, binary_worker_trees],
   ./contexts,
-  ./random/rng,
   ./instrumentation/[contracts, loggers],
   ./config
 
@@ -42,25 +41,15 @@ proc randomVictim(victims: SparseSet, workerID: WorkerID): WorkerID =
   postCondition: result != myID()
 
 proc findVictim*(req: var StealRequest): WorkerID =
-  preCondition:
-    myID() notin req.victims
-
-  result = Not_a_worker
-
-  if req.thiefID == myID():
-    # Steal request initiated by the current worker.
-    # Send it to a random one
-    ascertain: req.retry == 0
-    result = myThefts().rng.uniform(workforce())
-    while result == myID():
-      result = myThefts().rng.uniform(workforce())
-  elif req.retry == WV_MaxRetriesPerSteal:
+  if req.retry == WV_MaxRetriesPerSteal:
     # Return steal request to thief
     # logVictims(req.victims, req.thiefID)
     result = req.thiefID
   else:
     # Forward steal request to a different worker if possible
     # Also pass along information on the workers we manage
+    ascertain: (req.retry == 0 and req.thiefID == myID()) or
+               (req.retry > 0 and req.thiefID != myID())
     if myWorker().leftIsWaiting and myWorker().rightIsWaiting:
       markIdle(req.victims, myID())
     elif myWorker().leftIsWaiting:
@@ -80,7 +69,11 @@ proc findVictim*(req: var StealRequest): WorkerID =
       log("Worker %2d: relay thief {%d} -> no victim after %d tries (%u ones)\n",
         myID(), req.thiefID, req.retry, req.victims.len
       )
+    # If no targets were found either the request originated from a coworker
+    # and I was the last possible target.
+    # or all threads but the main one are sleeping and it retrieved its own request
+    # from one of the sleeper queues
+    postCondition: result != myID() or (result == myID() and myID() == LeaderID)
 
   postCondition: result in 0 ..< workforce()
-  postCondition: result != myID()
   postCondition: req.retry in 0 .. WV_MaxRetriesPerSteal
