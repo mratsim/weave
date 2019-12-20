@@ -46,9 +46,20 @@
 
 import
   # Standard library
-  locks, atomics,
+  atomics,
   # Internal
   ../config
+
+when defined(linux):
+  import ../primitives/futex_linux
+else:
+  import locks
+
+# On Linux, Glibc condition variables have lost signal issues
+# that do not happen on MacOS.
+# Instead we use raw futex to replace both locks and condition variables.
+# They uses 20x less space and do not add useless logic for our use case.
+# TODO: Windows futex. Unfortunately BSDs including Mac do not provide a futex.
 
 type
   EventNotifier* = object
@@ -63,24 +74,37 @@ type
     ##
     ## See also: binary semaphores, eventcounts
     ## On Windows: ManuallyResetEvent and AutoResetEvent
-    # ---- Consumer specific ----
-    lock{.align: WV_CacheLinePadding.}: Lock # The lock is never used, it's just there for the condition variable
-    ticket: uint8                            # A ticket for the consumer to sleep in a phase
-    # ---- Contention ---- no real need for padding as cache line should be reloaded in case of contention anyway
-    cond: Cond                               # Allow parking of threads
-    phase: Atomic[uint8]                     # A binary timestamp, toggles between 0 and 1 (but there is no atomic "not")
-    signaled: Atomic[bool]                   # Signaling condition
+    when defined(linux):
+      # ---- Consumer specific ----
+      ticket{.align: WV_CacheLinePadding.}: uint8 # A ticket for the consumer to sleep in a phase
+      # ---- Contention ---- no real need for padding as cache line should be reloaded in case of contention anyway
+      futex: Futex                                # A Futex (atomic int32 that can put thread to sleep)
+      phase: Atomic[uint8]                        # A binary timestamp, toggles between 0 and 1 (but there is no atomic "not")
+      signaled: Atomic[bool]                      # Signaling condition
+
+    else:
+      # ---- Consumer specific ----
+      lock{.align: WV_CacheLinePadding.}: Lock # The lock is never used, it's just there for the condition variable
+      ticket: uint8                            # A ticket for the consumer to sleep in a phase
+      # ---- Contention ---- no real need for padding as cache line should be reloaded in case of contention anyway
+      cond: Cond                               # Allow parking of threads
+      phase: Atomic[uint8]                     # A binary timestamp, toggles between 0 and 1 (but there is no atomic "not")
+      signaled: Atomic[bool]                   # Signaling condition
 
 func initialize*(en: var EventNotifier) =
-  en.cond.initCond()
-  en.lock.initLock()
+  when defined(linux):
+    en.futex.initialize()
+  else:
+    en.cond.initCond()
+    en.lock.initLock()
   en.ticket = 0
   en.phase.store(0, moRelaxed)
   en.signaled.store(false, moRelaxed)
 
 func `=destroy`*(en: var EventNotifier) =
-  en.cond.deinitCond()
-  en.lock.deinitLock()
+  when not defined(linux):
+    en.cond.deinitCond()
+    en.lock.deinitLock()
 
 func prepareToPark*(en: var EventNotifier) {.inline.} =
   ## The consumer intends to sleep soon.
@@ -95,8 +119,13 @@ func park*(en: var EventNotifier) {.inline.} =
   ## This may wakeup spuriously.
   if not en.signaled.load(moRelaxed):
     if en.ticket == en.phase.load(moRelaxed):
-      en.cond.wait(en.lock) # Spurious wakeup are not a problem
+      when defined(linux):
+        discard en.futex.wait(0)
+      else:
+        en.cond.wait(en.lock) # Spurious wakeup are not a problem
   en.signaled.store(false, moRelaxed)
+  when defined(linux):
+    en.futex.initialize()
   # We still hold the lock but it's not used anyway.
 
 func notify*(en: var EventNotifier) {.inline.} =
@@ -105,7 +134,10 @@ func notify*(en: var EventNotifier) {.inline.} =
   if en.signaled.load(moRelaxed):
     # Another producer is signaling
     return
-  en.signaled.store(true, moRelaxed)
-  fence(moRelease)
+  en.signaled.store(true, moRelease)
   discard en.phase.fetchXor(1, moRelaxed)
-  en.cond.signal()
+  when defined(linux):
+    en.futex.store(1, moRelease)
+    discard en.futex.wake()
+  else:
+    en.cond.signal()
