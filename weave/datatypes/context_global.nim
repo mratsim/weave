@@ -13,7 +13,7 @@ import
   ../primitives/barriers,
   ./sync_types, ./binary_worker_trees
 
-when WV_EnableBackoff:
+when WV_Backoff:
   import ../channels/event_notifiers
 
 # Global / inter-thread communication channels
@@ -38,7 +38,7 @@ type
     # Theft channels are bounded to "NumWorkers * WV_MaxConcurrentStealPerWorker"
     thefts*: ptr UncheckedArray[ChannelMpscUnboundedBatch[StealRequest]]
     tasks*: ptr UncheckedArray[Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]]]
-    when static(WV_EnableBackoff):
+    when static(WV_Backoff):
       parking*: ptr UncheckedArray[EventNotifier]
 
   GlobalContext* = object
