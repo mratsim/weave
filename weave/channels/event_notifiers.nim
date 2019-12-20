@@ -113,7 +113,7 @@ func prepareToPark*(en: var EventNotifier) {.inline.} =
   if not en.signaled.load(moRelaxed):
     en.ticket = en.phase.load(moRelaxed)
 
-func park*(en: var EventNotifier) {.inline.} =
+proc park*(en: var EventNotifier) {.inline.} =
   ## Wait until we are signaled of an event
   ## Thread is parked and does not consume CPU resources
   ## This may wakeup spuriously.
@@ -128,7 +128,7 @@ func park*(en: var EventNotifier) {.inline.} =
     en.futex.initialize()
   # We still hold the lock but it's not used anyway.
 
-func notify*(en: var EventNotifier) {.inline.} =
+proc notify*(en: var EventNotifier) {.inline.} =
   ## Signal a thread that it can be unparked
 
   if en.signaled.load(moRelaxed):

@@ -12,35 +12,15 @@
 import std/atomics, ../instrumentation/loggers
 export MemoryOrder
 
-const
-  NR_Futex = 202
-  FutexPrivateFlag = 128
-
 type
   Futex* = distinct Atomic[int32]
+  FutexOp = distinct cint
 
-  FutexOp {.size: sizeof(cint).}= enum
-    FutexWait = 0
-    FutexWake = 1
-    # ...
-    FutexWaitPrivate = 0 or FutexPrivateFlag # If all threads belong to the same process
-    FutexWakePrivate = 1 or FutexPrivateFlag # If all threads belong to the same process
-
-when not defined(release) or not defined(danger):
-  var SysFutexDbg {.importc:"SYS_futex", header: "<sys/syscall.h>".}: cint
-  assert NR_Futex == SysFutexDbg, "Your platform is misconfigured"
-
-  var FutexWaitDbg {.importc:"FUTEX_WAIT", header: "<linux/futex.h>".}: cint
-  assert ord(FutexWait) == FutexWaitDbg, "Your platform is misconfigured"
-
-  var FutexWakeDbg {.importc:"FUTEX_WAKE", header: "<linux/futex.h>".}: cint
-  assert ord(FutexWake) == FutexWakeDbg, "Your platform is misconfigured"
-
-  var FutexWaitPrivateDbg {.importc:"FUTEX_WAIT_PRIVATE", header: "<linux/futex.h>".}: cint
-  assert ord(FutexWaitPrivate) == FutexWaitPrivateDbg, "Your platform is misconfigured"
-
-  var FutexWakePrivateDbg {.importc:"FUTEX_WAKE_PRIVATE", header: "<linux/futex.h>".}: cint
-  assert ord(FutexWakePrivate) == FutexWakePrivateDbg, "Your platform is misconfigured"
+var NR_Futex {.importc: "__NR_futex", header: "<sys/syscall.h>".}: cint
+var FutexWait {.importc: "FUTEX_WAIT", header:"<linux/futex.h>".}: FutexOp
+var FutexWake {.importc:"FUTEX_WAKE", header: "<linux/futex.h>".}: FutexOp
+var FutexWaitPrivate {.importc:"FUTEX_WAIT_PRIVATE", header: "<linux/futex.h>".}: FutexOp
+var FutexWakePrivate {.importc:"FUTEX_WAKE_PRIVATE", header: "<linux/futex.h>".}: FutexOp
 
 proc syscall(sysno: clong): cint {.header:"<sys/syscall.h>", varargs.}
 
