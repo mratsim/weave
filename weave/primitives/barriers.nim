@@ -65,4 +65,4 @@ else:
     let err {.used.} = pthread_barrier_destroy(syncBarrier)
     when compileOption("assertions"):
       if err < 0:
-        raiseOSError(err)
+        raiseOSError(OSErrorCode(err))
