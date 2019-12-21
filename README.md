@@ -10,8 +10,24 @@ _"Good artists borrow, great artists steal."_ -- Pablo Picasso
 
 Weave (codenamed "Project Picasso") is a multithreading runtime for the [Nim programming language](https://nim-lang.org/).
 
-⚠️ At the moment, Weave only works on Linux and MacOS. The only missing part for Windows
-is wrapping [Synchronization Barriers](https://docs.microsoft.com/en-us/windows/win32/sync/synchronization-barriers) (which is much better than MacOS where you have to write the barrier from scratch).
+It is continuously tested on Linux, MacOS and Windows for the following CPU architectures: x86, x86_64 and ARM64.
+
+Weave aims to provide a composable, high-performance, ultra-low overhead and fine-grained parallel runtime that frees developers from the common worries of
+"are my tasks big enough to be parallelized?", "what should be my grain size?", "what if the time they take is completely unknown or different?" or "is parallel-for worth it if it's just a matrix addition? On what CPUs? What if it's exponentiation?".
+
+Thorough benchmarks track Weave performance against industry standard runtimes in C/C++/Cilk language on both Task parallelism and Data parallelism with a variety of workloads:
+- Compute-bound
+- Memory-bound
+- Load Balancing
+- Runtime-overhead bound (i.e. trillions of tasks in a couple milliseconds)
+- Nested parallelism
+
+Benchmarks are issued from recursive tree algorithms, finance, linear algebra and High Performance Computing, game simulations.
+In particular Weave displays as low as 3x to 10x less overhead than Intel TBB and GCC OpenMP
+on overhead-bound benchmarks.
+
+At implementation level, Weave unique feature is being-based on Message-Passing
+instead of being based on traditional work-stealing with shared-memory deques.
 
 > ⚠️ Disclaimer:
 >
@@ -20,7 +36,7 @@ is wrapping [Synchronization Barriers](https://docs.microsoft.com/en-us/windows/
 > detection tool to ensure proper implementation.
 >
 > Furthermore worker threads are basically actors or state-machines and
-> were not formally verified either. Empirical tests and benchmarks showed no large issue.
+> were not formally verified either.
 >
 > Weave does limit synchronization to only simple SPSC and MPSC channels which greatly reduces
 > the potential bug surface.
@@ -120,7 +136,7 @@ exit(Weave)
 - `spawn fnCall(args)` which spawns a function that may run on another thread and gives you an awaitable Flowvar handle.
 - `sync(Flowvar)` will await a Flowvar and block until you receive a result.
 - `sync(Weave)` is a global barrier for the main thread on the main task. Allowing nestable barriers for any thread is work-in-progress.
-- `parallelFor`, `parallelForStrided`, `parallelForStaged`, `parallelForStagedtrided` are described above and in the experimental section.
+- `parallelFor`, `parallelForStrided`, `parallelForStaged`, `parallelForStagedStrided` are described above and in the experimental section.
 - `loadBalance(Weave)` gives the runtime the opportunity to distribute work. Insert this within long computation as due to Weave design, it's busy workers hat are also in charge of load balancing. This is done automatically when using `parallelFor`.
 - `isSpawned` allows you to build speculative algorithm where a thread is spawned only if certain conditions are valid. See the `nqueens` benchmark for an example.
 - `getThreadId` returns a unique thread ID. The thread ID is in the range 0 ..< number of threads.
@@ -187,13 +203,9 @@ a couple hundreds of milliseconds. This can be enabled with `-d:WV_LazyFlowvar`.
 
 ### Backoff mechanism
 
-A Backoff mechanism is available for preview, that allow workers with no tasks to sleep instead of spining aimlessly and burning CPU.
+A Backoff mechanism is enabled by default. It allows workers with no tasks to sleep instead of spining aimlessly and burning CPU.
 
-This can be enabled with `-d:WV_EnableBackoff=on`.
-It will become the default in the future.
-
-⚠️ The backoff mechanism is currently prone to deadlocks where a worker sleeps
-and never replies anymore leaving the other workers hanging.
+It can be disabled with `-d:WV_Backoff=off`.
 
 ## Limitations
 
