@@ -157,8 +157,8 @@ steps:
     condition: ne(variables['Agent.OS'], 'Windows_NT')
 
   - powershell: |
-      echo "##vso[task.prependpath]$pwd\NimBinaries\nim-${CHANNEL}\bin"
-    displayName: 'Set env variable (Posix)'
+      echo "##vso[task.prependpath]$pwd\NimBinaries\nim-$(CHANNEL)\bin"
+    displayName: 'Set env variable (Windows)'
     condition: eq(variables['Agent.OS'], 'Windows_NT')
   - powershell: |
       echo $Env:Path
