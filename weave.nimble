@@ -40,7 +40,8 @@ task test, "Run Weave tests":
   test "", "weave/memory/persistacks.nim"
 
   test "", "weave/parallel_tasks.nim"
-  test "", "weave/parallel_for.nim"
+  when not defined(windows): # Need nestable barriers - https://github.com/mratsim/weave/issues/51
+    test "", "weave/parallel_for.nim"
   test "", "weave/parallel_for_staged.nim"
   # test "", "weave/parallel_reduce.nim"
 
@@ -54,7 +55,7 @@ task test, "Run Weave tests":
   test "", "benchmarks/heat/weave_heat.nim"
   test "", "benchmarks/matrix_transposition/weave_transposes.nim"
   test "", "benchmarks/nqueens/weave_nqueens.nim"
-  when not defined(windows):
+  when not defined(windows): # Need "time" support - https://github.com/mratsim/weave/issues/60
     test "", "benchmarks/single_task_producer/weave_spc.nim"
 
   test "-d:WV_LazyFlowvar", "benchmarks/dfs/weave_dfs.nim"
