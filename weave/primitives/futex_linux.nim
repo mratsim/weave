@@ -22,7 +22,7 @@ var FutexWake {.importc:"FUTEX_WAKE", header: "<linux/futex.h>".}: FutexOp
 var FutexWaitPrivate {.importc:"FUTEX_WAIT_PRIVATE", header: "<linux/futex.h>".}: FutexOp
 var FutexWakePrivate {.importc:"FUTEX_WAKE_PRIVATE", header: "<linux/futex.h>".}: FutexOp
 
-proc syscall(sysno: clong): cint {.header:"<sys/syscall.h>", varargs.}
+proc syscall(sysno: clong): cint {.header:"<unistd.h>", varargs.}
 
 proc sysFutex(
        futex: var Futex, op: FutexOp, val1: cint,
@@ -41,11 +41,12 @@ proc wake*(futex: var Futex): cint {.inline.} =
   ## or a Posix error code (if negative)
   sysFutex(futex, FutexWakePrivate, 1)
 
-proc load*(futex: var Futex, memOrder: MemoryOrder): int32 {.inline.} =
-  Atomic[int32](futex).load(memOrder)
-
-proc store*(futex: var Futex, val: int32, memOrder: MemoryOrder) {.inline.} =
-  Atomic[int32](futex).store(val, memOrder)
+# Futex is not a distinct Atomic[int32] due to bad codegen with C++
+# proc load*(futex: var Futex, memOrder: MemoryOrder): int32 {.inline.} =
+#   Atomic[int32](futex).load(memOrder)
+#
+# proc store*(futex: var Futex, val: int32, memOrder: MemoryOrder) {.inline.} =
+#   Atomic[int32](futex).store(val, memOrder)
 
 proc initialize*(futex: var Futex) {.inline.} =
   futex.store(0, moRelaxed)
