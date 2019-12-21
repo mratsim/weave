@@ -140,25 +140,26 @@ steps:
       fi
       popd # exit nim-CHANNEL
       popd # exit NimBinaries
-      echo "##vso[task.prependpath]$PWD/NimBinaries/nim-${CHANNEL}/bin"
     displayName: 'Building Nim'
 
-  # Nimble uses findExe which is broken under bash windows
-  - bash: |
-      echo "PATH=${PATH}"
-      nimble refresh
-      nimble install cligen
-    displayName: 'Building the package dependencies (Posix)'
-    condition: ne(variables['Agent.OS'], 'Windows_NT')
+  # # Nimble uses findExe which is broken under bash windows
+  # - bash: |
+  #     echo "##vso[task.prependpath]$PWD/NimBinaries/nim-${CHANNEL}/bin"
+  #     echo "PATH=${PATH}"
+  #     nimble refresh
+  #     nimble install cligen
+  #   displayName: 'Building the package dependencies (Posix)'
+  #   condition: ne(variables['Agent.OS'], 'Windows_NT')
 
-  - powershell: |
-      echo $Env:Path
-      nimble refresh
-      nimble install cligen
-    displayName: 'Building the package dependencies (Windows)'
-    condition: eq(variables['Agent.OS'], 'Windows_NT')
+  # - powershell: |
+  #     echo "##vso[task.prependpath]$Env:Path\NimBinaries\nim-${CHANNEL}\bin"
+  #     echo $Env:Path
+  #     nimble refresh
+  #     nimble install cligen
+  #   displayName: 'Building the package dependencies (Windows)'
+  #   condition: eq(variables['Agent.OS'], 'Windows_NT')
 
-  - bash: |
-      echo "PATH=${PATH}"
-      nimble test
-    displayName: 'Testing the package'
+  # - bash: |
+  #     echo "PATH=${PATH}"
+  #     nimble test
+  #   displayName: 'Testing the package'
