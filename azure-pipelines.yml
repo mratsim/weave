@@ -1,32 +1,24 @@
 strategy:
   matrix:
     # Nim requires enforcing ARCH="x86" and ucpu
-    # for 32-bit target as it seems like the machine is 64-bit
-    # Weave only works on devel and Unix platforms at the moment
-    # Windows_stable_32bit:
-    #   VM: 'windows-latest'
-    #   ARCH: x86
-    #   ucpu: i686
-    #   PLATFORM: x86
-    #   CHANNEL: stable
-    #   WEAVE_TEST_LANG: c
-    # Windows_stable_64bit:
-    #   VM: 'windows-latest'
-    #   PLATFORM: x64
-    #   CHANNEL: stable
-    #   WEAVE_TEST_LANG: c
-    # Windows_devel_32bit:
-    #   VM: 'windows-latest'
-    #   ARCH: x86
-    #   ucpu: i686
-    #   PLATFORM: x86
-    #   CHANNEL: devel
-    #   WEAVE_TEST_LANG: c
-    # Windows_devel_bit:
-    #   VM: 'windows-latest'
-    #   PLATFORM: x64
-    #   CHANNEL: devel
-    #   WEAVE_TEST_LANG: c
+    # for 32-bit targets as it seems like Azure machines are 64-bit
+    Windows_devel_32bit:
+      VM: 'windows-latest'
+      ARCH: x86
+      ucpu: i686
+      PLATFORM: x86
+      CHANNEL: devel
+      WEAVE_TEST_LANG: c
+    Windows_devel_64bit:
+      VM: 'windows-latest'
+      PLATFORM: x64
+      CHANNEL: devel
+      WEAVE_TEST_LANG: c
+    Windows_cpp_devel_64bit:
+      VM: 'windows-latest'
+      PLATFORM: x64
+      CHANNEL: devel
+      WEAVE_TEST_LANG: cpp
     Linux_devel_64bit:
       VM: 'ubuntu-16.04'
       PLATFORM: x64
@@ -41,6 +33,11 @@ strategy:
       VM: 'ubuntu-16.04'
       PLATFORM: x86
       ucpu: i686
+      CHANNEL: devel
+      WEAVE_TEST_LANG: c
+    MacOS_devel_64bit:
+      VM: 'macOS-10.14'
+      PLATFORM: x64
       CHANNEL: devel
       WEAVE_TEST_LANG: c
 
