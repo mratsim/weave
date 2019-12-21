@@ -140,7 +140,7 @@ proc notify*(en: var EventNotifier) {.inline.} =
   en.signaled.store(true, moRelease)
   discard en.phase.fetchXor(1, moRelaxed)
   when supportsFutex:
-    en.futex.store(1, moSequentiallyConsistent)
+    en.futex.store(1, moRelease)
     en.futex.wake()
   else:
     en.cond.signal()
