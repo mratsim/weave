@@ -150,5 +150,6 @@ steps:
     displayName: 'Building the package dependencies'
 
   - bash: |
+      echo "PATH=${PATH}"
       nimble test
     displayName: 'Testing the package'

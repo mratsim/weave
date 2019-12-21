@@ -30,7 +30,7 @@ type
     count: Natural32                # Total number of threads that need to arrive before opening the barrier
 
 const
-  PTHREAD_BARRIER_SERIAL_THREAD = Errno(1)
+  PTHREAD_BARRIER_SERIAL_THREAD* = Errno(1)
 
 proc pthread_cond_broadcast(cond: var Cond): Errno {.header:"<pthread.h>".}
   ## Nim only signal one thread in locks

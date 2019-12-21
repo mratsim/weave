@@ -56,7 +56,8 @@ else:
     when compileOption("assertions"):
       if err < 0:
         raiseOSError(OSErrorCode(err))
-    result = bool(err)
+    result = if err == PTHREAD_BARRIER_SERIAL_THREAD: true
+             else: false
 
   proc delete*(syncBarrier: sink SyncBarrier) {.inline.} =
     ## Deletes a synchronization barrier.

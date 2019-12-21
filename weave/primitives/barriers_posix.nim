@@ -16,13 +16,15 @@ when not compileOption("threads"):
 
 when defined(osx):
   import ./barriers_macos
-  export PthreadAttr, PthreadBarrier, Errno
+  export PthreadAttr, PthreadBarrier, Errno, PTHREAD_BARRIER_SERIAL_THREAD
 else:
   type
     PthreadAttr* {.byref, importc: "pthread_attr_t", header: "<sys/types.h>".} = object
     PthreadBarrier* {.byref, importc: "pthread_barrier_t", header: "<sys/types.h>".} = object
 
     Errno* = cint
+
+  var PTHREAD_BARRIER_SERIAL_THREAD* {.importc, header:"<pthread.h>".}: Errno
 
 # Pthread
 # -------------------------------------------------------
