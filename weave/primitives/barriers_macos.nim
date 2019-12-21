@@ -52,6 +52,10 @@ func pthread_barrier_init*(
   # barrier.sense = false
 
 proc pthread_barrier_wait*(barrier: var PthreadBarrier): Errno =
+  ## Wait on `barrier`
+  ## Returns PTHREAD_BARRIER_SERIAL_THREAD for a single arbitrary thread
+  ## Returns 0 for the other
+  ## Returns Errno if there is an error
   barrier.lock.acquire()
   {.locks: [barrier.lock].}:
     var local_sense = barrier.sense # Thread local sense
