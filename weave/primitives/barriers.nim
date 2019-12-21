@@ -46,7 +46,7 @@ else:
     let err {.used.} = pthread_barrier_init(syncBarrier, nil, threadCount)
     when compileOption("assertions"):
       if err != 1:
-        raiseOSError(err)
+        raiseOSError(OSErrorCode(err))
 
   proc wait*(syncBarrier: var SyncBarrier): bool {.inline.} =
     ## Blocks thread at a synchronization barrier.
@@ -55,7 +55,7 @@ else:
     let err {.used.} = pthread_barrier_wait(syncBarrier, SYNCHRONIZATION_BARRIER_FLAGS_NO_DELETE)
     when compileOption("assertions"):
       if err < 0:
-        raiseOSError(err)
+        raiseOSError(OSErrorCode(err))
     result = bool(err)
 
   proc delete*(syncBarrier: sink SyncBarrier) {.inline.} =
