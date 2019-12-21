@@ -13,7 +13,7 @@ import
   macros,
   # Internal
   ./parallel_macros, ./config,
-  ./contexts,
+  ./contexts, ./scheduler,
   ./datatypes/flowvars,
   ./instrumentation/[contracts, profilers]
 
