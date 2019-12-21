@@ -45,7 +45,7 @@ else:
     ## before release.
     let err {.used.} = pthread_barrier_init(syncBarrier, nil, threadCount)
     when compileOption("assertions"):
-      if err != 1:
+      if err != 0:
         raiseOSError(OSErrorCode(err))
 
   proc wait*(syncBarrier: var SyncBarrier): bool {.inline.} =
