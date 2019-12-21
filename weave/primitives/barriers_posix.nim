@@ -22,7 +22,7 @@ else:
     PthreadAttr* {.byref, importc: "pthread_attr_t", header: "<sys/types.h>".} = object
     PthreadBarrier* {.byref, importc: "pthread_barrier_t", header: "<sys/types.h>".} = object
 
-    Errno* = distinct cint
+    Errno* = cint
 
 # Pthread
 # -------------------------------------------------------

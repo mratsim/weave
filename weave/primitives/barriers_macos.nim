@@ -15,7 +15,7 @@ import locks
 type
   Natural32 = range[0'i32..high(int32)]
 
-  Errno* = distinct cint
+  Errno* = cint
 
   PthreadAttr* = object
     ## Dummy

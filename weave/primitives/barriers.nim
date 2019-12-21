@@ -32,3 +32,37 @@ when defined(windows):
     ## This assumes no race between waiting at a barrier and deleting it,
     ## and reuse of the barrier requires initialization.
     DeleteSynchronizationBarrier(syncBarrier.addr)
+
+else:
+  import ./barriers_posix
+  when compileOption("assertions"):
+    import os
+
+  type SyncBarrier* = PthreadBarrier
+
+  proc init*(syncBarrier: var SyncBarrier, threadCount: range[0'i32..high(int32)]) {.inline.} =
+    ## Initialize a synchronization barrier that will block ``threadCount`` threads
+    ## before release.
+    let err {.used.} = pthread_barrier_init(syncBarrier, nil, threadCount)
+    when compileOption("assertions"):
+      if err != 1:
+        raiseOSError(err)
+
+  proc wait*(syncBarrier: var SyncBarrier): bool {.inline.} =
+    ## Blocks thread at a synchronization barrier.
+    ## Returns true for one of the threads (the last one on Windows, undefined on Posix)
+    ## and false for the others.
+    let err {.used.} = pthread_barrier_wait(syncBarrier, SYNCHRONIZATION_BARRIER_FLAGS_NO_DELETE)
+    when compileOption("assertions"):
+      if err < 0:
+        raiseOSError(err)
+    result = bool(err)
+
+  proc delete*(syncBarrier: sink SyncBarrier) {.inline.} =
+    ## Deletes a synchronization barrier.
+    ## This assumes no race between waiting at a barrier and deleting it,
+    ## and reuse of the barrier requires initialization.
+    let err {.used.} = pthread_barrier_destroy(syncBarrier.addr)
+    when compileOption("assertions"):
+      if err < 0:
+        raiseOSError(err)
