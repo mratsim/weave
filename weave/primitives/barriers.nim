@@ -54,7 +54,7 @@ else:
     ## and false for the others.
     let err {.used.} = pthread_barrier_wait(syncBarrier)
     when compileOption("assertions"):
-      if err < 0:
+      if err != PTHREAD_BARRIER_SERIAL_THREAD and err < 0:
         raiseOSError(OSErrorCode(err))
     result = if err == PTHREAD_BARRIER_SERIAL_THREAD: true
              else: false
