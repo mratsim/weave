@@ -343,7 +343,7 @@ func allocBlock(arena: var Arena): ptr MemBlock {.inline.} =
 # ----------------------------------------------------------------------------------
 # TODO: metrics
 
-func release(pool: var TLPoolAllocator, arena: ptr Arena) =
+proc release(pool: var TLPoolAllocator, arena: ptr Arena) =
   ## Returns the memory of an arena to the OS
   if pool.first == arena: pool.first = arena.next
   if pool.last == arena: pool.last = arena.prev
@@ -358,7 +358,7 @@ func release(pool: var TLPoolAllocator, arena: ptr Arena) =
 
   wv_freeAligned(arena)
 
-func considerRelease(pool: var TLPoolAllocator, arena: ptr Arena) {.inline.} =
+proc considerRelease(pool: var TLPoolAllocator, arena: ptr Arena) {.inline.} =
   ## Test if an arena memory should be released to the OS
   debugMem:
     log("Pool    0x%.08x - TID %d - considering Arena 0x%.08x for release, %d arenas in pool\n",
