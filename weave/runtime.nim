@@ -16,7 +16,12 @@ import
   ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
   ./scheduler, ./signals, ./workers, ./thieves, ./victims,
   # Low-level primitives
-  ./primitives/[affinity, barriers]
+  ./primitives/barriers
+
+when defined(windows):
+  import ./primitives/affinity_windows
+else:
+  import ./primitives/affinity_posix
 
 # Runtime public routines
 # ----------------------------------------------------------------------------------
