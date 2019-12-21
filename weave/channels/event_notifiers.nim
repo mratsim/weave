@@ -52,8 +52,12 @@ import
 
 when defined(linux):
   import ../primitives/futex_linux
+elif defined(windows):
+  import ../primitives/futex_windows
 else:
   import locks
+
+const supportsFutex = defined(linux) or defined(windows)
 
 # On Linux, Glibc condition variables have lost signal issues
 # that do not happen on MacOS.
@@ -74,14 +78,13 @@ type
     ##
     ## See also: binary semaphores, eventcounts
     ## On Windows: ManuallyResetEvent and AutoResetEvent
-    when defined(linux):
+    when supportsFutex:
       # ---- Consumer specific ----
       ticket{.align: WV_CacheLinePadding.}: uint8 # A ticket for the consumer to sleep in a phase
       # ---- Contention ---- no real need for padding as cache line should be reloaded in case of contention anyway
       futex: Futex                                # A Futex (atomic int32 that can put thread to sleep)
       phase: Atomic[uint8]                        # A binary timestamp, toggles between 0 and 1 (but there is no atomic "not")
       signaled: Atomic[bool]                      # Signaling condition
-
     else:
       # ---- Consumer specific ----
       lock{.align: WV_CacheLinePadding.}: Lock # The lock is never used, it's just there for the condition variable
@@ -92,7 +95,7 @@ type
       signaled: Atomic[bool]                   # Signaling condition
 
 func initialize*(en: var EventNotifier) =
-  when defined(linux):
+  when supportsFutex:
     en.futex.initialize()
   else:
     en.cond.initCond()
@@ -102,7 +105,7 @@ func initialize*(en: var EventNotifier) =
   en.signaled.store(false, moRelaxed)
 
 func `=destroy`*(en: var EventNotifier) =
-  when not defined(linux):
+  when not supportsFutex:
     en.cond.deinitCond()
     en.lock.deinitLock()
 
@@ -119,12 +122,12 @@ proc park*(en: var EventNotifier) {.inline.} =
   ## This may wakeup spuriously.
   if not en.signaled.load(moRelaxed):
     if en.ticket == en.phase.load(moRelaxed):
-      when defined(linux):
-        discard en.futex.wait(0)
+      when supportsFutex:
+        en.futex.wait(0)
       else:
         en.cond.wait(en.lock) # Spurious wakeup are not a problem
   en.signaled.store(false, moRelaxed)
-  when defined(linux):
+  when supportsFutex:
     en.futex.initialize()
   # We still hold the lock but it's not used anyway.
 
@@ -136,8 +139,8 @@ proc notify*(en: var EventNotifier) {.inline.} =
     return
   en.signaled.store(true, moRelease)
   discard en.phase.fetchXor(1, moRelaxed)
-  when defined(linux):
+  when supportsFutex:
     en.futex.store(1, moRelease)
-    discard en.futex.wake()
+    en.futex.wake()
   else:
     en.cond.signal()

@@ -17,8 +17,6 @@ type
   FutexOp = distinct cint
 
 var NR_Futex {.importc: "__NR_futex", header: "<sys/syscall.h>".}: cint
-var FutexWait {.importc: "FUTEX_WAIT", header:"<linux/futex.h>".}: FutexOp
-var FutexWake {.importc:"FUTEX_WAKE", header: "<linux/futex.h>".}: FutexOp
 var FutexWaitPrivate {.importc:"FUTEX_WAIT_PRIVATE", header: "<linux/futex.h>".}: FutexOp
 var FutexWakePrivate {.importc:"FUTEX_WAKE_PRIVATE", header: "<linux/futex.h>".}: FutexOp
 
@@ -29,17 +27,21 @@ proc sysFutex(
        timeout: pointer = nil, val2: pointer = nil, val3: cint = 0): cint {.inline.} =
   syscall(NR_Futex, futex.addr, op, val1, timeout, val2, val3)
 
-proc wait*(futex: var Futex, refVal: int32): cint {.inline.} =
+proc wait*(futex: var Futex, refVal: int32) {.inline.} =
   ## Suspend a thread if the value of the futex is the same as refVal.
-  ## Returns 0 in case of a successful suspend
-  ## If value are different, it returns EWOULDBLOCK
-  sysFutex(futex, FutexWaitPrivate, refVal)
+  
+  # Returns 0 in case of a successful suspend
+  # If value are different, it returns EWOULDBLOCK
+  # We discard as this is not needed and simplifies compat with Windows futex
+  discard sysFutex(futex, FutexWaitPrivate, refVal)
 
-proc wake*(futex: var Futex): cint {.inline.} =
+proc wake*(futex: var Futex) {.inline.} =
   ## Wake one thread (from the same process)
-  ## Returns the number of actually woken thread
-  ## or a Posix error code (if negative)
-  sysFutex(futex, FutexWakePrivate, 1)
+
+  # Returns the number of actually woken threads
+  # or a Posix error code (if negative)
+  # We discard as this is not needed and simplifies compat with Windows futex
+  discard sysFutex(futex, FutexWakePrivate, 1)
 
 # Futex is not a distinct Atomic[int32] due to bad codegen with C++
 # proc load*(futex: var Futex, memOrder: MemoryOrder): int32 {.inline.} =
