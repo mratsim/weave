@@ -25,8 +25,10 @@ import
   cligen,
   # Weave
   ../../weave,
+
+when defined(linux):
   # bench
-  ../wtime, ../resources
+  import ../wtime, ../resources
 
 # Types
 # --------------------------------
@@ -305,35 +307,39 @@ proc main(numRounds = 2000, input: string, output = "") =
   else:
     nthreads = countProcessors()
 
-  var ru: Rusage
-  getrusage(RusageSelf, ru)
-  var
-    rss = ru.ru_maxrss
-    flt = ru.ru_minflt
+  when not defined(windows):
+    var ru: Rusage
+    getrusage(RusageSelf, ru)
+    var
+      rss = ru.ru_maxrss
+      flt = ru.ru_minflt
 
-  let start = wtime_msec()
+    let start = wtime_msec()
   init(Weave)
   blackScholesWeave(ctx.addr)
   exit(Weave)
-  let stop = wtime_msec()
 
-  getrusage(RusageSelf, ru)
-  rss = ru.ru_maxrss - rss
-  flt = ru.ru_minflt - flt
+  when not defined(windows):
+    let stop = wtime_msec()
+
+    getrusage(RusageSelf, ru)
+    rss = ru.ru_maxrss - rss
+    flt = ru.ru_minflt - flt
 
 
-  const lazy = defined(WV_LazyFlowvar)
-  const config = if lazy: " (lazy flowvars)"
-                 else: " (eager flowvars)"
+    const lazy = defined(WV_LazyFlowvar)
+    const config = if lazy: " (lazy flowvars)"
+                  else: " (eager flowvars)"
 
   echo "--------------------------------------------------------------------------"
   echo "Scheduler:                                    Weave", config
   echo "Benchmark:                                    Black & Scholes Option Pricing"
   echo "Threads:                                      ", nthreads
-  echo "Time(ms)                                      ", round(stop - start, 3)
-  echo "Max RSS (KB):                                 ", ru.ru_maxrss
-  echo "Runtime RSS (KB):                             ", rss
-  echo "# of page faults:                             ", flt
+  when not defined(windows):
+    echo "Time(ms)                                      ", round(stop - start, 3)
+    echo "Max RSS (KB):                                 ", ru.ru_maxrss
+    echo "Runtime RSS (KB):                             ", rss
+    echo "# of page faults:                             ", flt
   echo "--------------------------------------------------------------------------"
   echo "# of rounds:                                  ", numRounds
   echo "# of options:                                 ", ctx.numOptions

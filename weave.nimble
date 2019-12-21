@@ -54,25 +54,13 @@ task test, "Run Weave tests":
   test "", "benchmarks/heat/weave_heat.nim"
   test "", "benchmarks/matrix_transposition/weave_transposes.nim"
   test "", "benchmarks/nqueens/weave_nqueens.nim"
-  test "", "benchmarks/single_task_producer/weave_spc.nim"
+  when not defined(windows):
+    test "", "benchmarks/single_task_producer/weave_spc.nim"
 
   test "-d:WV_LazyFlowvar", "benchmarks/dfs/weave_dfs.nim"
   test "-d:WV_LazyFlowvar", "benchmarks/fibonacci/weave_fib.nim"
   test "-d:WV_LazyFlowvar", "benchmarks/heat/weave_heat.nim"
   test "-d:WV_LazyFlowvar", "benchmarks/matrix_transposition/weave_transposes.nim"
   test "-d:WV_LazyFlowvar", "benchmarks/nqueens/weave_nqueens.nim"
-  test "-d:WV_LazyFlowvar", "benchmarks/single_task_producer/weave_spc.nim"
-
-  # test "-d:WV_EnableBackoff=on", "benchmarks/dfs/weave_dfs.nim"
-  # test "-d:WV_EnableBackoff=on", "benchmarks/fibonacci/weave_fib.nim"
-  # test "-d:WV_EnableBackoff=on", "benchmarks/heat/weave_heat.nim"
-  # test "-d:WV_EnableBackoff=on", "benchmarks/matrix_transposition/weave_transposes.nim"
-  # test "-d:WV_EnableBackoff=on", "benchmarks/nqueens/weave_nqueens.nim"
-  # test "-d:WV_EnableBackoff=on", "benchmarks/single_task_producer/weave_spc.nim"
-
-  # test "-d:WV_LazyFlowvar -d:WV_EnableBackoff=on", "benchmarks/dfs/weave_dfs.nim"
-  # test "-d:WV_LazyFlowvar -d:WV_EnableBackoff=on", "benchmarks/fibonacci/weave_fib.nim"
-  # test "-d:WV_LazyFlowvar -d:WV_EnableBackoff=on", "benchmarks/heat/weave_heat.nim"
-  # test "-d:WV_LazyFlowvar -d:WV_EnableBackoff=on", "benchmarks/matrix_transposition/weave_transposes.nim"
-  # test "-d:WV_LazyFlowvar -d:WV_EnableBackoff=on", "benchmarks/nqueens/weave_nqueens.nim"
-  # test "-d:WV_LazyFlowvar -d:WV_EnableBackoff=on", "benchmarks/single_task_producer/weave_spc.nim"
+  when not defined(windows):
+    test "-d:WV_LazyFlowvar", "benchmarks/single_task_producer/weave_spc.nim"

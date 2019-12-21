@@ -9,9 +9,10 @@ import
   # Stdlib
   system/ansi_c, strformat, os, strutils, cpuinfo,
   # Weave
-  ../../weave,
+  ../../weave
+when not defined(windows):
   # bench
-  ../wtime
+  import ../wtime
 
 proc dfs(depth, breadth: int): uint32 =
   if depth == 0:
@@ -58,13 +59,15 @@ proc main() =
     quit 1
 
   # Staccato benches runtime init and exit as well
-  let start = wtime_usec()
+  when not defined(windows):
+    let start = wtime_usec()
 
   init(Weave)
   answer = test(depth, breadth)
   exit(Weave)
 
-  let stop = wtime_usec()
+  when not defined(windows):
+    let stop = wtime_usec()
 
   const lazy = defined(WV_LazyFlowvar)
   const config = if lazy: " (lazy flowvars)"
@@ -73,7 +76,8 @@ proc main() =
   echo "Scheduler:  Weave", config
   echo "Benchmark:  dfs"
   echo "Threads:    ", nthreads
-  echo "Time(us)    ", stop - start
+  when not defined(windows):
+    echo "Time(us)    ", stop - start
   echo "Output:     ", answer
 
   quit 0
