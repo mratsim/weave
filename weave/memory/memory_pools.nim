@@ -288,7 +288,7 @@ func collect(arena: var Arena, force: bool) =
   ## We only move localFree to free when it's O(1)
   ## except on thread teardown
 
-  let beforeCollect = arena.meta.used
+  let beforeCollect {.used.} = arena.meta.used
 
   if not arena.meta.localFree.isNil:
     if likely(arena.meta.free.isNil):

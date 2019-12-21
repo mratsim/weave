@@ -10,11 +10,11 @@
 
 import
   # Standard library
-  macros, typetraits,
+  macros,
   # Internal
   ./parallel_macros, ./config,
-  ./scheduler, ./runtime, ./contexts,
-  ./datatypes/[sync_types, flowvars],
+  ./contexts,
+  ./datatypes/flowvars,
   ./instrumentation/[contracts, profilers]
 
 when not compileOption("threads"):
@@ -233,6 +233,8 @@ macro parallelReduceImpl*(loopParams: untyped, stride: int, body: untyped): unty
 
 
 when isMainModule:
+  import ./runtime
+
   block:
     proc sumReduce(n: int): int =
       var waitableSum: Flowvar[int]

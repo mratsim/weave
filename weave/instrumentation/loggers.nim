@@ -7,6 +7,8 @@
 
 import system/ansi_c
 
+{.used.}
+
 template log*(args: varargs[untyped]): untyped =
   c_printf(args)
   flushFile(stdout)

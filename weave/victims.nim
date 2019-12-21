@@ -11,8 +11,7 @@ import
   ./contexts, ./config,
   ./instrumentation/[contracts, profilers, loggers],
   ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_spsc_single],
-  ./thieves, ./loop_splitting,
-  ./memory/memory_pools
+  ./thieves, ./loop_splitting
 
 # Victims - Proxy handling on behalf of idle child workers
 # ----------------------------------------------------------------------------------

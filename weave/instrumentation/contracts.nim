@@ -7,6 +7,8 @@
 
 import macros, os, strutils
 
+{.used.}
+
 # A simple design-by-contract API
 # ----------------------------------------------------------------------------------
 
@@ -77,7 +79,7 @@ macro assertContract(
   result = quote do:
     {.noSideEffect.}:
       when compileOption("assertions"):
-        assert(`predicate`, `debug` & $`values` & "  [Worker "& `myID` & "]\n")
+        assert(`predicate`, `debug` & $`values` & "  [Worker " & `myID` & "]\n")
       elif defined(WV_Asserts):
         if unlikely(not(`predicate`)):
           raise newException(AssertionError, `debug` & $`values` & '\n')

@@ -14,13 +14,12 @@ is wrapping [Synchronization Barriers](https://docs.microsoft.com/en-us/windows/
 
 > ⚠️ Disclaimer:
 >
-> The synchronization primitives were not formally verified
-> or model-checked to prove the absence of data races or deadlock/livelock,
-> nor were they passed under a data race detection tool.
+> Only 1 out of 2 complex synchronization primitives was formally verified
+> to be deadlock-free. They were not submitted to an additional data race
+> detection tool to ensure proper implementation.
 >
-> Individual components are tested and the benchmarks as well,
-> however the potential interleaving of hundreds of threads for
-> billions of tasks and memory accesses was not.
+> Furthermore worker threads are basically actors or state-machines and
+> were not formally verified either. Empirical tests and benchmarks showed no large issue.
 >
 > Weave does limit synchronization to only simple SPSC and MPSC channels which greatly reduces
 > the potential bug surface.

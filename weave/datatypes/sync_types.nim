@@ -10,7 +10,6 @@ import
   ../config,
   ../channels/channels_spsc_single_ptr,
   ../instrumentation/contracts,
-  ../memory/allocs,
   std/atomics
 
 # Inter-thread synchronization types

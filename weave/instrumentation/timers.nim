@@ -78,7 +78,7 @@ template timer_new*(timer: var Timer, ghzClock: float64) =
   timer.elapsed = 0
   timer.ghz = ghzClock
 
-template timer_reset(timer: var Timer, ghzClock: float64) =
+template timer_reset(timer: var Timer, ghzClock: float64) {.used.} =
   timer_new(timer, ghzClock)
 
 template timer_start*(timer: var Timer) =

@@ -88,9 +88,9 @@ proc wv_free*[T: ptr](p: T) {.inline.} =
     c_free(p)
 
 when defined(windows):
-  proc alloca(size: csize): pointer {.header: "<malloc.h>".}
+  proc alloca(size: int): pointer {.header: "<malloc.h>".}
 else:
-  proc alloca(size: csize): pointer {.header: "<alloca.h>".}
+  proc alloca(size: int): pointer {.header: "<alloca.h>".}
 
 template alloca*(T: typedesc): ptr T =
   cast[ptr T](alloca(sizeof(T)))

@@ -10,11 +10,10 @@
 
 import
   # Standard library
-  macros, typetraits,
+  macros,
   # Internal
-  ./parallel_macros, ./config,
-  ./scheduler, ./runtime, ./contexts,
-  ./datatypes/[sync_types, flowvars],
+  ./parallel_macros,
+  ./contexts,
   ./instrumentation/[contracts, profilers]
 
 when not compileOption("threads"):
@@ -144,6 +143,8 @@ macro parallelForStagedStrided*(loopParams: untyped, stride: Positive, body: unt
 # --------------------------------------------------------
 
 when isMainModule:
+  import ./runtime
+
   block:
     # expandMacros:
     proc sumReduce(n: int): int =

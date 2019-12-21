@@ -16,7 +16,7 @@ proc pthread_self(): Pthread {.header: "<pthread.h>".}
 
 proc pthread_setaffinity_np(
        thread: Pthread,
-       cpuset_size: csize,
+       cpuset_size: int,
        cpuset: CpuSet
   ) {.header: "<pthread.h>".}
   ## Limit specified `thread` to run only on the processors

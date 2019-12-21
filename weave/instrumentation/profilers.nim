@@ -6,8 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 # TODO: unused import warning - https://github.com/nim-lang/Nim/issues/11826
-import system/ansi_c, macros, ./timers
-
+when defined(WV_Profile):
+  import system/ansi_c, macros, ./timers
 
 # Profiling
 # ----------------------------------------------------------------------------------
@@ -19,8 +19,8 @@ import system/ansi_c, macros, ./timers
 #   - 7z/LZMA technique: https://github.com/jljusten/LZMA-SDK/blob/781863cdf592da3e97420f50de5dac056ad352a5/CPP/7zip/UI/Common/Bench.cpp#L1487-L1506
 #   - Loop with carried depency: https://stackoverflow.com/questions/11706563/how-can-i-programmatically-find-the-cpu-frequency-with-c/25400230#25400230
 const
-  CpuFreqMhz {.intdefine.} = 4100
-  CpuFreqGhz = CpuFreqMhz.float64 / 100
+  CpuFreqMhz {.intdefine, used.} = 4100
+  CpuFreqGhz {.used.} = CpuFreqMhz.float64 / 100
 
 template checkName(name: untyped) {.used.} =
   static:

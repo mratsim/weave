@@ -8,9 +8,7 @@
 import
   std/atomics,
   ../config,
-  ../instrumentation/[contracts, loggers],
-  ../primitives/compiler_optimization_hints
-
+  ../instrumentation/[contracts, loggers]
 
 type
   ChannelSpscSinglePtr*[T: ptr] = object

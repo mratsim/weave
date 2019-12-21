@@ -12,7 +12,7 @@ import
   # Standard library
   macros, typetraits,
   # Internal
-  ./scheduler, ./runtime, ./contexts,
+  ./scheduler, ./contexts,
   ./datatypes/[flowvars, sync_types],
   ./instrumentation/[contracts, profilers]
 
@@ -157,6 +157,8 @@ macro spawn*(funcCall: typed): untyped =
 # --------------------------------------------------------
 
 when isMainModule:
+  import ./runtime
+
   block: # Async without result
 
     proc display_int(x: int) =

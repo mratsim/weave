@@ -10,9 +10,10 @@ import
   ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch],
   ./memory/[persistacks, lookaside_lists, memory_pools, allocs],
   ./config,
-  system/ansi_c,
-  ./instrumentation/[profilers, loggers, contracts],
-  ./primitives/barriers
+  ./instrumentation/[profilers, loggers, contracts]
+
+metrics:
+  import system/ansi_c
 
 Backoff:
   import ./channels/event_notifiers

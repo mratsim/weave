@@ -88,7 +88,7 @@ func prevPowerofTwo(n: WorkerID): WorkerID {.inline.} =
   ## or the biggest power of 2 preceding n
   1'i32 shl fastLog2(n+1)
 
-iterator traverseDepthFirst(start, maxID: WorkerID): WorkerID =
+iterator traverseDepthFirst(start, maxID: WorkerID): WorkerID {.used.}=
   ## CPU and memory efficient depth first iteration of implicit binary array trees:
   ## - Stackless
   ## - O(1) space, O(n + log(n)) operations (log(n) to find the last leaf)
