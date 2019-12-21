@@ -8,11 +8,20 @@
 import winlean
 
 type
-  SynchronizationBarrier*{.importc:"LPSYNCHRONIZATION_BARRIER", header:"<synchapi.h>".} = ptr object
+  SynchronizationBarrier*{.importc:"SYNCHRONIZATION_BARRIER", header:"<synchapi.h>".} = object
 
 var SYNCHRONIZATION_BARRIER_FLAGS_NO_DELETE* {.importc, header: "<synchapi.h>".}: DWORD
   ## Skip expensive checks on barrier enter if a barrier is never deleted.
 
-proc EnterSynchronizationBarrier*(lpBarrier: SynchronizationBarrier, dwFlags: DWORD): WINBOOL {.importc, header: "<synchapi.h>".}
-proc DeleteSynchronizationBarrier*(lpBarrier: sink SynchronizationBarrier) {.importc, header: "<synchapi.h>".}
-proc InitializeSynchronizationBarrier*(lpBarrier: SynchronizationBarrier, lTotalThreads: LONG, lSpinCount: LONG): WINBOOL {.importc, header: "<synchapi.h>".}
+proc EnterSynchronizationBarrier*(lpBarrier: var SynchronizationBarrier, dwFlags: DWORD): WINBOOL {.importc, stdcall, header: "<synchapi.h>".}
+proc DeleteSynchronizationBarrier*(lpBarrier: ptr SynchronizationBarrier) {.importc, stdcall, header: "<synchapi.h>".}
+proc InitializeSynchronizationBarrier*(lpBarrier: var SynchronizationBarrier, lTotalThreads: LONG, lSpinCount: LONG): WINBOOL {.importc, stdcall, header: "<synchapi.h>".}
+
+when isMainModule:
+  import os
+
+  var x{.noinit.}: SynchronizationBarrier
+  let err = InitializeSynchronizationBarrier(x, 2, -1)
+  if err != 1:
+    assert err == 0
+    raiseOSError(osLastError())

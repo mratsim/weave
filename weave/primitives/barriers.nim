@@ -12,7 +12,7 @@ when defined(windows):
 
   type SyncBarrier* = SynchronizationBarrier
 
-  proc init*(syncBarrier: SyncBarrier, threadCount: range[0'i32..high(int32)]) {.inline.} =
+  proc init*(syncBarrier: var SyncBarrier, threadCount: range[0'i32..high(int32)]) {.inline.} =
     ## Initialize a synchronization barrier that will block ``threadCount`` threads
     ## before release.
     let err {.used.} = InitializeSynchronizationBarrier(syncBarrier, threadCount, -1)
@@ -21,7 +21,7 @@ when defined(windows):
         assert err == 0
         raiseOSError(osLastError())
 
-  proc wait*(syncBarrier: SyncBarrier): bool {.inline.} =
+  proc wait*(syncBarrier: var SyncBarrier): bool {.inline.} =
     ## Blocks thread at a synchronization barrier.
     ## Returns true for one of the threads (the last one on Windows, undefined on Posix)
     ## and false for the others.
@@ -31,4 +31,4 @@ when defined(windows):
     ## Deletes a synchronization barrier.
     ## This assumes no race between waiting at a barrier and deleting it,
     ## and reuse of the barrier requires initialization.
-    DeleteSynchronizationBarrier(syncBarrier)
+    DeleteSynchronizationBarrier(syncBarrier.addr)
