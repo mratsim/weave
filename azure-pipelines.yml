@@ -63,6 +63,7 @@ steps:
     displayName: 'long path support'
     condition: eq(variables['Agent.OS'], 'Windows_NT')
   - bash: |
+      echo "PATH=${PATH}"
       set -e
       echo "Installing MinGW-w64"
       if [[ $PLATFORM == "x86" ]]; then
@@ -90,6 +91,7 @@ steps:
     condition: eq(variables['Agent.OS'], 'Windows_NT')
 
   - bash: |
+      echo "PATH=${PATH}"
       export ncpu=
       case '$(Agent.OS)' in
       'Linux')
@@ -108,6 +110,7 @@ steps:
     displayName: 'Detecting number of cores'
 
   - bash: |
+      echo "PATH=${PATH}"
       if [ "${CHANNEL}" = stable ]; then
         BRANCH="v$(curl https://nim-lang.org/channels/stable)"
       else
@@ -130,7 +133,7 @@ steps:
       else
         pushd "nim-${CHANNEL}"
         git fetch origin "${BRANCH}"
-        if ! git merge FETCH_HEAD | grep "Already up.to.date"; then
+        if ! git merge FETCH_HEAD | grep "Already up to date."; then
           bin/nim c koch
           ./koch boot -d:release
           ./koch tools
@@ -143,6 +146,7 @@ steps:
     displayName: 'Building Nim'
 
   - bash: |
+      echo "PATH=${PATH}"
       nimble refresh
       nimble install cligen || true
     displayName: 'Building the package dependencies'
