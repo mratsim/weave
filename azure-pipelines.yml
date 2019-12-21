@@ -143,8 +143,11 @@ steps:
     displayName: 'Building Nim'
 
   # Nimble uses findExe which is broken under bash windows
+  # We need to set PATH in the collector for the next tast
+  # and also update it within this task with export
   - bash: |
       echo "##vso[task.prependpath]$PWD/NimBinaries/nim-${CHANNEL}/bin"
+      export PATH="$PWD/NimBinaries/nim-${CHANNEL}/bin:${PATH}"
       echo "PATH=${PATH}"
       nimble refresh
       nimble install cligen
@@ -152,7 +155,8 @@ steps:
     condition: ne(variables['Agent.OS'], 'Windows_NT')
 
   - powershell: |
-      echo "##vso[task.prependpath]$Env:Path\NimBinaries\nim-${CHANNEL}\bin"
+      echo "##vso[task.prependpath]$pwd\NimBinaries\nim-${CHANNEL}\bin"
+      $env:Path = "$pwd\NimBinaries\nim-${CHANNEL}\bin;$env:Path"
       echo $Env:Path
       nimble refresh
       nimble install cligen
