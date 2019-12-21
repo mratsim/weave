@@ -62,7 +62,7 @@ else:
     ## Deletes a synchronization barrier.
     ## This assumes no race between waiting at a barrier and deleting it,
     ## and reuse of the barrier requires initialization.
-    let err {.used.} = pthread_barrier_destroy(syncBarrier.addr)
+    let err {.used.} = pthread_barrier_destroy(syncBarrier)
     when compileOption("assertions"):
       if err < 0:
         raiseOSError(err)
