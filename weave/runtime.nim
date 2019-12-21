@@ -16,7 +16,12 @@ import
   ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
   ./scheduler, ./signals, ./workers, ./thieves, ./victims,
   # Low-level primitives
-  ./primitives/[affinity, barriers]
+  ./primitives/barriers
+
+when defined(windows):
+  import ./primitives/affinity_windows
+else:
+  import ./primitives/affinity_posix
 
 # Runtime public routines
 # ----------------------------------------------------------------------------------
@@ -42,7 +47,7 @@ proc init*(_: type Weave) =
   globalCtx.com.tasks = wv_alloc(Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]], workforce())
   Backoff:
     globalCtx.com.parking = wv_alloc(EventNotifier, workforce())
-  discard pthread_barrier_init(globalCtx.barrier, nil, workforce())
+  globalCtx.barrier.init(workforce())
 
   # Lead thread - pinned to CPU 0
   myID() = 0
@@ -63,13 +68,13 @@ proc init*(_: type Weave) =
   myWorker().currentTask = newTaskFromCache() # Root task
   init(localCtx)
   # Wait for the child threads
-  discard pthread_barrier_wait(globalCtx.barrier)
+  discard globalCtx.barrier.wait()
 
 proc globalCleanup() =
   for i in 1 ..< workforce():
     joinThread(globalCtx.threadpool[i])
 
-  discard pthread_barrier_destroy(globalCtx.barrier)
+  globalCtx.barrier.delete()
   wv_free(globalCtx.threadpool)
 
   # Channels, each thread cleaned its channels
@@ -174,7 +179,7 @@ proc exit*(_: type Weave) =
   localCtx.signaledTerminate = true
 
   # 1 matching barrier in worker_entry_fn
-  discard pthread_barrier_wait(globalCtx.barrier)
+  discard globalCtx.barrier.wait()
 
   # 1 matching barrier in metrics
   workerMetrics()

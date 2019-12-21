@@ -45,7 +45,7 @@ type
     com*: ComChannels
     threadpool*: ptr UncheckedArray[Thread[WorkerID]]
     numWorkers*: int32
-    barrier*: PthreadBarrier # TODO windows support
+    barrier*: SyncBarrier
     mempools*: ptr UncheckedArray[TlPoolAllocator]
 
     # TODO track workers per socket / NUMA domain

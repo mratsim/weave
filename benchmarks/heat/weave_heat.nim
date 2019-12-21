@@ -36,9 +36,10 @@ import
   strformat, os, strutils, math, system/ansi_c,
   cpuinfo,
   # Weave
-  ../../weave,
+  ../../weave
+when not defined(windows):
   # bench
-  ../wtime, ../resources
+  import ../wtime, ../resources
 
 # Helpers
 # -------------------------------------------------------
@@ -267,11 +268,12 @@ proc main() =
   else:
     nthreads = countProcessors()
 
-  var ru: Rusage
-  getrusage(RusageSelf, ru)
-  var
-    rss = ru.ru_maxrss
-    flt = ru.ru_minflt
+  when not defined(windows):
+    var ru: Rusage
+    getrusage(RusageSelf, ru)
+    var
+      rss = ru.ru_maxrss
+      flt = ru.ru_minflt
 
   initTest()
 
@@ -279,13 +281,15 @@ proc main() =
   init(Weave)
 
   prep()
-  let start = wtime_usec()
+  when not defined(windows):
+    let start = wtime_usec()
   test()
-  let stop = wtime_usec()
+  when not defined(windows):
+    let stop = wtime_usec()
 
-  getrusage(RusageSelf, ru)
-  rss = ru.ru_maxrss - rss
-  flt = ru.ru_minflt - flt
+    getrusage(RusageSelf, ru)
+    rss = ru.ru_maxrss - rss
+    flt = ru.ru_minflt - flt
 
   exit(Weave)
 
@@ -300,10 +304,11 @@ proc main() =
   echo "Scheduler:        Weave", config
   echo "Benchmark:        heat"
   echo "Threads:          ", nthreads
-  echo "Time(us)          ", stop - start
-  echo "Max RSS (KB):     ", ru.ru_maxrss
-  echo "Runtime RSS (KB): ", rss
-  echo "# of page faults: ", flt
+  when not defined(windows):
+    echo "Time(us)          ", stop - start
+    echo "Max RSS (KB):     ", ru.ru_maxrss
+    echo "Runtime RSS (KB): ", rss
+    echo "# of page faults: ", flt
 
   quit 0
 

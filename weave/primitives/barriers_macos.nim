@@ -15,7 +15,7 @@ import locks
 type
   Natural32 = range[0'i32..high(int32)]
 
-  Errno* = distinct cint
+  Errno* = cint
 
   PthreadAttr* = object
     ## Dummy
@@ -30,7 +30,7 @@ type
     count: Natural32                # Total number of threads that need to arrive before opening the barrier
 
 const
-  PTHREAD_BARRIER_SERIAL_THREAD = Errno(1)
+  PTHREAD_BARRIER_SERIAL_THREAD* = Errno(1)
 
 proc pthread_cond_broadcast(cond: var Cond): Errno {.header:"<pthread.h>".}
   ## Nim only signal one thread in locks
@@ -52,6 +52,10 @@ func pthread_barrier_init*(
   # barrier.sense = false
 
 proc pthread_barrier_wait*(barrier: var PthreadBarrier): Errno =
+  ## Wait on `barrier`
+  ## Returns PTHREAD_BARRIER_SERIAL_THREAD for a single arbitrary thread
+  ## Returns 0 for the other
+  ## Returns Errno if there is an error
   barrier.lock.acquire()
   {.locks: [barrier.lock].}:
     var local_sense = barrier.sense # Thread local sense

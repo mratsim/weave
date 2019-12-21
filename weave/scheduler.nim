@@ -251,13 +251,13 @@ proc worker_entry_fn*(id: WorkerID) {.gcsafe.} =
   myID() = id # If this crashes, you need --tlsemulation:off
   myMemPool().initialize(myID())
   localCtx.init()
-  discard pthread_barrier_wait(globalCtx.barrier)
+  discard globalCtx.barrier.wait()
 
   {.gcsafe.}: # Not GC-safe when multi-threaded due to globals
     schedulingLoop()
 
   # 1 matching barrier in init(Runtime) for lead thread
-  discard pthread_barrier_wait(globalCtx.barrier)
+  discard globalCtx.barrier.wait()
 
   # 1 matching barrier in init(Runtime) for lead thread
   workerMetrics()

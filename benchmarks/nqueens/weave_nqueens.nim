@@ -39,9 +39,11 @@ import
   # Stdlib
   system/ansi_c, strformat, os, strutils, cpuinfo,
   # Weave
-  ../../weave,
+  ../../weave
+
+when not defined(windows):
   # bench
-  ../wtime, ../resources
+  import ../wtime, ../resources
 
 # Nim helpers
 # -------------------------------------------------
@@ -178,21 +180,27 @@ proc main() =
     echo &"The number of queens N (on a NxN board) must be in the range [1, {solutions.len}]"
     quit 1
 
-  var ru: Rusage
-  getrusage(RusageSelf, ru)
-  var
-    rss = ru.ru_maxrss
-    flt = ru.ru_minflt
+  when not defined(windows):
+    var ru: Rusage
+    getrusage(RusageSelf, ru)
+    var
+      rss = ru.ru_maxrss
+      flt = ru.ru_minflt
 
   init(Weave)
 
-  let start = wtime_msec()
+  when not defined(windows):
+    let start = wtime_msec()
+  
   let count = nqueens_par(n, 0, alloca(char, n))
-  let stop = wtime_msec()
+  
+  when not defined(windows):
+    let stop = wtime_msec()
 
-  getrusage(RusageSelf, ru)
-  rss = ru.ru_maxrss - rss
-  flt = ru.ru_minflt - flt
+  when not defined(windows):
+    getrusage(RusageSelf, ru)
+    rss = ru.ru_maxrss - rss
+    flt = ru.ru_minflt - flt
 
   exit(Weave)
 
@@ -211,10 +219,11 @@ proc main() =
   echo "Scheduler:            Weave", config
   echo "Benchmark:            N-queens"
   echo "Threads:              ", nthreads
-  echo "Time(us)              ", stop - start
-  echo "Max RSS (KB):         ", ru.ru_maxrss
-  echo "Runtime RSS (KB):     ", rss
-  echo "# of page faults:     ", flt
+  when not defined(windows):
+    echo "Time(us)              ", stop - start
+    echo "Max RSS (KB):         ", ru.ru_maxrss
+    echo "Runtime RSS (KB):     ", rss
+    echo "# of page faults:     ", flt
   echo "Problem size:         ", n,"x",n, " board with ",n, " queens"
   echo "Solutions found:      ", count
 

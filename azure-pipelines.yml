@@ -1,32 +1,24 @@
 strategy:
   matrix:
     # Nim requires enforcing ARCH="x86" and ucpu
-    # for 32-bit target as it seems like the machine is 64-bit
-    # Weave only works on devel and Unix platforms at the moment
-    # Windows_stable_32bit:
-    #   VM: 'windows-latest'
-    #   ARCH: x86
-    #   ucpu: i686
-    #   PLATFORM: x86
-    #   CHANNEL: stable
-    #   WEAVE_TEST_LANG: c
-    # Windows_stable_64bit:
-    #   VM: 'windows-latest'
-    #   PLATFORM: x64
-    #   CHANNEL: stable
-    #   WEAVE_TEST_LANG: c
-    # Windows_devel_32bit:
-    #   VM: 'windows-latest'
-    #   ARCH: x86
-    #   ucpu: i686
-    #   PLATFORM: x86
-    #   CHANNEL: devel
-    #   WEAVE_TEST_LANG: c
-    # Windows_devel_bit:
-    #   VM: 'windows-latest'
-    #   PLATFORM: x64
-    #   CHANNEL: devel
-    #   WEAVE_TEST_LANG: c
+    # for 32-bit targets as it seems like Azure machines are 64-bit
+    Windows_devel_32bit:
+      VM: 'windows-latest'
+      ARCH: x86
+      ucpu: i686
+      PLATFORM: x86
+      CHANNEL: devel
+      WEAVE_TEST_LANG: c
+    Windows_devel_64bit:
+      VM: 'windows-latest'
+      PLATFORM: x64
+      CHANNEL: devel
+      WEAVE_TEST_LANG: c
+    Windows_cpp_devel_64bit:
+      VM: 'windows-latest'
+      PLATFORM: x64
+      CHANNEL: devel
+      WEAVE_TEST_LANG: cpp
     Linux_devel_64bit:
       VM: 'ubuntu-16.04'
       PLATFORM: x64
@@ -41,6 +33,11 @@ strategy:
       VM: 'ubuntu-16.04'
       PLATFORM: x86
       ucpu: i686
+      CHANNEL: devel
+      WEAVE_TEST_LANG: c
+    MacOS_devel_64bit:
+      VM: 'macOS-10.14'
+      PLATFORM: x64
       CHANNEL: devel
       WEAVE_TEST_LANG: c
 
@@ -66,6 +63,7 @@ steps:
     displayName: 'long path support'
     condition: eq(variables['Agent.OS'], 'Windows_NT')
   - bash: |
+      echo "PATH=${PATH}"
       set -e
       echo "Installing MinGW-w64"
       if [[ $PLATFORM == "x86" ]]; then
@@ -87,12 +85,12 @@ steps:
       mkdir -p /c/custom
       mv "$MINGW_DIR" /c/custom/
       popd
-      export PATH="/c/custom/${MINGW_DIR}/bin:$PATH"
-      echo "##vso[task.setvariable variable=PATH;]$PATH"
+      echo "##vso[task.prependpath]/c/custom/${MINGW_DIR}/bin"
     displayName: 'Install dependencies (Windows)'
     condition: eq(variables['Agent.OS'], 'Windows_NT')
 
   - bash: |
+      echo "PATH=${PATH}"
       export ncpu=
       case '$(Agent.OS)' in
       'Linux')
@@ -107,10 +105,11 @@ steps:
       esac
       [[ -z "$ncpu" || $ncpu -le 0 ]] && ncpu=1
       echo "Found ${ncpu} cores"
-      echo "##vso[task.setvariable variable=ncpu;]${ncpu}"
+      echo "##vso[task.setvariable variable=ncpu;]$ncpu"
     displayName: 'Detecting number of cores'
 
   - bash: |
+      echo "PATH=${PATH}"
       if [ "${CHANNEL}" = stable ]; then
         BRANCH="v$(curl https://nim-lang.org/channels/stable)"
       else
@@ -133,7 +132,7 @@ steps:
       else
         pushd "nim-${CHANNEL}"
         git fetch origin "${BRANCH}"
-        if ! git merge FETCH_HEAD | grep "Already up.to.date"; then
+        if [ git merge FETCH_HEAD | grep -c "Already up to date." -ne 1 ]; then
           bin/nim c koch
           ./koch boot -d:release
           ./koch tools
@@ -141,15 +140,34 @@ steps:
       fi
       popd # exit nim-CHANNEL
       popd # exit NimBinaries
-      export PATH="NimBinaries/nim-${CHANNEL}/bin${PATH:+:$PATH}"
-      echo "##vso[task.setvariable variable=PATH;]$PATH"
     displayName: 'Building Nim'
 
+  # Nimble uses findExe which is broken under bash windows
+  # We need to set PATH in the collector for the next tast
+  # and also update it within this task with export
   - bash: |
+      echo "##vso[task.prependpath]$PWD/NimBinaries/nim-${CHANNEL}/bin"
+    displayName: 'Set env variable (Posix)'
+    condition: ne(variables['Agent.OS'], 'Windows_NT')
+  - bash: |
+      echo "PATH=${PATH}"
       nimble refresh
-      nimble install cligen || true
-    displayName: 'Building the package dependencies'
+      nimble install cligen
+    displayName: 'Building the package dependencies (Posix)'
+    condition: ne(variables['Agent.OS'], 'Windows_NT')
+
+  - powershell: |
+      echo "##vso[task.prependpath]$pwd\NimBinaries\nim-$(CHANNEL)\bin"
+    displayName: 'Set env variable (Windows)'
+    condition: eq(variables['Agent.OS'], 'Windows_NT')
+  - powershell: |
+      echo $Env:Path
+      nimble refresh
+      nimble install cligen
+    displayName: 'Building the package dependencies (Windows)'
+    condition: eq(variables['Agent.OS'], 'Windows_NT')
 
   - bash: |
+      echo "PATH=${PATH}"
       nimble test
     displayName: 'Testing the package'

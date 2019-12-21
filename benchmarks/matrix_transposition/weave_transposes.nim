@@ -15,9 +15,11 @@ import
   # Third-party
   cligen,
   # Weave
-  ../../weave,
+  ../../weave
+
+when not defined(windows):
   # bench
-  ../wtime, ../resources
+  import ../wtime, ../resources
 
 
 # Memory
@@ -121,17 +123,19 @@ func initialize(buffer: ptr UncheckedArray[float32], len: int) =
 template memUsage(maxRSS, runtimeRSS, pageFaults: untyped{ident}, body: untyped) =
   var maxRSS, runtimeRSS, pageFaults: int32
   block:
-    var ru: Rusage
-    getrusage(RusageSelf, ru)
-    runtimeRSS = ru.ru_maxrss
-    pageFaults = ru.ru_minflt
+    when not defined(windows):
+      var ru: Rusage
+      getrusage(RusageSelf, ru)
+      runtimeRSS = ru.ru_maxrss
+      pageFaults = ru.ru_minflt
 
     body
 
-    getrusage(RusageSelf, ru)
-    runtimeRSS = ru.ru_maxrss - runtimeRSS
-    pageFaults = ru.ru_minflt - pageFaults
-    maxRss = ru.ru_maxrss
+    when not defined(windows):
+      getrusage(RusageSelf, ru)
+      runtimeRSS = ru.ru_maxrss - runtimeRSS
+      pageFaults = ru.ru_minflt - pageFaults
+      maxRss = ru.ru_maxrss
 
 proc report(
     M, N: int, nthreads: int32, nrounds: int, reordered: bool,
@@ -159,54 +163,62 @@ proc report(
   echo "--------------------------------------------------------------------------"
   if not reordered:
     echo "Transposition:                                ", M,'x',N, " --> ", N, 'x', M
-    echo "Time(ms):                                     ", round(mxnTime, 3)
-    echo "Max RSS (KB):                                 ", mxnMaxRss
-    echo "Runtime RSS (KB):                             ", mxnRuntimeRSS
-    echo "# of page faults:                             ", mxnPageFaults
-    echo "Perf (GMEMOPs/s ~ GigaMemory Operations/s)    ", round(mxnPerf, 3)
+    when not defined(windows):
+      echo "Time(ms):                                     ", round(mxnTime, 3)
+      echo "Max RSS (KB):                                 ", mxnMaxRss
+      echo "Runtime RSS (KB):                             ", mxnRuntimeRSS
+      echo "# of page faults:                             ", mxnPageFaults
+      echo "Perf (GMEMOPs/s ~ GigaMemory Operations/s)    ", round(mxnPerf, 3)
     echo "--------------------------------------------------------------------------"
     echo "Transposition:                                ", N,'x',M, " --> ", M, 'x', N
-    echo "Time(ms):                                     ", round(nxmTime, 3)
-    echo "Max RSS (KB):                                 ", nxmMaxRss
-    echo "Runtime RSS (KB):                             ", nxmRuntimeRSS
-    echo "# of page faults:                             ", nxmPageFaults
-    echo "Perf (GMEMOPs/s ~ GigaMemory Operations/s)    ", round(nxmPerf, 3)
+    when not defined(windows):
+      echo "Time(ms):                                     ", round(nxmTime, 3)
+      echo "Max RSS (KB):                                 ", nxmMaxRss
+      echo "Runtime RSS (KB):                             ", nxmRuntimeRSS
+      echo "# of page faults:                             ", nxmPageFaults
+      echo "Perf (GMEMOPs/s ~ GigaMemory Operations/s)    ", round(nxmPerf, 3)
   else:
     echo "Transposition:                                ", N,'x',M, " --> ", M, 'x', N
-    echo "Time(ms):                                     ", round(nxmTime, 3)
-    echo "Max RSS (KB):                                 ", nxmMaxRss
-    echo "Runtime RSS (KB):                             ", nxmRuntimeRSS
-    echo "# of page faults:                             ", nxmPageFaults
-    echo "Perf (GMEMOPs/s ~ GigaMemory Operations/s)    ", round(mxnPerf, 3)
+    when not defined(windows):
+      echo "Time(ms):                                     ", round(nxmTime, 3)
+      echo "Max RSS (KB):                                 ", nxmMaxRss
+      echo "Runtime RSS (KB):                             ", nxmRuntimeRSS
+      echo "# of page faults:                             ", nxmPageFaults
+      echo "Perf (GMEMOPs/s ~ GigaMemory Operations/s)    ", round(mxnPerf, 3)
     echo "--------------------------------------------------------------------------"
     echo "Transposition:                                ", M,'x',N, " --> ", N, 'x', M
-    echo "Time(ms):                                     ", round(mxnTime, 3)
-    echo "Max RSS (KB):                                 ", mxnMaxRss
-    echo "Runtime RSS (KB):                             ", mxnRuntimeRSS
-    echo "# of page faults:                             ", mxnPageFaults
-    echo "Perf (GMEMOPs/s ~ GigaMemory Operations/s)    ", round(nxmPerf, 3)
+    when not defined(windows):
+      echo "Time(ms):                                     ", round(mxnTime, 3)
+      echo "Max RSS (KB):                                 ", mxnMaxRss
+      echo "Runtime RSS (KB):                             ", mxnRuntimeRSS
+      echo "# of page faults:                             ", mxnPageFaults
+      echo "Perf (GMEMOPs/s ~ GigaMemory Operations/s)    ", round(nxmPerf, 3)
 
 template runBench(transposeName: typed, reorderCompute, isSequential: bool): untyped =
   if not reorderCompute:
     if not isSequential:
       init(Weave)
     memUsage(mxnMaxRss, mxnRuntimeRss, mxnPageFaults):
-      let start = wtime_msec()
+      when not defined(windows):
+        let start = wtime_msec()
       for _ in 0 ..< nrounds:
         transposeName(M, N, bufIn, bufOut)
       if not isSequential:
         sync(Weave)
-      let stop = wtime_msec()
-      mxnTime = stop - start
+      when not defined(windows):
+        let stop = wtime_msec()
+        mxnTime = stop - start
 
     memUsage(nxmMaxRss, nxmRuntimeRss, nxmPageFaults):
-      let start = wtime_msec()
+      when not defined(windows):
+        let start = wtime_msec()
       for _ in 0 ..< nrounds:
         transposeName(N, M, bufIn, bufOut)
       if not isSequential:
         sync(Weave)
-      let stop = wtime_msec()
-      nxmTime = stop - start
+      when not defined(windows):
+        let stop = wtime_msec()
+        nxmTime = stop - start
 
     if not isSequential:
       exit(Weave)
@@ -221,22 +233,26 @@ template runBench(transposeName: typed, reorderCompute, isSequential: bool): unt
     if not isSequential:
       init(Weave)
     memUsage(nxmMaxRss, nxmRuntimeRss, nxmPageFaults):
-      let start = wtime_msec()
+      when not defined(windows):
+        let start = wtime_msec()
       for _ in 0 ..< nrounds:
         transposeName(N, M, bufIn, bufOut)
       if not isSequential:
         sync(Weave)
-      let stop = wtime_msec()
-      nxmTime = stop - start
+      when not defined(windows):
+        let stop = wtime_msec()
+        nxmTime = stop - start
 
     memUsage(mxnMaxRss, mxnRuntimeRss, mxnPageFaults):
-      let start = wtime_msec()
+      when not defined(windows):
+        let start = wtime_msec()
       for _ in 0 ..< nrounds:
         transposeName(M, N, bufIn, bufOut)
       if not isSequential:
         sync(Weave)
-      let stop = wtime_msec()
-      mxnTime = stop - start
+      when not defined(windows):
+        let stop = wtime_msec()
+        mxnTime = stop - start
 
     if not isSequential:
       exit(Weave)

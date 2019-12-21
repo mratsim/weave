@@ -24,10 +24,10 @@ long long Fib(long long n) {
 int main(int argc, char *argv[])
 {
 
-	if (argc != 2) {
-    printf("Usage: fib <n-th fibonacci number requested>\n");
-		exit(0);
-	}
+  if (argc != 2) {
+  printf("Usage: fib <n-th fibonacci number requested>\n");
+      exit(0);
+  }
 
   long long n = atoi(argv[1]);
 

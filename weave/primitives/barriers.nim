@@ -5,46 +5,65 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
-# Abstractions over OS-specific barrier implementations
-# TODO: support Windows (check iOS, Android, Genode, Haiku, Nintendo Switch)
+when defined(windows):
+  import ./barriers_windows
+  when compileOption("assertions"):
+    import os
 
-when not compileOption("threads"):
-  {.error: "This requires --threads:on compilation flag".}
+  type SyncBarrier* = SynchronizationBarrier
 
-# Types
-# -------------------------------------------------------
+  proc init*(syncBarrier: var SyncBarrier, threadCount: range[0'i32..high(int32)]) {.inline.} =
+    ## Initialize a synchronization barrier that will block ``threadCount`` threads
+    ## before release.
+    let err {.used.} = InitializeSynchronizationBarrier(syncBarrier, threadCount, -1)
+    when compileOption("assertions"):
+      if err != 1:
+        assert err == 0
+        raiseOSError(osLastError())
 
-when defined(osx):
-  import ./pthread_barrier_osx
-  export PthreadAttr, PthreadBarrier, Errno
-elif defined(linux):
-  type
-    PthreadAttr* {.byref, importc: "pthread_attr_t", header: "<sys/types.h>".} = object
-    PthreadBarrier* {.byref, importc: "pthread_barrier_t", header: "<sys/types.h>".} = object
+  proc wait*(syncBarrier: var SyncBarrier): bool {.inline.} =
+    ## Blocks thread at a synchronization barrier.
+    ## Returns true for one of the threads (the last one on Windows, undefined on Posix)
+    ## and false for the others.
+    result = bool EnterSynchronizationBarrier(syncBarrier, SYNCHRONIZATION_BARRIER_FLAGS_NO_DELETE)
 
-    Errno* = distinct cint
+  proc delete*(syncBarrier: sink SyncBarrier) {.inline.} =
+    ## Deletes a synchronization barrier.
+    ## This assumes no race between waiting at a barrier and deleting it,
+    ## and reuse of the barrier requires initialization.
+    DeleteSynchronizationBarrier(syncBarrier.addr)
+
 else:
-  {.error: "Platform not supported".}
+  import ./barriers_posix
+  when compileOption("assertions"):
+    import os
 
-# Pthread
-# -------------------------------------------------------
+  type SyncBarrier* = PthreadBarrier
 
-when defined(linux):
-  proc pthread_barrier_init*(
-        barrier: PthreadBarrier,
-        attr: PthreadAttr or ptr PthreadAttr,
-        count: range[0'i32..high(int32)]
-      ): Errno {.header: "<pthread.h>".}
-    ## Initialize `barrier` with the attributes `attr`.
-    ## The barrier is opened when `count` waiters arrived.
+  proc init*(syncBarrier: var SyncBarrier, threadCount: range[0'i32..high(int32)]) {.inline.} =
+    ## Initialize a synchronization barrier that will block ``threadCount`` threads
+    ## before release.
+    let err {.used.} = pthread_barrier_init(syncBarrier, nil, threadCount)
+    when compileOption("assertions"):
+      if err != 0:
+        raiseOSError(OSErrorCode(err))
 
-  proc pthread_barrier_destroy*(
-        barrier: sink PthreadBarrier): Errno {.header: "<pthread.h>".}
-    ## Destroy a previously dynamically initialized `barrier`.
+  proc wait*(syncBarrier: var SyncBarrier): bool {.inline.} =
+    ## Blocks thread at a synchronization barrier.
+    ## Returns true for one of the threads (the last one on Windows, undefined on Posix)
+    ## and false for the others.
+    let err {.used.} = pthread_barrier_wait(syncBarrier)
+    when compileOption("assertions"):
+      if err != PTHREAD_BARRIER_SERIAL_THREAD and err < 0:
+        raiseOSError(OSErrorCode(err))
+    result = if err == PTHREAD_BARRIER_SERIAL_THREAD: true
+             else: false
 
-  proc pthread_barrier_wait*(
-        barrier: var PthreadBarrier
-      ): Errno {.header: "<pthread.h>".}
-    ## Wait on `barrier`
-elif defined(osx):
-  export pthread_barrier_init, pthread_barrier_wait, pthread_barrier_destroy
+  proc delete*(syncBarrier: sink SyncBarrier) {.inline.} =
+    ## Deletes a synchronization barrier.
+    ## This assumes no race between waiting at a barrier and deleting it,
+    ## and reuse of the barrier requires initialization.
+    let err {.used.} = pthread_barrier_destroy(syncBarrier)
+    when compileOption("assertions"):
+      if err < 0:
+        raiseOSError(OSErrorCode(err))
