@@ -24,7 +24,7 @@ import
   # Third-party
   cligen,
   # Weave
-  ../../weave,
+  ../../weave
 
 when defined(linux):
   # bench
@@ -327,9 +327,9 @@ proc main(numRounds = 2000, input: string, output = "") =
     flt = ru.ru_minflt - flt
 
 
-    const lazy = defined(WV_LazyFlowvar)
-    const config = if lazy: " (lazy flowvars)"
-                  else: " (eager flowvars)"
+  const lazy = defined(WV_LazyFlowvar)
+  const config = if lazy: " (lazy flowvars)"
+                else: " (eager flowvars)"
 
   echo "--------------------------------------------------------------------------"
   echo "Scheduler:                                    Weave", config
