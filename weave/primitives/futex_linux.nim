@@ -13,7 +13,7 @@ import std/atomics, ../instrumentation/loggers
 export MemoryOrder
 
 type
-  Futex* = distinct Atomic[int32]
+  Futex* = Atomic[int32]
   FutexOp = distinct cint
 
 var NR_Futex {.importc: "__NR_futex", header: "<sys/syscall.h>".}: cint
