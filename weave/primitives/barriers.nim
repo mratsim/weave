@@ -52,7 +52,7 @@ else:
     ## Blocks thread at a synchronization barrier.
     ## Returns true for one of the threads (the last one on Windows, undefined on Posix)
     ## and false for the others.
-    let err {.used.} = pthread_barrier_wait(syncBarrier, SYNCHRONIZATION_BARRIER_FLAGS_NO_DELETE)
+    let err {.used.} = pthread_barrier_wait(syncBarrier)
     when compileOption("assertions"):
       if err < 0:
         raiseOSError(OSErrorCode(err))
