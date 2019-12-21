@@ -155,7 +155,7 @@ steps:
       echo $Env:Path
       nimble refresh
       nimble install cligen
-    displayName: 'Building the package dependencies (Posix)'
+    displayName: 'Building the package dependencies (Windows)'
     condition: eq(variables['Agent.OS'], 'Windows_NT')
 
   - bash: |
