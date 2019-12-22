@@ -199,7 +199,8 @@ proc lastStealAttemptFailure*(req: sink StealRequest) =
   else:
     req.state = Waiting
     debugTermination:
-      log("Worker %2d: sends state passively WAITING to its parent worker %d\n", myID(), myWorker().parent)
+      log("Worker %2d: sends state passively WAITING to its parent worker %d (Channel: 0x%.08x)\n",
+          myID(), myWorker().parent, globalCtx.com.thefts[myWorker().parent])
     Backoff:
       myParking().prepareToPark()
     sendShare(req)

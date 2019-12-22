@@ -85,12 +85,13 @@ proc recv*(req: var StealRequest): bool {.inline.} =
     # and defer to the current worker (their parent)
     while result and req.state == Waiting:
       debugTermination:
-        log("Worker %2d: receives state passively WAITING from its child worker %d (left (%d): %s, right (%d): %s)\n",
+        log("Worker %2d: receives state passively WAITING from its child worker %d (left (%d): %s, right (%d): %s) (Channel: 0x%.08x)\n",
             myID(), req.thiefID,
             myWorker().left,
             if myWorker().leftIsWaiting: "waiting" else: "not waiting",
             myWorker().right,
-            if myWorker().rightIsWaiting: "waiting" else: "not waiting"
+            if myWorker().rightIsWaiting: "waiting" else: "not waiting",
+            myThieves()
           )
 
       # Only children can forward a request where they sleep
