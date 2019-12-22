@@ -48,6 +48,10 @@ proc inspectInfix(node: NimNode): NimNode =
           toHex(cast[ByteAddress](`node`) and 0xffff_ffff)
         else:
           $(`node`)
+    of nnkPar:
+      result = nnkPar.newTree()
+      for sub in node:
+        result.add inspect(sub)
     else:
       return node.toStrLit()
   return inspect(node)
