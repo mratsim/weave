@@ -7,7 +7,7 @@ license       = "MIT or Apache License 2.0"
 
 # Dependencies
 
-requires "nim >= 1.1.1"
+requires "nim >= 1.1.1", "synthesis"
 
 proc test(flags, path: string) =
   if not dirExists "build":
