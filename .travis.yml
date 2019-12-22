@@ -39,10 +39,6 @@ matrix:
         - ARCH=amd64
         - CHANNEL=devel
       compiler: clang
-  allow_failures:
-    # Also ignore OSX, due to very long build time
-    # and strange issues: https://github.com/mratsim/weave/issues/51
-    - os: osx
   fast_finish: true
 
 before_install:

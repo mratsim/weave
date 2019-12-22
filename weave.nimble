@@ -40,13 +40,13 @@ task test, "Run Weave tests":
   test "", "weave/memory/persistacks.nim"
 
   test "", "weave/parallel_tasks.nim"
-  when not defined(windows): # Need nestable barriers - https://github.com/mratsim/weave/issues/51
+  when defined(linux): # Need nestable barriers - https://github.com/mratsim/weave/issues/51
     test "", "weave/parallel_for.nim"
   test "", "weave/parallel_for_staged.nim"
   # test "", "weave/parallel_reduce.nim"
 
   test "-d:WV_LazyFlowvar", "weave/parallel_tasks.nim"
-  when not defined(windows):
+  when defined(linux):
     test "-d:WV_LazyFlowvar", "weave/parallel_for.nim"
   test "-d:WV_LazyFlowvar", "weave/parallel_for_staged.nim"
   # test "-d:WV_LazyFlowvar", "weave/parallel_reduce.nim" # Experimental
