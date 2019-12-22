@@ -11,7 +11,8 @@ import
   ./contexts, ./config,
   ./instrumentation/[contracts, profilers, loggers],
   ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_spsc_single],
-  ./thieves, ./loop_splitting
+  ./thieves, ./loop_splitting,
+  ./stealing_fsm
 
 # Victims - Proxy handling on behalf of idle child workers
 # ----------------------------------------------------------------------------------
@@ -120,60 +121,6 @@ proc recv*(req: var StealRequest): bool {.inline.} =
         result = recvProxy(req, myWorker().right)
 
   postCondition: not result or (result and req.state != Waiting)
-
-proc declineOwn(req: sink StealRequest) =
-  ## Decline our own steal request
-
-  # The assumption that no one had jobs to steal
-  # does not hold when we process our child requests
-  # we might have taken one we sent to our children
-  # TODO: how to prevent cascading sleep
-  # preCondition: req.victims.isEmpty()
-
-  # debug:
-  #   log("Worker %2d: received own request (req.state: %s, left (%d): %s, right (%d): %s)\n",
-  #     myID(), $req.state,
-  #     myWorker().left,
-  #     if myWorker().leftIsWaiting: "waiting" else: "not waiting",
-  #     myWorker().right,
-  #     if myWorker().rightIsWaiting: "waiting" else: "not waiting")
-
-  if req.state == Stealing and myWorker().leftIsWaiting and myWorker().rightIsWaiting:
-    when WV_MaxConcurrentStealPerWorker == 1:
-      # When there is only one concurrent steal request allowed, it's always the last.
-      lastStealAttemptFailure(req)
-    else:
-      # Is this the last theft attempt allowed per steal request?
-      # - if so: lastStealAttemptFailure special case (termination if lead thread, sleep if worker)
-      # - if not: drop it and wait until we receive work or all out steal requests failed.
-      if myThefts().outstanding == WV_MaxConcurrentStealPerWorker and
-          myTodoBoxes().len == WV_MaxConcurrentStealPerWorker - 1:
-        # "WV_MaxConcurrentStealPerWorker - 1" steal requests have been dropped
-        # as evidenced by the corresponding channel "address boxes" being recycled
-        ascertain: myThefts().dropped == WV_MaxConcurrentStealPerWorker - 1
-        lastStealAttemptFailure(req)
-      else:
-        drop(req)
-  else:
-    # Our own request but we still have work, so we reset it and recirculate.
-    ascertain: req.victims.capacity.int32 == workforce()
-    req.retry = 0
-    req.victims.refill()
-    req.findVictimAndRelaySteal()
-
-proc decline*(req: sink StealRequest) {.gcsafe.} =
-  ## Pass steal request to another worker
-  ## or the manager if it's our own that came back
-  preCondition: req.retry <= WV_MaxRetriesPerSteal
-
-  req.retry += 1
-  incCounter(stealDeclined)
-
-  profile(send_recv_req):
-    if req.thiefID == myID():
-      req.declineOwn()
-    else: # Not our own request
-      req.findVictimAndRelaySteal()
 
 template receivedOwn(req: sink StealRequest) =
   preCondition: req.state != Waiting

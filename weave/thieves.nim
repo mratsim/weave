@@ -48,7 +48,7 @@ proc rawSend(victimID: WorkerID, req: sink StealRequest) {.inline.}=
   # N steal requests (from N-1 workers + own request sent back)
   postCondition: stealRequestSent
 
-proc relaySteal(victimID: WorkerID, req: sink StealRequest) {.inline.} =
+proc relaySteal*(victimID: WorkerID, req: sink StealRequest) {.inline.} =
   rawSend(victimID, req)
 
 proc sendSteal(victimID: WorkerID, req: sink StealRequest) {.inline.} =
@@ -93,26 +93,6 @@ proc findVictimAndSteal(req: sink StealRequest) {.inline.} =
   debug: log("Worker %2d: sending own steal request to %d (Channel 0x%.08x)\n",
     myID(), target, globalCtx.com.thefts[target].addr)
   target.sendSteal(req)
-
-proc forget*(req: sink StealRequest) {.gcsafe.}
-
-proc findVictimAndRelaySteal*(req: sink StealRequest) {.inline, gcsafe.} =
-  req.victims.excl(myID())
-  let target = findVictim(req)
-  if target != myID():
-    # debug: log("Worker %2d: relay steal request from %d to %d (Channel 0x%.08x)\n",
-    #   myID(), req.thiefID, target, globalCtx.com.thefts[target].addr)
-    target.relaySteal(req)
-  else:
-    # A worker may receive its own steal request in "Working" state
-    # in that case, it's a signal to call "lastAttemptFailure"/defer to "declineOwn"
-    # but with termination detection.
-    # but is it safe? in any case, we need to forget it to prevent a livelock
-    # where a worker constantly retrieves its own steal request from one of its child channels
-    # see: https://github.com/mratsim/weave/issues/43
-    # Also victims.nim imports thieves.nim so we can't import victims.declineOwn here.
-    ascertain: req.state == Working
-    forget(req)
 
 # Stealing logic
 # ----------------------------------------------------------------------------------
@@ -185,25 +165,3 @@ proc drop*(req: sink StealRequest) =
   myThefts().dropped += 1
   myTodoBoxes().recycle(req.thiefAddr)
   localCtx.stealCache.recycle(req)
-
-proc lastStealAttemptFailure*(req: sink StealRequest) =
-  ## If it's the last theft attempt per emitted steal requests
-  ## - if we are the lead thread, we know that every other threads are idle/waiting for work
-  ##   but there is none --> termination
-  ## - if we are a worker thread, we message our parent and
-  ##   passively wait for it to send us work or tell us to shutdown.
-
-  if myID() == LeaderID:
-    detectTermination()
-    forget(req)
-  else:
-    req.state = Waiting
-    debugTermination:
-      log("Worker %2d: sends state passively WAITING to its parent worker %d\n", myID(), myWorker().parent)
-    Backoff:
-      myParking().prepareToPark()
-    sendShare(req)
-    ascertain: not myWorker().isWaiting
-    myWorker().isWaiting = true
-    Backoff: # Thread is blocked here until woken up.
-      myParking().park()
