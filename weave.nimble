@@ -39,15 +39,13 @@ task test, "Run Weave tests":
   test "", "weave/memory/memory_pools.nim"
   test "", "weave/memory/persistacks.nim"
 
-  when not defined(osx):
-    test "", "weave/parallel_tasks.nim"
+  test "", "weave/parallel_tasks.nim"
   when defined(linux): # Need nestable barriers - https://github.com/mratsim/weave/issues/51
     test "", "weave/parallel_for.nim"
   test "", "weave/parallel_for_staged.nim"
   # test "", "weave/parallel_reduce.nim"
 
-  when not defined(osx):
-    test "-d:WV_LazyFlowvar", "weave/parallel_tasks.nim"
+  test "-d:WV_LazyFlowvar", "weave/parallel_tasks.nim"
   when defined(linux):
     test "-d:WV_LazyFlowvar", "weave/parallel_for.nim"
   test "-d:WV_LazyFlowvar", "weave/parallel_for_staged.nim"
