@@ -80,7 +80,7 @@ before_script:
     - export PATH="$PWD/nim-${CHANNEL}/bin${PATH:+:$PATH}"
 script:
     - nimble refresh
-    - nimble install cligen || true
+    - nimble install cligen synthesis
     - nimble test
 branches:
   except:

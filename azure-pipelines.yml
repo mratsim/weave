@@ -152,7 +152,7 @@ steps:
   - bash: |
       echo "PATH=${PATH}"
       nimble refresh
-      nimble install cligen
+      nimble install cligen synthesis
     displayName: 'Building the package dependencies (Posix)'
     condition: ne(variables['Agent.OS'], 'Windows_NT')
 
@@ -163,7 +163,7 @@ steps:
   - powershell: |
       echo $Env:Path
       nimble refresh
-      nimble install cligen
+      nimble install cligen synthesis
     displayName: 'Building the package dependencies (Windows)'
     condition: eq(variables['Agent.OS'], 'Windows_NT')
 
