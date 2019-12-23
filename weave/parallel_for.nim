@@ -140,7 +140,7 @@ macro parallelForStrided*(loopParams: untyped, stride: Positive, body: untyped):
 # --------------------------------------------------------
 
 when isMainModule:
-  import ./instrumentation/loggers, ./runtime
+  import ./instrumentation/loggers, ./runtime, ./runtime_fsm
 
   block:
     proc main() =

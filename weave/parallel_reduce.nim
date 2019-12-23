@@ -233,7 +233,7 @@ macro parallelReduceImpl*(loopParams: untyped, stride: int, body: untyped): unty
 
 
 when isMainModule:
-  import ./runtime
+  import ./runtime, ./runtime_fsm
 
   block:
     proc sumReduce(n: int): int =

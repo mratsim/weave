@@ -157,7 +157,7 @@ macro spawn*(funcCall: typed): untyped =
 # --------------------------------------------------------
 
 when isMainModule:
-  import ./runtime
+  import ./runtime, ./runtime_fsm
 
   block: # Async without result
 
