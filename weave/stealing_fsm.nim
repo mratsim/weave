@@ -190,5 +190,7 @@ behavior(declineReqFSA):
       myParking().park()
   fin: DS_Exit
 
+# -------------------------------------------
+
 synthesize(declineReqFSA):
   proc decline*(req: sink StealRequest) {.gcsafe.}

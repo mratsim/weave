@@ -17,7 +17,7 @@ import
 # Worker - Tasks handling
 # ----------------------------------------------------------------------------------
 
-proc restartWork() =
+proc restartWork*() =
   preCondition: myThefts().outstanding == WV_MaxConcurrentStealPerWorker
   preCondition: myTodoBoxes().len == WV_MaxConcurrentStealPerWorker
 
@@ -29,49 +29,6 @@ proc restartWork() =
   myThefts().outstanding = 1 # The current steal request is not fully fulfilled yet
   myWorker().isWaiting = false
   myThefts().dropped = 0
-
-proc recv*(task: var Task, isOutOfTasks: bool): bool =
-  ## Check the worker task channel for a task successfully stolen
-  ##
-  ## Updates task and returns true if a task was found
-
-  # Note we could use a static bool for isOutOfTasks but this
-  # increase the code size.
-  profile(send_recv_task):
-    for i in 0 ..< WV_MaxConcurrentStealPerWorker:
-      result = myTodoBoxes().access(i)
-                            .tryRecv(task)
-      if result:
-        myTodoBoxes().nowAvailable(i)
-        localCtx.stealCache.nowAvailable(i)
-        debug: log("Worker %2d: received a task with function address 0x%.08x (Channel 0x%.08x)\n",
-          myID(), task.fn, myTodoBoxes().access(i).addr)
-        break
-
-  if not result:
-    trySteal(isOutOfTasks)
-  else:
-    when WV_MaxConcurrentStealPerWorker == 1:
-      if myWorker().isWaiting:
-        restartWork()
-    else: # WV_MaxConcurrentStealPerWorker > 1
-      if myWorker().isWaiting:
-        restartWork()
-      else:
-        # If we have dropped one or more steal requests before receiving
-        # tasks, adjust outstanding to make sure that we can send MaxSteal
-        # steal requests again
-        if myThefts().dropped > 0:
-          ascertain: myThefts().outstanding > myThefts().dropped
-          myThefts().outstanding -= myThefts().dropped
-          myThefts().dropped = 0
-
-    # Steal request fulfilled
-    myThefts().outstanding -= 1
-
-    debug: log("Worker %2d: %d theft(s) outstanding after receiving a task\n", myID(), myThefts().outstanding)
-    postCondition: myThefts().outstanding in 0 ..< WV_MaxConcurrentStealPerWorker
-    postCondition: myThefts().dropped == 0
 
 proc runTask*(task: Task) {.inline, gcsafe.} =
   preCondition: not task.fn.isNil
