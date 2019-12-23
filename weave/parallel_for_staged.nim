@@ -143,7 +143,7 @@ macro parallelForStagedStrided*(loopParams: untyped, stride: Positive, body: unt
 # --------------------------------------------------------
 
 when isMainModule:
-  import ./runtime
+  import ./runtime, ./runtime_fsm
 
   block:
     # expandMacros:
