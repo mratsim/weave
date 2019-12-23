@@ -14,7 +14,7 @@ import
   ./datatypes/[sync_types, prell_deques, binary_worker_trees],
   ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch],
   ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
-  ./scheduler, ./signals, ./workers, ./thieves, ./victims,
+  ./scheduler, ./signals, ./workers, ./thieves, ./victims, ./work_fsm,
   # Low-level primitives
   ./primitives/barriers
 
