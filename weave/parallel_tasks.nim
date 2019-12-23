@@ -12,7 +12,7 @@ import
   # Standard library
   macros, typetraits,
   # Internal
-  ./scheduler, ./contexts,
+  ./scheduler, ./contexts, ./await_fsm,
   ./datatypes/[flowvars, sync_types],
   ./instrumentation/[contracts, profilers]
 
