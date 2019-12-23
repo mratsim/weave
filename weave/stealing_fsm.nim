@@ -63,14 +63,12 @@ implEvent(declineReqFSA, DSE_IamThief):
 behavior(declineReqFSA):
   ini: DS_ReceivedReq
   event: DSE_IamThief
-  transition:
-    discard
+  transition: discard
   fin: DS_MyOwnReq
 
 behavior(declineReqFSA):
   ini: DS_ReceivedReq
-  transition:
-    discard
+  transition: discard
   fin: DS_FindVictimAndSteal
 
 # Decline other steal requests
@@ -125,8 +123,7 @@ implEvent(declineReqFSA, DSE_MyTreeIsIdle):
 behavior(declineReqFSA):
   ini: DS_MyOwnReq
   event: DSE_MyTreeIsIdle
-  transition:
-    discard
+  transition: discard
   fin: DS_TreeIdle
 
 behavior(declineReqFSA):
