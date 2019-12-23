@@ -153,7 +153,7 @@ proc nextTask*(childTask: bool): Task {.inline.} =
       else:
         forget(req)
     else:
-      dispatchTasks(req)
+      dispatchElseDecline(req)
 
 proc declineAll*() =
   var req: StealRequest
@@ -304,13 +304,13 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
     profile(idle):
       while not recvElseSteal(task, isOutOfTasks = false):
         # We might inadvertently remove our own steal request in
-        # dispatchTasks so resteal
+        # dispatchElseDecline so resteal
         profile_stop(idle)
         trySteal(isOutOfTasks = false)
         # If someone wants our non-child tasks, let's oblige
         var req: StealRequest
         while recv(req):
-          dispatchTasks(req)
+          dispatchElseDecline(req)
         profile_start(idle)
         if isFutReady():
           profile_stop(idle)
@@ -363,7 +363,7 @@ proc schedule*(task: sink Task) =
   # Check if someone requested a steal
   var req: StealRequest
   while recv(req):
-    dispatchTasks(req)
+    dispatchElseDecline(req)
 
   profile_start(enq_deq_task)
 

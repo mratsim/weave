@@ -165,7 +165,7 @@ proc send(req: sink StealRequest, task: sink Task, numStolen: int32 = 1) {.inlin
   incCounter(stealHandled)
   incCounter(tasksSent, numStolen)
 
-proc dispatchTasks*(req: sink StealRequest) {.gcsafe.}=
+proc dispatchElseDecline*(req: sink StealRequest) {.gcsafe.}=
   ## Send tasks in return of a steal request
   ## or decline and relay the steal request to another thread
 
@@ -247,7 +247,7 @@ proc distributeWork(req: sink StealRequest): bool =
 
   # Send independent task(s) if possible
   if not myWorker().deque.isEmpty():
-    req.dispatchTasks()
+    req.dispatchElseDecline()
     return true
     # TODO - the control flow is entangled here
     #        since we have a non-empty deque we will never take
