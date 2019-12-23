@@ -194,7 +194,7 @@ proc schedulingLoop() =
 
     var task: Task
     profile(idle):
-      while not recv(task, isOutOfTasks = true):
+      while not recvElseSteal(task, isOutOfTasks = true):
         ascertain: myWorker().deque.isEmpty()
         ascertain: myThefts().outstanding > 0
         declineAll()
@@ -302,7 +302,7 @@ proc forceFuture*[T](fv: Flowvar[T], parentResult: var T) =
     trySteal(isOutOfTasks = false)
     var task: Task
     profile(idle):
-      while not recv(task, isOutOfTasks = false):
+      while not recvElseSteal(task, isOutOfTasks = false):
         # We might inadvertently remove our own steal request in
         # dispatchTasks so resteal
         profile_stop(idle)

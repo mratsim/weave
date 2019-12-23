@@ -116,4 +116,4 @@ behavior(recvTaskFSA):
 # -------------------------------------------
 
 synthesize(recvTaskFSA):
-  proc recv*(task: var Task, isOutOfTasks: bool): bool
+  proc recvElseSteal*(task: var Task, isOutOfTasks: bool): bool

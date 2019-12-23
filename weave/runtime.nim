@@ -128,7 +128,7 @@ proc sync*(_: type Weave) {.gcsafe.} =
 
       var task: Task
       profile(idle):
-        while not recv(task, isOutOfTasks = true):
+        while not recvElseSteal(task, isOutOfTasks = true):
           ascertain: myWorker().deque.isEmpty()
           ascertain: myThefts().outstanding > 0
           declineAll()
