@@ -14,7 +14,7 @@ import
   ./contexts, ./config,
   ./victims, ./loop_splitting,
   ./thieves, ./workers,
-  ./random/rng, ./stealing_fsm, ./work_fsm
+  ./random/rng, ./stealing_fsm, ./work_fsm, ./scheduler_fsm
 
 # Local context
 # ----------------------------------------------------------------------------------
@@ -143,17 +143,9 @@ proc nextTask*(childTask: bool): Task {.inline.} =
   shareWork()
 
   # Check if someone requested to steal from us
-  var req: StealRequest
-  while recv(req):
-    # If we just popped a loop task, we may split it here
-    # It makes dispatching tasks simpler
-    if myWorker().deque.isEmpty() and result.isSplittable():
-      if req.thiefID != myID():
-        splitAndSend(result, req)
-      else:
-        forget(req)
-    else:
-      dispatchElseDecline(req)
+  # Send them extra tasks if we have them
+  # or split our popped task if possible
+  handleThieves(result)
 
 proc declineAll*() =
   var req: StealRequest
