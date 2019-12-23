@@ -128,10 +128,10 @@ behavior(syncFSA):
 # -------------------------------------------
 
 onEntry(syncFSA, SY_Steal):
-  let hasTask = recvElseSteal(task, isOutOfTasks = true)
+  let lootedTask = recvElseSteal(task, isOutOfTasks = true)
 
 implEvent(syncFSA, SYE_ReceivedTask):
-  hasTask
+  lootedTask
 
 behavior(syncFSA):
   ini: SY_Steal
