@@ -45,7 +45,8 @@ task test, "Run Weave tests":
   test "", "weave/parallel_for_staged.nim"
   # test "", "weave/parallel_reduce.nim"
 
-  test "-d:WV_LazyFlowvar", "weave/parallel_tasks.nim"
+  when not defined(osx):
+    test "-d:WV_LazyFlowvar", "weave/parallel_tasks.nim"
   when defined(linux):
     test "-d:WV_LazyFlowvar", "weave/parallel_for.nim"
   test "-d:WV_LazyFlowvar", "weave/parallel_for_staged.nim"
