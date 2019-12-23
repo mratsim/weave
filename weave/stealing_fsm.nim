@@ -152,7 +152,7 @@ behavior(declineReqFSA):
   ini: DS_TreeIdle
   event: DSE_ItWasTheLastReq
   transition:
-    when WV_MaxConcurrentStealPerWorker >= 1:
+    when WV_MaxConcurrentStealPerWorker > 1:
       # "WV_MaxConcurrentStealPerWorker - 1" steal requests have been dropped
       # as evidenced by the corresponding channel "address boxes" being recycled
       ascertain: myThefts().dropped == WV_MaxConcurrentStealPerWorker - 1
