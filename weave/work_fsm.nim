@@ -39,7 +39,7 @@ setPrologue(recvTaskFSA):
   ##
   ## Updates task and returns true if a task was found
   var curChanIdx = 0
-  profile_init(send_recv_task)
+  profile_start(send_recv_task)
 
 setInitialState(recvTaskFSA, RT_CheckChannel)
 setTerminalState(recvTaskFSA, RT_Exit)
@@ -50,11 +50,13 @@ setTerminalState(recvTaskFSA, RT_Exit)
 implEvent(recvTaskFSA, RTE_CheckedAllChannels):
   curChanIdx == WV_MaxConcurrentStealPerWorker
 
+onExit(recvTaskFSA, RT_CheckChannel):
+  profile_stop(send_recv_task)
+
 behavior(recvTaskFSA):
   ini: RT_CheckChannel
   interrupt: RTE_CheckedAllChannels
   transition:
-    profile_stop(send_recv_task)
     trySteal(isOutofTasks)
   fin: RT_Exit
 
@@ -79,7 +81,6 @@ behavior(recvTaskFSA):
     localCtx.stealCache.nowAvailable(curChanIdx)
     debug: log("Worker %2d: received a task with function address 0x%.08x (Channel 0x%.08x)\n",
       myID(), task.fn, myTodoBoxes().access(curChanIdx).addr)
-    profile_stop(send_recv_task)
   fin: RT_FoundTask
 
 # -------------------------------------------
