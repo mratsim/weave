@@ -604,6 +604,7 @@ assert sizeof(Arena) == WV_MemArenaSize,
 
 when isMainModule:
   import times, strformat, system/ansi_c, math, strutils
+  import ../primitives/barriers
 
   # Single-threaded
   # ----------------------------------------------------------------------------------
@@ -708,11 +709,17 @@ when isMainModule:
   template genBench(Alloc: untyped, NumVals: static int): untyped =
     const Padding = 10 * NumVals # Pad with a 0 so that iteration 10 of thread 3 is 3010 with 99 max iters
 
+    when Alloc == Pool:
+      const NumThreads = ord(low(WorkerKind)) + ord(high(WorkerKind)) + 1
+      var barrier: SyncBarrier
+      barrier.init(NumThreads)
 
     proc `thread_func Alloc`(args: ThreadArgs) =
       when Alloc == Pool:
+
         let pool = args.pool
         pool[].initialize()
+        discard barrier.wait()
 
       template Worker(id: WorkerKind, body: untyped): untyped {.dirty.} =
         if args.ID == id:
