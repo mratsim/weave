@@ -1,8 +1,7 @@
 # Apache v2 License
 # Mamy Ratsimbazafy
 #
-# GEMM (GEneralized Matrix Multiplication) using MKL
-# See the .nim.cfg for MKL paths
+# GEMM (GEneralized Matrix Multiplication) using OpenBLAS
 {.passC:"-fopenmp".}
 {.passL:"-fopenmp".}
 
@@ -23,7 +22,7 @@ proc gemm*(ORDER: OrderType, TRANSA, TRANSB: TransposeType, M, N, K: int, ALPHA:
   A: ptr float64, LDA: int, B: ptr float64, LDB: int, BETA: float64, C: ptr float64, LDC: int)
   {. dynlib: blas, importc: "cblas_dgemm" .}
 
-proc benchMKL(a, b: seq[float32], ashape, bshape: MatrixShape, nb_samples: int): seq[float32] =
+proc benchOpenBLAS(a, b: seq[float32], ashape, bshape: MatrixShape, nb_samples: int): seq[float32] =
   let req_ops = gemm_required_ops(ashape, bshape)
   let out_shape = gemm_out_shape(ashape, bshape)
   let out_size = out_shape.M * out_shape.N
@@ -54,4 +53,4 @@ when isMainModule:
     let a = newSeqWith(M*K, float32 rand(-0.1..0.1))
     let b = newSeqWith(K*N, float32 rand(-0.1..0.1))
 
-    let mkl = benchMKL(a, b, (M,K), (K,N), NbSamples)
+    let mkl = benchOpenBLAS(a, b, (M,K), (K,N), NbSamples)
