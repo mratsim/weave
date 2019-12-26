@@ -129,7 +129,7 @@ template receivedOwn(req: sink StealRequest) =
     let task = myTask()
     let tasksLeft = if not task.isNil and task.isLoop:
                       ascertain: task.stop > task.cur
-                      (task.stop - task.cur) div task.stride
+                      (task.stop - task.cur + task.stride-1) div task.stride
                     else: 0
 
     # Received our own steal request, we can forget about it

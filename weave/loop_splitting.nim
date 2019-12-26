@@ -21,7 +21,7 @@ import
 
 func splitHalf(task: Task): int {.inline.} =
   ## Split loop iteration range in half
-  task.cur + ((task.stop - task.cur) div task.stride) shr 1
+  task.cur + ((task.stop - task.cur + task.stride-1) div task.stride) shr 1
 
 # TODO: removed - https://github.com/aprell/tasking-2.0/commit/61068370282335802c07fcbc6bab3c9904c8ee4b
 #
@@ -44,7 +44,7 @@ func roundPrevMultipleOf(x: SomeInteger, step: SomeInteger): SomeInteger {.inlin
 
 func splitAdaptative(task: Task, approxNumThieves: int32): int {.inline.} =
   ## Split iteration range based on the number of steal requests
-  let itersLeft = (task.stop - task.cur) div task.stride
+  let itersLeft = (task.stop - task.cur + task.stride-1) div task.stride
   preCondition: itersLeft > 1
 
   debug:
@@ -71,4 +71,4 @@ template split*(task: Task, approxNumThieves: int32): int =
     {.error: "Unreachable".}
 
 template isSplittable*(t: Task): bool =
-  not t.isNil and t.isLoop and (t.stop - t.cur) div t.stride > 1
+  not t.isNil and t.isLoop and (t.stop - t.cur + task.stride-1) div t.stride > 1
