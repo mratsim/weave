@@ -42,7 +42,7 @@ when isMainModule:
   import ../../weave
 
   randomize(42) # FOr reproducibility
-  warmup()
+  # warmup()
   reportConfig("Weave (Pure Nim)", float32, (M, K), (K, N))
 
   block:

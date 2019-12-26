@@ -41,7 +41,7 @@ when isMainModule:
   import std/[random, sequtils]
 
   randomize(42) # FOr reproducibility
-  warmup()
+  # warmup()
   reportConfig("Laser (Pure Nim) + OpenMP", float32, (M, K), (K, N))
 
   block:

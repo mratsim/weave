@@ -47,7 +47,7 @@ when isMainModule:
   import std/[random, sequtils]
 
   randomize(42) # FOr reproducibility
-  warmup()
+  # warmup()
   reportConfig("Intel MKL", float32, (M, K), (K, N))
 
   block:
