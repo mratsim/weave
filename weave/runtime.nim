@@ -64,7 +64,7 @@ proc init*(_: type Weave) =
     #       Note that while 2x siblings is common, Xeon Phi has 4x Hyper-Threading.
     pinToCpu(globalCtx.threadpool[i], i)
 
-  myMemPool().initialize(myID())
+  myMemPool().initialize()
   myWorker().currentTask = newTaskFromCache() # Root task
   init(localCtx)
   # Wait for the child threads

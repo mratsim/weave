@@ -84,7 +84,7 @@ EagerFV:
     ## From the parent thread awaiting on the result, force its computation
     ## by eagerly processing only the child tasks spawned by the awaited task
     fv.forceFuture(parentResult)
-    recycle(myID(), fv.chan)
+    recycle(fv.chan)
 
 LazyFV:
   # Templates everywhere as we use alloca
@@ -113,7 +113,7 @@ LazyFV:
       parentResult = cast[ptr T](fv.lfv.lazy.buf.addr)[]
     else:
       ascertain: not fv.lfv.lazy.chan.isNil
-      recycle(myID(), fv.lfv.lazy.chan)
+      recycle(fv.lfv.lazy.chan)
 
   import sync_types
 
@@ -158,8 +158,8 @@ proc recycleFVN*(fvNode: sink FlowvarNode) {.inline.} =
   ## This assumes that the channel was already recycled
   ## by a "sync"/"forceComplete"
   LazyFV:
-    recycle(myID(), fvNode.lfv)
-  recycle(myID(), fvNode)
+    recycle(fvNode.lfv)
+  recycle(fvNode)
 
 
 # TODO destructors for automatic management

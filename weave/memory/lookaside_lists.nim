@@ -49,8 +49,7 @@ type
     # Stack pointer
     top: T
     # Mempool doesn't provide the proper free yet
-    freeFn*: proc(threadID: int32, t: T) {.nimcall, gcsafe.}
-    threadID*: int32 # TODO, memory pool abstraction leaking
+    freeFn*: proc(elem: T) {.nimcall, gcsafe.}
     # Adaptative freeing
     count: int
     recentAsk: int
@@ -59,10 +58,9 @@ type
     #
     registeredAt: ptr tuple[onHeartbeat: proc(env: pointer) {.nimcall.}, env: pointer]
 
-func initialize*[T](lal: var LookAsideList[T], tID: int32, freeFn: proc(threadID: int32, t: T) {.nimcall, gcsafe.}) =
+func initialize*[T](lal: var LookAsideList[T], freeFn: proc(elem: T) {.nimcall, gcsafe.}) =
   ## We assume the lookaside lists is zero-init when the thread-local context is allocated
   lal.freeFn = freeFn
-  lal.threadID = tID
 
 func isEmpty(lal: LookAsideList): bool {.inline.} =
   result = lal.top.isNil
@@ -95,7 +93,7 @@ proc delete*[T](lal: var LookAsideList[T]) {.gcsafe.} =
     lal.registeredAt.env = nil
 
   while (let elem = lal.pop(); not elem.isNil):
-    lal.freeFn(lal.threadID, elem)
+    lal.freeFn(elem)
 
 proc cacheMaintenanceEx[T](lal: ptr LookAsideList[T]) =
   ## Expensive memory maintenance,
@@ -134,7 +132,7 @@ proc cacheMaintenanceEx[T](lal: ptr LookAsideList[T]) =
   # Otherwise trigger exponential decay
   let half = lal.count shr 1
   while lal.count > half: # this handles the "1" task edge case (half = 0)
-    lal.freeFn(lal.threadID, lal[].popImpl())
+    lal.freeFn(lal[].popImpl())
 
   lal.recentAsk = 0
 
@@ -160,7 +158,7 @@ proc setCacheMaintenanceEx*[T](hook: var tuple[onHeartbeat: proc(env: pointer){.
 when isMainModule:
   import allocs
 
-  proc customFree[T](threadID: int32, p: T) {.gcsafe.}=
+  proc customFree[T](p: T) {.gcsafe.}=
     wv_free(p)
 
   type

@@ -75,7 +75,7 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
   ctx.runtimeIsQuiescent = false
   ctx.signaledTerminate = false
 
-  ctx.taskCache.initialize(tID = myID(), freeFn = memory_pools.recycle)
+  ctx.taskCache.initialize(freeFn = memory_pools.recycle)
   myMemPool.hook.setCacheMaintenanceEx(ctx.taskCache)
 
   # Worker
@@ -241,7 +241,7 @@ proc worker_entry_fn*(id: WorkerID) {.gcsafe.} =
   preCondition: localCtx == default(TLContext)
 
   myID() = id # If this crashes, you need --tlsemulation:off
-  myMemPool().initialize(myID())
+  myMemPool().initialize()
   localCtx.init()
   discard globalCtx.barrier.wait()
 
