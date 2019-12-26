@@ -61,7 +61,8 @@ task test, "Run Weave tests":
     test "", "benchmarks/bouncing_producer_consumer/weave_bpc.nim"
   when defined(i386) or defined(amd64):
     test "", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
-    test "", "benchmarks/matmul_gemm_blas/weave_gemm.nim"
+    when not defined(windows): # This is too slow on Azure windows machines
+      test "", "benchmarks/matmul_gemm_blas/weave_gemm.nim"
 
   test "-d:WV_LazyFlowvar", "benchmarks/dfs/weave_dfs.nim"
   test "-d:WV_LazyFlowvar", "benchmarks/fibonacci/weave_fib.nim"
@@ -73,4 +74,5 @@ task test, "Run Weave tests":
     test "-d:WV_LazyFlowvar", "benchmarks/bouncing_producer_consumer/weave_bpc.nim"
   when defined(i386) or defined(amd64):
     test "-d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
-    test "-d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/weave_gemm.nim"
+    when not defined(windows): # This is too slow on Azure windows machines
+      test "-d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/weave_gemm.nim"
