@@ -104,7 +104,6 @@ proc gebp_mkernel*[T; ukernel: static MicroKernel](
           alpha, upanel_a, upanel_b,                 #    αA[ic+ir:ic+ir+mr, pc:pc+kc] *
           beta, c_aux                                #     B[pc:pc+kc, jc+jr:jc+jr+nr] +
         )                                            #    βC[ic:ic+mc, jc:jc+nc]
-  sync(Weave)
 
 # ###########################################################################################
 #
@@ -161,12 +160,11 @@ proc gemm_impl[T; ukernel: static MicroKernel](
     # First time writing to C, we scale it, otherwise accumulate
     let beta = if pc == 0: beta else: 1.T
 
+    sync(Weave) # TODO: this cannot be nested
     # ####################################
     # 3. for ic = 0,...,m−1 in steps of mc
-    # TODO: need a barrier for nested for loop?
-    # parallelFor icb in 0 ..< tiles.ic_num_tasks:
-    #   captures: {pc, tiles, nc, kc, alpha, beta, vA, vC, M}
-    for icb in 0 ..< tiles.ic_num_tasks:
+    parallelFor icb in 0 ..< tiles.ic_num_tasks:
+      captures: {pc, tiles, nc, kc, alpha, beta, vA, vC, M}
 
       let packA = tiles.a + icb * tiles.upanelA_size
       prefetch(packA, Write, LowTemporalLocality)
@@ -181,6 +179,7 @@ proc gemm_impl[T; ukernel: static MicroKernel](
           alpha, packA, tiles.b,                      #    αA[ic:ic+mc, pc:pc+kc] * B[pc:pc+kc, jc:jc+nc] +
           beta, vC.stride(ic, 0)                      #    βC[ic:ic+mc, jc:jc+nc]
         )
+    sync(Weave) # TODO: this cannot be nested
 
 # ############################################################
 #

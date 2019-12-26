@@ -58,6 +58,9 @@ task test, "Run Weave tests":
   test "", "benchmarks/nqueens/weave_nqueens.nim"
   when not defined(windows): # Need "time" support - https://github.com/mratsim/weave/issues/60
     test "", "benchmarks/single_task_producer/weave_spc.nim"
+  when defined(i386) or defined(amd64):
+    test "", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
+    test "", "benchmarks/matmul_gemm_blas/weave_gemm.nim"
 
   test "-d:WV_LazyFlowvar", "benchmarks/dfs/weave_dfs.nim"
   test "-d:WV_LazyFlowvar", "benchmarks/fibonacci/weave_fib.nim"
@@ -66,3 +69,6 @@ task test, "Run Weave tests":
   test "-d:WV_LazyFlowvar", "benchmarks/nqueens/weave_nqueens.nim"
   when not defined(windows):
     test "-d:WV_LazyFlowvar", "benchmarks/single_task_producer/weave_spc.nim"
+  when defined(i386) or defined(amd64):
+    test "-d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
+    test "-d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/weave_gemm.nim"

@@ -39,10 +39,8 @@ proc pack_A_mc_kc*[T; ukernel: static MicroKernel](
   let unroll_stop = mc.round_step_down(MR)
 
   # 1. Pack m matrices of size kc*mr, m = mc/mr
-  parallelForStrided i in 0..< unroll_stop, stride = MR:
-    captures: {kc, buffer, A}
-    parallelFor k in 0 ..< kc:
-      captures: {i, kc, buffer, A}
+  for i in countup(0, unroll_stop-1, MR):
+    for k in 0 ..< kc:
       for ii in 0 ..< MR:
         buffer[i*kc + k*MR + ii] = A[i+ii, k]
 
@@ -55,8 +53,6 @@ proc pack_A_mc_kc*[T; ukernel: static MicroKernel](
         offBuf[k*MR + i] = A[unroll_stop+i, k]
       for i in remainder ..< MR: # Pad with 0 if packing over the edge
         offBuf[k*MR + i] = 0.T
-
-  sync(Weave)
 
 # ############################################################
 #
