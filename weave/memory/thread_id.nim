@@ -39,9 +39,8 @@ when (defined(gcc) or defined(clang) or defined(llvm_gcc)) and
     else:
       {.error: "Unreachable".}
 elif defined(windows):
-  proc NtcurrentTeb(): int {.importc, cdecl, header:"<windows.h>".}
+  proc NtcurrentTeb(): int {.importc, stdcall, dynlib:"ntdll".}
     ## Get pointer to Thread Environment BLock
-    # Note that ntdll.dll exports this as stdcall but it's a cdecl ¯\_(ツ)_/¯
 
   func getMemThreadID*(): int {.inline.} =
     ## Returns a unique thread-local identifier.
