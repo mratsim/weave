@@ -11,7 +11,19 @@
 # as for that case, the ID should be the range 0 ..< Weave_NUM_THREADS
 # to allow the common pattern or indexing an array by a thread ID.
 
-when (defined(gcc) or defined(clang) or defined(llvm_gcc)) and
+when defined(windows):
+  proc NtCurrentTeb(): int {.importc, cdecl, header:"<windows.h>".}
+    ## Get pointer to Thread Environment Block
+    # This is cdecl according to
+    # https://undocumented.ntinternals.net/index.html?page=UserMode%2FUndocumented%20Functions%2FNT%20Objects%2FThread%2FNtCurrentTeb.html
+
+  func getMemThreadID*(): int {.inline.} =
+    ## Returns a unique thread-local identifier.
+    ## This is suitable for memory allocator thread-local identifier
+    ## and never requires an expensive syscall.
+    NtcurrentTeb()
+
+elif (defined(gcc) or defined(clang) or defined(llvm_gcc)) and
   (defined(i386) or defined(amd64) or defined(arm) or defined(arm64)):
 
   func getMemThreadID*(): int {.inline.} =
@@ -38,15 +50,6 @@ when (defined(gcc) or defined(clang) or defined(llvm_gcc)) and
       {.emit: ["""asm volatile("mrs %0, tpidr_el0":"=r"(""",result,"));"].}
     else:
       {.error: "Unreachable".}
-elif defined(windows):
-  proc NtcurrentTeb(): int {.importc, stdcall, dynlib:"ntdll".}
-    ## Get pointer to Thread Environment BLock
-
-  func getMemThreadID*(): int {.inline.} =
-    ## Returns a unique thread-local identifier.
-    ## This is suitable for memory allocator thread-local identifier
-    ## and never requires an expensive syscall.
-    NtcurrentTeb()
 else:
   var dummy {.threadvar.}: byte
 
