@@ -54,7 +54,7 @@ proc warmup*() =
   # Warmup - make sure cpu is on max perf
   let start = getMonoTime()
   var foo = 123
-  for i in 0 ..< 300_000_000:
+  for i in 0 ..< 500_000_000:
     foo += i*i mod 456
     foo = foo mod 789
 
