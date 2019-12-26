@@ -21,7 +21,6 @@ Here is a table of the available benchmarks:
 
 | Name                               | Parallelism             | Notable for stressing               | Origin                                                                               |
 |------------------------------------|-------------------------|-------------------------------------|--------------------------------------------------------------------------------------|
-
 | Generic Parallel For               | Data Parallelism        | Load Balancing                      | [OpenMP benchmark for PyTorch](https://github.com/zy97140/omp-benchmark-for-pytorch) |
 | Unbalanced Tree Search             | Task Parallelism        | Load balancing                      | UTS paper / Barcelona OMP Task Suite                                                 |
 
