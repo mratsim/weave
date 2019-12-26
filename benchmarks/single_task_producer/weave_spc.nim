@@ -85,11 +85,11 @@ proc main() =
     NumTasksTotal = paramStr(1).parseInt.int32
   if paramCount() >= 2:
     TaskGranularity = paramStr(2). parseInt.int32
-  if paramCount() == 4:
+  if paramCount() == 3:
     PollInterval = paramStr(3).parseInt.float64
   else:
     PollInterval = TaskGranularity.float64
-  if paramCount() > 4:
+  if paramCount() > 3:
     let exeName = getAppFilename().extractFilename()
     echo &"Usage: {exeName} <# of tasks:{NumTasksTotal}> " &
          &"<task granularity (us): {TaskGranularity}> " &
@@ -123,7 +123,6 @@ proc main() =
   rss = ru.ru_maxrss - rss
   flt = ru.ru_minflt - flt
 
-  sync(Weave)
   exit(Weave)
 
   const lazy = defined(WV_LazyFlowvar)
@@ -131,17 +130,17 @@ proc main() =
                  else: " (eager flowvars)"
 
   echo "--------------------------------------------------------------------------"
-  echo "Scheduler:                                    Weave", config
-  echo "Benchmark:                                    SPC (Single task Producer - multi Consumer)"
-  echo "Threads:                                      ", nthreads
-  echo "Time(ms)                                      ", round(stop - start, 3)
-  echo "Max RSS (KB):                                 ", ru.ru_maxrss
-  echo "Runtime RSS (KB):                             ", rss
-  echo "# of page faults:                             ", flt
+  echo "Scheduler:                                     Weave", config
+  echo "Benchmark:                                     SPC (Single task Producer - multi Consumer)"
+  echo "Threads:                                       ", nthreads
+  echo "Time(ms)                                       ", round(stop - start, 3)
+  echo "Max RSS (KB):                                  ", ru.ru_maxrss
+  echo "Runtime RSS (KB):                              ", rss
+  echo "# of page faults:                              ", flt
   echo "--------------------------------------------------------------------------"
-  echo "# of tasks:                                   ", NumTasksTotal
-  echo "Task granularity (us):                        ", TaskGranularity
-  echo "Polling / manual load balacing interval (us): ", PollInterval
+  echo "# of tasks:                                    ", NumTasksTotal
+  echo "Task granularity (us):                         ", TaskGranularity
+  echo "Polling / manual load balancing interval (us): ", PollInterval
 
   quit 0
 
