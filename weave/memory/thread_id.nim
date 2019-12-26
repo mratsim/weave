@@ -22,13 +22,13 @@ when (defined(gcc) or defined(clang) or defined(llvm_gcc)) and
     # see: https://akkadia.org/drepper/tls.pdf
     when defined(i386):
       asm """
-        movl %%gs:0, %0:"=r"(`result`)::"""
+        "movl %%gs:0, %0":"=r"(`result`)::"""
     elif defined(osx):
       asm """
-        movq %%gs:0, %0:"=r"(`result`)::"""
+        "movq %%gs:0, %0":"=r"(`result`)::"""
     elif defined(amd64):
       asm """
-        movq %%fs:0, %0:"=r"(`result`)::"""
+        "movq %%fs:0, %0":"=r"(`result`)::"""
     elif defined(arm):
       {.emit: ["""asm volatile(
         "mrc p15, 0, %0, c13, c0, 3"

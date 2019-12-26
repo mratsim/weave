@@ -32,7 +32,7 @@ import
   ../channels/channels_mpsc_unbounded_batch,
   ../instrumentation/[contracts, loggers],
   ../config,
-  ./allocs,
+  ./allocs, ./thread_id,
   std/atomics
 
 # Constants (move in config.nim)
@@ -121,7 +121,7 @@ type
     # Number of blocks in use
     used: range[0'i32 .. int32 MaxBlocks] # (WV_MemArenaSize - SizeofMetadata) div WV_MemBlockSize
     # Arena owner
-    threadID: Atomic[int32]
+    threadID: Atomic[int]
 
   Arena = object
     # TODO: Aligned arenas will create L1 64k aliasing conflicts
@@ -149,7 +149,7 @@ type
     first {.align: WV_CacheLinePadding.}: ptr Arena
     last: ptr Arena
     numArenas: range[int32(0) .. high(int32)]
-    threadID: int32
+    threadID: int
     # After a deterministic amount of fast allocations we can trigger
     # expensive maintenance operations to amortize them.
     # Cache strategies building on top of this memory pool
@@ -426,7 +426,7 @@ proc allocEx(pool: var TLPoolAllocator): ptr MemBlock =
 # Public API
 # ----------------------------------------------------------------------------------
 
-proc initialize*(pool: var TLPoolAllocator, threadID: int32) =
+proc initialize*(pool: var TLPoolAllocator) =
   ## Initialize a thread-local memory pool
   ## This automatically reserves one arena
   ## of WV_MemArenaSize (default 32kB) that can
@@ -450,7 +450,7 @@ proc initialize*(pool: var TLPoolAllocator, threadID: int32) =
       pool.addr, threadID, pool.numArenas)
 
   zeroMem(pool.addr, sizeof(pool))
-  pool.threadID = threadID
+  pool.threadID = getMemThreadID()
   discard pool.newArena()
 
   postCondition: not pool.first.isNil
@@ -481,7 +481,7 @@ proc borrow*(pool: var TLPoolAllocator, T: typedesc): ptr T =
     # Fast-path
     return cast[ptr T](pool.last[].allocBlock())
 
-proc recycle*[T](myThreadID: int32, p: ptr T) {.gcsafe.} =
+proc recycle*[T](p: ptr T) {.gcsafe.} =
   ## Returns a memory block to its memory pool.
   ##
   ## This is thread-safe, any thread can call it.
@@ -502,7 +502,7 @@ proc recycle*[T](myThreadID: int32, p: ptr T) {.gcsafe.} =
   # Find the owning arena
   let arena = p.getArena()
 
-  if myThreadID == arena.meta.threadID.load(moRelaxed):
+  if getMemThreadID() == arena.meta.threadID.load(moRelaxed):
     # thread-local free
     if arena.meta.localFree.isNil:
       p.next.store(nil, moRelaxed)
@@ -616,12 +616,11 @@ when isMainModule:
   proc benchSingleThreadedPool(NumAllocs: static int) =
     var pointers: ref array[NumAllocs, ptr MyObject]
     new pointers
-    let myID = 0'i32
 
     let start = cpuTime()
 
     var pool: TLPoolAllocator
-    pool.initialize(threadID = myID)
+    pool.initialize()
 
     for i in 0 ..< Iters:
       for j in 0 ..< NumAllocs:
@@ -629,9 +628,9 @@ when isMainModule:
       # Deallocate in mixed order - note that the mempool
       # is optimized for LIFO dealloc.
       for j in countup(0, NumAllocs-1, 2):
-        myID.recycle(pointers[j])
+        recycle(pointers[j])
       for j in countup(1, NumAllocs-1, 2):
-        myID.recycle(pointers[j])
+        recycle(pointers[j])
 
     let stop = cpuTime()
     echo &"Single-threaded: Pool   alloc for {NumAllocs} blocks: {stop-start:.4f} s"
@@ -713,7 +712,7 @@ when isMainModule:
     proc `thread_func Alloc`(args: ThreadArgs) =
       when Alloc == Pool:
         let pool = args.pool
-        pool[].initialize(threadID = args.ID.int32)
+        pool[].initialize()
 
       template Worker(id: WorkerKind, body: untyped): untyped {.dirty.} =
         if args.ID == id:
@@ -739,7 +738,7 @@ when isMainModule:
         elif kind == Nim:
           freeShared(val)
         else:
-          recycle(myThreadID = ord(Receiver), val)
+          recycle(val)
 
       Worker(Receiver):
         var counts: array[Sender1..Sender15, int]
