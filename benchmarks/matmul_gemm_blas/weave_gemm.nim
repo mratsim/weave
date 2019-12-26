@@ -43,7 +43,7 @@ when isMainModule:
 
   randomize(42) # FOr reproducibility
   warmup()
-  reportConfig("Laser (Pure Nim) + OpenMP", float32, (M, K), (K, N))
+  reportConfig("Weave (Pure Nim)", float32, (M, K), (K, N))
 
   block:
     let a = newSeqWith(M*K, float32 rand(-0.1..0.1))
