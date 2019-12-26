@@ -14,7 +14,7 @@ import
   macros,
   # Internal
   ./parallel_macros, ./parallel_reduce,
-  ./contexts,
+  ./contexts, ./runtime,
   ./instrumentation/contracts
 
 when not compileOption("threads"):
