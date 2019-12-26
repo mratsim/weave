@@ -320,7 +320,7 @@ when isMainModule:
 
   var pool: TLPoolAllocator
 
-  pool.initialize(threadID = 0)
+  pool.initialize()
 
   proc newTask(cache: var LookAsideList[Task]): Task =
     result = cache.pop()
@@ -329,7 +329,7 @@ when isMainModule:
     zeroMem(result, sizeof(deref(Task)))
 
   proc delete(task: Task) =
-    recycle(myThreadID = 0'i32, task)
+    recycle(task)
 
   iterator items(t: Task): Task =
     var cur = t
@@ -340,12 +340,11 @@ when isMainModule:
 
   proc recycleAll(taskList: sink Task) =
     for task in taskList:
-      recycle(myThreadID = 0'i32, task)
+      recycle(task)
 
   suite "Testing PrellDeques":
     var deq: PrellDeque[Task]
     var cache: LookAsideList[Task]
-    # cache.threadID = 0
     # cache.freeFn = recycle
     # pool.hook.setHeartbeat(cache)
 
@@ -408,7 +407,6 @@ when isMainModule:
         var deq2: PrellDeque[Task]
         deq2.initialize()
         var cache2: LookAsideList[Task]
-        cache2.threadID = 1
         cache2.freeFn = recycle
 
         deq2.addListFirst(head, tail, numStolen)

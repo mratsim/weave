@@ -116,7 +116,7 @@ proc newTaskFromCache*(): Task =
 
 proc delete*(task: Task) {.inline.} =
   preCondition: not task.isNil()
-  recycle(myID(), task)
+  recycle(task)
 
 iterator items(t: Task): Task =
   var cur = t
@@ -128,7 +128,7 @@ iterator items(t: Task): Task =
 proc flushAndDispose*(dq: var PrellDeque) =
   let leftovers = flush(dq)
   for task in items(leftovers):
-    recycle(myID(), task)
+    recycle(task)
 
 # Dynamic Scopes
 # ----------------------------------------------------------------------------------

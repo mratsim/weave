@@ -161,7 +161,7 @@ when isMainModule:
     echo "-----------------------------------"
     var threads: array[2, Thread[ThreadArgs]]
     var pool: TLPoolAllocator
-    pool.initialize(threadID = 0)
+    pool.initialize()
 
     var chan = pool.borrow(ChannelSPSCSingle)
     chan[].initialize(itemSize = sizeof(int))
@@ -172,7 +172,7 @@ when isMainModule:
     joinThread(threads[0])
     joinThread(threads[1])
 
-    recycle(0, chan)
+    recycle(chan)
 
     echo "-----------------------------------"
     echo "Success"
