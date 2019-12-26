@@ -160,7 +160,7 @@ proc gemm_impl[T; ukernel: static MicroKernel](
     # First time writing to C, we scale it, otherwise accumulate
     let beta = if pc == 0: beta else: 1.T
 
-    sync(Weave)
+    sync(Weave) # TODO: this cannot be nested
     # ####################################
     # 3. for ic = 0,...,m−1 in steps of mc
     parallelFor icb in 0 ..< tiles.ic_num_tasks:
@@ -179,7 +179,7 @@ proc gemm_impl[T; ukernel: static MicroKernel](
           alpha, packA, tiles.b,                      #    αA[ic:ic+mc, pc:pc+kc] * B[pc:pc+kc, jc:jc+nc] +
           beta, vC.stride(ic, 0)                      #    βC[ic:ic+mc, jc:jc+nc]
         )
-    sync(Weave)
+    sync(Weave) # TODO: this cannot be nested
 
 # ############################################################
 #
