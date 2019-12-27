@@ -156,6 +156,9 @@ template decCounter*(name: untyped{ident}) =
     # Assumes localCtx is in the calling context
     localCtx.counters.name -= 1
 
+metrics:
+  import ./primitives/barriers
+
 proc workerMetrics*() =
   metrics:
     Leader:
@@ -165,7 +168,7 @@ proc workerMetrics*() =
       c_printf("+========================================+\n")
       c_printf("  / use -d:WV_profile for high-res timers /  \n")
 
-    discard pthread_barrier_wait(globalCtx.barrier)
+    discard globalCtx.barrier.wait()
 
     c_printf("Worker %2d: %u steal requests sent\n", myID(), localCtx.counters.stealSent)
     c_printf("Worker %2d: %u steal requests handled\n", myID(), localCtx.counters.stealHandled)
