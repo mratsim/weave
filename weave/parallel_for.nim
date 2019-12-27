@@ -142,55 +142,55 @@ macro parallelForStrided*(loopParams: untyped, stride: Positive, body: untyped):
 when isMainModule:
   import ./instrumentation/loggers, ./runtime, ./runtime_fsm
 
-  block:
-    proc main() =
-      init(Weave)
+  # block:
+  #   proc main() =
+  #     init(Weave)
 
-      parallelFor i in 0 ..< 100:
-        log("%d (thread %d)\n", i, myID())
+  #     parallelFor i in 0 ..< 100:
+  #       log("%d (thread %d)\n", i, myID())
 
-      exit(Weave)
+  #     exit(Weave)
 
-    echo "Simple parallel for"
-    echo "-------------------------"
-    main()
-    echo "-------------------------"
+  #   echo "Simple parallel for"
+  #   echo "-------------------------"
+  #   main()
+  #   echo "-------------------------"
 
-  block: # Capturing outside scope
-    proc main2() =
-      init(Weave)
+  # block: # Capturing outside scope
+  #   proc main2() =
+  #     init(Weave)
 
-      var a = 100
-      var b = 10
-      # expandMacros:
-      parallelFor i in 0 ..< 10:
-        captures: {a, b}
-        log("a+b+i = %d (thread %d)\n", a+b+i, myID())
+  #     var a = 100
+  #     var b = 10
+  #     # expandMacros:
+  #     parallelFor i in 0 ..< 10:
+  #       captures: {a, b}
+  #       log("a+b+i = %d (thread %d)\n", a+b+i, myID())
 
-      exit(Weave)
-
-
-    echo "\n\nCapturing outside variables"
-    echo "-------------------------"
-    main2()
-    echo "-------------------------"
+  #     exit(Weave)
 
 
-  block: # Nested loops
-    proc main3() =
-      init(Weave)
+  #   echo "\n\nCapturing outside variables"
+  #   echo "-------------------------"
+  #   main2()
+  #   echo "-------------------------"
 
-      parallelFor i in 0 ..< 4:
-        parallelFor j in 0 ..< 8:
-          captures: {i}
-          log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
 
-      exit(Weave)
+  # block: # Nested loops
+  #   proc main3() =
+  #     init(Weave)
 
-    echo "\n\nNested loops"
-    echo "-------------------------"
-    main3()
-    echo "-------------------------"
+  #     parallelFor i in 0 ..< 4:
+  #       parallelFor j in 0 ..< 8:
+  #         captures: {i}
+  #         log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
+
+  #     exit(Weave)
+
+  #   echo "\n\nNested loops"
+  #   echo "-------------------------"
+  #   main3()
+  #   echo "-------------------------"
 
 
   block: # Strided Nested loops
@@ -198,8 +198,8 @@ when isMainModule:
       init(Weave)
 
       # expandMacros:
-      parallelForStrided i in 0 ..< 100, stride = 30:
-        parallelForStrided j in 0 ..< 200, stride = 60:
+      parallelForStrided i in 0 ..< 500, stride = 30:
+        parallelForStrided j in 0 ..< 1000, stride = 60:
           captures: {i}
           log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
 
