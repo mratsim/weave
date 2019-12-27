@@ -127,6 +127,7 @@ template omp_for*(
     index: untyped,
     length: Natural,
     use_simd, nowait: static bool,
+    schedule: static string,
     body: untyped
   ) =
   ## OpenMP for loop (not parallel)
@@ -153,7 +154,8 @@ template omp_for*(
   const omp_annotation = block:
     "for " &
       (when use_simd: "simd " else: "") &
-      (when nowait: "nowait " else: "")
+      (when nowait: "nowait " else: "") &
+      "schedule(" & schedule & ')'
   for `index`{.inject.} in `||`(0, length-1, omp_annotation):
     block: body
 

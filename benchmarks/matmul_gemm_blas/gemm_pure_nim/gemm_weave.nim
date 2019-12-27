@@ -81,7 +81,8 @@ proc gebp_mkernel*[T; ukernel: static MicroKernel](
 
     # ###################################
     # 5. for ir = 0,...,m−1 in steps of mr
-    for ir in countup(0, mc-1, MR):
+    parallelForStrided ir in 0 ..< mc, stride = MR:
+      captures: {nr, jr, mc, nc, kc, alpha, packA, packB, beta, mcncC}
       let mr = min(mc - ir, MR)
       let c_aux = mcncC.stride(ir, jr)               # C[ic+ir:ic+ir+mr, jc+jr:jc+jr+nr]
 

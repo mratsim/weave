@@ -7,7 +7,7 @@ const
   M*     = 16*6*20
   K*     = 16*6*20
   N*     = 16*6*20
-  NbSamples* = 10    # This might stresss the allocator when packing if the matrices are big
+  NbSamples* = 300  # This might stresss the allocator when packing if the matrices are big
   CpuGhz = 3.5      # i9-9980XE OC All turbo 4.1GHz (AVX2 4.0GHz, AVX512 3.5GHz)
   NumCpuCores = 18
   VectorWidth = 16  # 8 float32 for AVX2, 16 for AVX512

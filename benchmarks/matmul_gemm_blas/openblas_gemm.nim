@@ -46,7 +46,7 @@ when isMainModule:
   import std/[random, sequtils]
 
   randomize(42) # FOr reproducibility
-  warmup()
+  # warmup()
   reportConfig("OpenBLAS", float32, (M, K), (K, N))
 
   block:
