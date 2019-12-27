@@ -11,6 +11,7 @@ const cSourcesPath = currentSourcePath.rsplit(DirSep, 1)[0] & '/'
 {.passC:"-fopenmp".}
 {.passL:"-fopenmp".}
 
+{.passC:"-I" & cSourcesPath.}
 {.passC:"-I" & cSourcesPath & "mkl-dnn/include".}
 {.passC:"-I" & cSourcesPath & "mkl-dnn/src/common".}
 {.passC:"-I" & cSourcesPath & "mkl-dnn/src/cpu".}
