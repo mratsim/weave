@@ -147,6 +147,10 @@ behavior(awaitFSA):
   transition:
     ascertain: not task.fn.isNil
     debug: log("Worker %2d: forcefut 3 - stoled tasks\n", myID())
+    TargetLastVictim:
+      if task.victim != Not_a_worker:
+        myThefts().lastVictim = task.victim
+        ascertain: myThefts().lastVictim != myID()
 
     if not task.next.isNil:
       profile(enq_deq_task):

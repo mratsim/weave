@@ -182,7 +182,8 @@ proc dispatchElseDecline*(req: sink StealRequest) {.gcsafe.}=
     ascertain: not task.fn.isNil
     ascertain: cast[ByteAddress](task.fn) != 0xFACADE
     profile(send_recv_task):
-      # TODO LastVictim
+      TargetLastVictim:
+        task.victim = myID()
       LazyFV:
         batchConvertLazyFlowvar(task)
       debug: log("Worker %2d: preparing %d task(s) for worker %2d with function address 0x%.08x\n",
@@ -201,6 +202,8 @@ proc splitAndSend*(task: Task, req: sink StealRequest) =
 
     # Copy the current task
     upperSplit[] = task[]
+    TargetLastVictim:
+      upperSplit.victim = myID()
 
     # Split iteration range according to given strategy
     # [start, stop) => [start, split) + [split, end)

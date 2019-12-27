@@ -198,6 +198,10 @@ proc schedulingLoop() =
     # 3. We stole some task(s)
     ascertain: not task.fn.isNil
     debug: log("Worker %2d: schedloop 3 - stoled tasks\n", myID())
+    TargetLastVictim:
+      if task.victim != Not_a_worker:
+        myThefts().lastVictim = task.victim
+        ascertain: myThefts().lastVictim != myID()
 
     if not task.next.isNil:
       # Add everything

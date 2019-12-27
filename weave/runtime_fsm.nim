@@ -160,6 +160,10 @@ behavior(syncFSA):
     # 3. We stole some task(s)
     debug: log("Worker %2d: globalsync 3 - stoled tasks\n", myID())
     ascertain: not task.fn.isNil
+    TargetLastVictim:
+      if task.victim != Not_a_worker:
+        myThefts().lastVictim = task.victim
+        ascertain: myThefts().lastVictim != myID()
 
     if not task.next.isNil:
       profile(enq_deq_task):

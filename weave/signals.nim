@@ -32,7 +32,8 @@ proc asyncSignal(fn: proc (_: pointer) {.nimcall, gcsafe.}, chan: var ChannelSps
   profile(send_recv_task):
     let dummy = newTaskFromCache()
     dummy.fn = fn
-    # TODO: StealLastVictim
+    TargetLastVictim:
+      dummy.victim = Not_a_worker
 
     let signalSent = chan.trySend(dummy)
     debugTermination: log("Worker %2d: sending asyncSignal\n", myID())
