@@ -32,16 +32,13 @@ matrix:
         - CHANNEL=devel
       compiler: clang
 
-    # OSX tests for Travis are very strange. A non-root task
-    # can end up in a root barrier even when there is no nested parallelism
-    # TODO: https://github.com/mratsim/weave/issues/51
     # On OSX we only test against clang (gcc is mapped to clang by default)
-    # - os: osx
-    #   arch: amd64
-    #   env:
-    #     - ARCH=amd64
-    #     - CHANNEL=devel
-    #   compiler: clang
+    - os: osx
+      arch: amd64
+      env:
+        - ARCH=amd64
+        - CHANNEL=devel
+      compiler: clang
   fast_finish: true
 
 before_install:

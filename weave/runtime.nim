@@ -65,7 +65,12 @@ proc init*(_: type Weave) =
     pinToCpu(globalCtx.threadpool[i], i)
 
   myMemPool().initialize()
-  myWorker().currentTask = newTaskFromCache() # Root task
+
+  # Root task
+  myWorker().currentTask = newTaskFromCache()
+  myTask().parent = nil
+  myTask().fn = cast[type myTask().fn](0xEFFACED)
+
   init(localCtx)
   # Wait for the child threads
   discard globalCtx.barrier.wait()

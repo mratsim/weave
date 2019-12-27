@@ -40,16 +40,14 @@ type
     stride*: int
     # 64 bytes
     futures*: pointer  # LinkedList of futures required by the current task
-    batch*: int32      # TODO remove
     isLoop*: bool
     hasFuture*: bool   # If a task is associated with a future, the future is stored at data[0]
     futureSize*: uint8 # Size of the future result type if relevant
     # 79 bytes
     # User data - including the FlowVar channel to send back result.
-    data*: array[TaskDataSize, byte]
-
-    # TODO: support loops with steps
-
+    # It is very likely that User data contains a pointer (the Flowvar channel)
+    # We align to avoid torn reads/extra bookkeeping.
+    data*{.align:sizeof(int).}: array[TaskDataSize, byte]
 
   # Steal requests
   # ----------------------------------------------------------------------------------
