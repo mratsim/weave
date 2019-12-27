@@ -1,5 +1,5 @@
 
-# Build with "crystal build -Dpreview_mt benchmarks/fibonacci/crystal_fib.cr"
+# Build with "crystal build --release -Dpreview_mt benchmarks/fibonacci/crystal_fib.cr"
 # Run with "CRYSTAL_WORKERS=36 ./crystal_fib" it default to 4
 
 def fib(i : Int32, ch : Channel(Int32) | Nil)
