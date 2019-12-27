@@ -243,7 +243,7 @@ template runBench(transposeName: typed, reorderCompute: bool): untyped =
 # Interface
 # ---------------------------------------------------
 
-proc main(M = 400, N = 4000, nrounds = 10000, transposeStrat = TiledCollapsed, reorderCompute=false) =
+proc main(M = 400, N = 4000, nrounds = 1000, transposeStrat = TiledCollapsed, reorderCompute=false) =
   echo "Inverting the transpose order may favor one transposition heavily for non-tiled strategies"
 
   let nthreads = if transposeStrat == Sequential: 1'i32
