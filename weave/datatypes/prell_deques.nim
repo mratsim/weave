@@ -116,7 +116,7 @@ proc flush*[T: StealableTask](dq: var PrellDeque[T]): T {.inline.} =
 # Batch routines
 # ---------------------------------------------------------------
 
-func addListFirst[T](dq: var PrellDeque[T], head, tail: sink T, len: int32) =
+func addListFirst[T](dq: var PrellDeque[T], head, tail: sink T, len: int32) {.inline.} =
   # Add a list of tasks [head ... tail] of length len to the front of the deque
   preCondition: not head.isNil and not tail.isNil
   preCondition: len > 0
@@ -130,20 +130,16 @@ func addListFirst[T](dq: var PrellDeque[T], head, tail: sink T, len: int32) =
   dq.head = head
   dq.pendingTasks += len
 
-func addListFirst*[T](dq: var PrellDeque[T], head: sink T, len: int32) =
+func addListFirst*[T](dq: var PrellDeque[T], head: sink T) =
   preCondition: not head.isNil
-  preCondition: len > 0
 
   var tail = head
-  when compileOption("boundChecks"):
-    var index = 0'i32
+  var index = 0'i32
   while not tail.next.isNil:
     tail = tail.next
-    when compileOption("boundChecks"):
-      index += 1
+    index += 1
 
-  when compileOption("boundChecks"):
-    postCondition: index + 1 == len
+  let len = index + 1
   dq.addListFirst(head, tail, len)
 
 # Task-specific routines
@@ -235,7 +231,6 @@ template multistealImpl[T](
     dq.tail.prev.next = dq.tail.addr # last task points to dummy
 
   dq.pendingTasks -= numStolen
-  # dq.numSteals += 1
 
 func stealMany*[T](dq: var PrellDeque[T],
                   maxSteals: int32, # should be range[1'i32 .. high(int32)]

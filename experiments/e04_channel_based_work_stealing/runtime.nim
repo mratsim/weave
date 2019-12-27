@@ -616,7 +616,6 @@ proc async_action(fn: proc (_: pointer) {.nimcall.}, chan: Channel[Task]) =
   profile(send_recv_task):
     let dummy = task_alloc()
     dummy.fn = fn
-    dummy.batch = 1
     when defined(StealLastVictim):
       dummy.victim = -1
 

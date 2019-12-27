@@ -195,10 +195,9 @@ proc schedulingLoop() =
     ascertain: not task.fn.isNil
     debug: log("Worker %2d: schedloop 3 - stoled tasks\n", myID())
 
-    let loot = task.batch
-    if loot > 1:
+    if not task.next.isNil:
       # Add everything
-      myWorker().deque.addListFirst(task, loot)
+      myWorker().deque.addListFirst(task)
       # And then only use the last
       task = myWorker().deque.popFirst()
 

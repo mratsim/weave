@@ -178,7 +178,6 @@ proc dispatchElseDecline*(req: sink StealRequest) {.gcsafe.}=
 
   if not task.isNil:
     profile(send_recv_task):
-      task.batch = loot
       # TODO LastVictim
       LazyFV:
         batchConvertLazyFlowvar(task)
@@ -220,8 +219,6 @@ proc splitAndSend*(task: Task, req: sink StealRequest) =
   debug: log("Worker %2d: Sending [%ld, %ld) to worker %d\n", myID(), upperSplit.start, upperSplit.stop, req.thiefID)
 
   profile(send_recv_task):
-    upperSplit.batch = 1
-
     if upperSplit.hasFuture:
       # The task has a future so it depends on both splitted tasks.
       let fvNode = newFlowvarNode(upperSplit.futureSize)

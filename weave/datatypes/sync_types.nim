@@ -40,7 +40,6 @@ type
     stride*: int
     # 64 bytes
     futures*: pointer  # LinkedList of futures required by the current task
-    batch*: int32      # TODO remove
     isLoop*: bool
     hasFuture*: bool   # If a task is associated with a future, the future is stored at data[0]
     futureSize*: uint8 # Size of the future result type if relevant

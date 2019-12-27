@@ -110,7 +110,6 @@ proc newTaskFromCache*(): Task =
   result.stop = 0
   result.stride = 0
   result.futures = nil
-  result.batch = 0
   result.isLoop = false
   result.hasFuture = false
 
