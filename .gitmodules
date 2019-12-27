@@ -13,3 +13,6 @@
 [submodule "benchmarks/vendor/tasking-2.0"]
 	path = benchmarks/vendor/tasking-2.0
 	url = https://github.com/aprell/tasking-2.0
+[submodule "benchmarks/vendor/mkl-dnn"]
+	path = benchmarks/vendor/mkl-dnn
+	url = https://github.com/intel/mkl-dnn
