@@ -159,6 +159,8 @@ proc send(req: sink StealRequest, task: sink Task, numStolen: int32 = 1) {.inlin
   debug: log("Worker %2d: sending %d tasks (task.fn 0x%.08x) to Worker %2d\n",
     myID(), numStolen, task.fn, req.thiefID, req.thiefAddr)
   let taskSent = req.thiefAddr[].trySend(task)
+  TargetLastThief:
+    myThefts().lastThief = req.thiefID
 
   postCondition: taskSent # SPSC channel with only 1 slot
 
@@ -180,7 +182,8 @@ proc dispatchElseDecline*(req: sink StealRequest) {.gcsafe.}=
     ascertain: not task.fn.isNil
     ascertain: cast[ByteAddress](task.fn) != 0xFACADE
     profile(send_recv_task):
-      # TODO LastVictim
+      TargetLastVictim:
+        task.victim = myID()
       LazyFV:
         batchConvertLazyFlowvar(task)
       debug: log("Worker %2d: preparing %d task(s) for worker %2d with function address 0x%.08x\n",
@@ -199,6 +202,8 @@ proc splitAndSend*(task: Task, req: sink StealRequest) =
 
     # Copy the current task
     upperSplit[] = task[]
+    TargetLastVictim:
+      upperSplit.victim = myID()
 
     # Split iteration range according to given strategy
     # [start, stop) => [start, split) + [split, end)

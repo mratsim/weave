@@ -314,10 +314,9 @@ proc main(datasetSize = 20000'i64, batchSize = 256'i64, imageLabels = 1000'i64, 
   echo '\n'
   wv_free(sanityM.buffer)
 
-  # reportConfig("Sequential", 1, datasetSize, batchSize, imageLabels, textVocabulary)
-
-  # block:
-  #   runBench(logsumexpSerial, datasetSize, batchSize, imageLabels)
+  reportConfig("Sequential", 1, datasetSize, batchSize, imageLabels, textVocabulary)
+  block:
+    runBench(logsumexpSerial, datasetSize, batchSize, imageLabels)
   # block:
   #   runBench(logsumexpSerial, datasetSize, batchSize, textVocabulary)
 

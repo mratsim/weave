@@ -58,7 +58,18 @@ proc findVictim*(req: var StealRequest): WorkerID =
       markIdle(req.victims, myWorker().right)
 
     ascertain: myID() notin req.victims
-    result = randomVictim(req.victims, req.thiefID)
+    when FirstVictim == LastVictim:
+      if myThefts().lastVictim != Not_a_worker and myThefts().lastVictim in req.victims:
+        result = myThefts().lastVictim
+      else:
+        result = randomVictim(req.victims, req.thiefID)
+    elif FirstVictim == LastThief:
+      if myThefts().lastThief != Not_a_worker and myThefts().lastThief in req.victims:
+        result = myThefts().lastThief
+      else:
+        result = randomVictim(req.victims, req.thiefID)
+    else:
+      result = randomVictim(req.victims, req.thiefID)
 
   if result == Not_a_worker:
     # Couldn't find a victim. Return the steal request to the thief

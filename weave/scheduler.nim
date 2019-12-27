@@ -101,6 +101,10 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
     localCtx.stealCache.access(i).victims.allocate(capacity = workforce())
 
   myThefts().rng.seed(myID())
+  TargetLastVictim:
+    myThefts().lastVictim = Not_a_worker
+  TargetLastThief:
+    myThefts().lastThief = Not_a_worker
 
   # Debug
   # -----------------------------------------------------------
@@ -194,6 +198,10 @@ proc schedulingLoop() =
     # 3. We stole some task(s)
     ascertain: not task.fn.isNil
     debug: log("Worker %2d: schedloop 3 - stoled tasks\n", myID())
+    TargetLastVictim:
+      if task.victim != Not_a_worker:
+        myThefts().lastVictim = task.victim
+        ascertain: myThefts().lastVictim != myID()
 
     if not task.next.isNil:
       # Add everything

@@ -261,8 +261,9 @@ proc main(matrixSize = 25000'i32, boxes = 1000'i32) =
 
   reportConfig("Sequential", 1, matrixSize, boxes)
   runBench(generateHistogramSerial, matrix, boxes, parallel = false)
-  reportConfig("Weave" & config, nthreads, matrixSize, boxes)
+  reportConfig("Weave - Parallel Reduce" & config, nthreads, matrixSize, boxes)
   runBench(generateHistogramWeaveReduce, matrix, boxes)
+  reportConfig("Weave - Parallel For Staged" & config, nthreads, matrixSize, boxes)
   runBench(generateHistogramWeaveStaged, matrix, boxes)
 
 dispatch(main)
