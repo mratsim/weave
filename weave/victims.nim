@@ -159,6 +159,8 @@ proc send(req: sink StealRequest, task: sink Task, numStolen: int32 = 1) {.inlin
   debug: log("Worker %2d: sending %d tasks (task.fn 0x%.08x) to Worker %2d\n",
     myID(), numStolen, task.fn, req.thiefID, req.thiefAddr)
   let taskSent = req.thiefAddr[].trySend(task)
+  TargetLastThief:
+    myThefts().lastThief = req.thiefID
 
   postCondition: taskSent # SPSC channel with only 1 slot
 

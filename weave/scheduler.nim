@@ -101,6 +101,10 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
     localCtx.stealCache.access(i).victims.allocate(capacity = workforce())
 
   myThefts().rng.seed(myID())
+  TargetLastVictim:
+    myThefts().lastVictim = Not_a_worker
+  TargetLastThief:
+    myThefts().lastThief = Not_a_worker
 
   # Debug
   # -----------------------------------------------------------

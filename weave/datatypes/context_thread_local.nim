@@ -56,11 +56,11 @@ type
     # Before a worker can become quiescent it has to drop MaxSteal - 1
     # steal request and send the remaining one to its parent
     dropped*: int32
-    # RRNG state to choose victims
+    # RNG state to choose victims
     rng*: RngState
-    when defined(StealLastVictim):
+    when FirstVictim == LastVictim:
       lastVictim*: WorkerID
-    when defined(StealLastThief):
+    when FirstVictim == LastThief:
       lastThief*: WorkerID
     # Adaptative theft
     stealHalf*: bool

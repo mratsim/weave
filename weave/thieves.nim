@@ -133,8 +133,6 @@ proc trySteal*(isOutOfTasks: bool) =
         req.state = Stealing
       else:
         req.state = Working
-
-      # TODO LastVictim/LastThief
       req.findVictimAndSteal()
 
 proc forget*(req: sink StealRequest) {.gcsafe.} =

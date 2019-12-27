@@ -65,22 +65,29 @@ const WV_Backoff* {.booldefine.} = true
   ## steal requests queues when they sleep and there is latency to wake up.
 
 type
-  StealKind* {.pure.}= enum
+  StealKind* {.pure.} = enum
     one
     half
     adaptative
 
-  SplitKind* {.pure.}= enum
+  SplitKind* {.pure.} = enum
     half
     guided
     adaptative
 
+  VictimSelection* = enum
+    Random     # Always target a new victim randomly
+    LastVictim # Target the last victim if possible
+    LastThief  # Target the last thief if possible
+
 const
   WV_Steal{.strdefine.} = "adaptative"
   WV_Split{.strdefine.} = "adaptative"
+  WV_Target{.strdefine.} = "Random"
 
   StealStrategy* = parseEnum[StealKind](WV_Steal)
   SplitStrategy* = parseEnum[SplitKind](WV_Split)
+  FirstVictim* = parseEnum[VictimSelection](WV_Target)
 
 # Static scopes
 # ----------------------------------------------------------------------------------
@@ -111,6 +118,14 @@ template EagerFV*(body: untyped): untyped =
 
 template Backoff*(body: untyped): untyped =
   when WV_Backoff:
+    body
+
+template TargetLastVictim*(body: untyped): untyped =
+  when FirstVictim == LastVictim:
+    body
+
+template TargetLastThief*(body: untyped): untyped =
+  when FirstVictim == LastThief:
     body
 
 # Dynamic defines
