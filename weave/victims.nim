@@ -177,6 +177,8 @@ proc dispatchElseDecline*(req: sink StealRequest) {.gcsafe.}=
     let (task, loot) = req.takeTasks()
 
   if not task.isNil:
+    ascertain: not task.fn.isNil
+    ascertain: cast[ByteAddress](task.fn) != 0xFACADE
     profile(send_recv_task):
       # TODO LastVictim
       LazyFV:
