@@ -44,21 +44,20 @@ func roundPrevMultipleOf(x: SomeInteger, step: SomeInteger): SomeInteger {.inlin
 
 func splitAdaptative(task: Task, approxNumThieves: int32): int {.inline.} =
   ## Split iteration range based on the number of steal requests
-  let itersLeft = (task.stop - task.cur + task.stride-1) div task.stride
-  preCondition: itersLeft > 1
+  let chunksLeft = (task.stop - task.cur + task.stride-1) div task.stride
+  preCondition: chunksLeft > 1
 
   debug:
-    log("Worker %2d: %ld iterations left (start: %d, current: %d, stop: %d, stride: %d, %d thieves)\n",
-      myID(), iters_left, task.start, task.cur, task.stop, task.stride, approxNumThieves)
+    log("Worker %2d: %ld chunks left (start: %d, current: %d, stop: %d, stride: %d, %d thieves)\n",
+      myID(), chunksLeft, task.start, task.cur, task.stop, task.stride, approxNumThieves)
 
   # Send a chunk of work to all
-  let chunk = max(itersLeft div (approxNumThieves + 1), 1)
+  let chunk = max(chunksLeft div (approxNumThieves + 1), 1)
 
   postCondition:
-    itersLeft > chunk
+    chunksLeft > chunk
 
-  debug: log("Worker %2d: sending %ld iterations\n", myID(), chunk*task.stride)
-  return roundPrevMultipleOf(task.stop - chunk*task.stride, chunk*task.stride)
+  result = roundPrevMultipleOf(task.stop - chunk*task.stride, task.stride)
 
 template split*(task: Task, approxNumThieves: int32): int =
   when SplitStrategy == SplitKind.half:
