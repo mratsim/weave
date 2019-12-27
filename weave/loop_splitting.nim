@@ -71,4 +71,4 @@ template split*(task: Task, approxNumThieves: int32): int =
     {.error: "Unreachable".}
 
 template isSplittable*(t: Task): bool =
-  not t.isNil and t.isLoop and (t.stop - t.cur + task.stride-1) div t.stride > 1
+  not t.isNil and t.isLoop and (t.stop - t.cur + t.stride-1) div t.stride > 1
