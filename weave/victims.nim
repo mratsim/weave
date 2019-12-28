@@ -46,16 +46,6 @@ Backoff:
 # Victims - Adaptative task splitting
 # ----------------------------------------------------------------------------------
 
-proc approxNumThieves(): int32 {.inline.} =
-  # We estimate the number of idle workers by counting the number of theft attempts
-  # Notes:
-  #   - We peek into a MPSC channel from the consumer thread: the peek is a lower bound
-  #     as more requests may pile up concurrently.
-  #   - We already read 1 steal request before trying to split so need to add it back.
-  #   - Workers may send steal requests before actually running out-of-work
-  result = 1 + myThieves().peek()
-  debug: log("Worker %2d: has %ld steal requests\n", myID(), result)
-
 Backoff:
   proc approxNumThievesProxy(worker: WorkerID): int32 =
     # Estimate the number of idle workers of a worker subtree
@@ -201,15 +191,16 @@ proc dispatchElseDecline*(req: sink StealRequest) {.gcsafe.}=
     ascertain: myWorker().deque.isEmpty()
     decline(req)
 
-proc evalSplit(task: Task, req: StealRequest, delegated: bool): int {.inline.}=
+proc evalSplit(task: Task, req: StealRequest, workSharing: bool): int {.inline.}=
   when SplitStrategy == SplitKind.half:
     return splitHalf(task)
   elif SplitStrategy == guided:
     return splitGuided(task)
   elif SplitStrategy == SplitKind.adaptative:
-    var guessThieves = approxNumThieves()
+    var guessThieves = myThieves().peek()
+    debug: log("Worker %2d: has %ld steal requests queued\n", myID(), guessThieves)
     Backoff:
-      if delegated:
+      if workSharing:
         # The real splitting will be done by the child worker
         # We need to send it enough work for its own children and all the steal requests pending
         ascertain: req.thiefID in {myWorker().left, myWorker().right}
@@ -220,7 +211,7 @@ proc evalSplit(task: Task, req: StealRequest, delegated: bool): int {.inline.}=
           right = approxNumThievesProxy(myWorker().right)
         guessThieves += left + right
         debug:
-          log("Worker %2d: delegated split, thiefID %d, total subtree thieves %d, left{id: %d, waiting: %d, requests: %d}, right{id: %d, waiting: %d, requests: %d}\n",
+          log("Worker %2d: workSharing split, thiefID %d, total subtree thieves %d, left{id: %d, waiting: %d, requests: %d}, right{id: %d, waiting: %d, requests: %d}\n",
             myID(), req.thiefID, guessThieves, myWorker().left, myWorker().leftIsWaiting, left, myWorker().right, myWorker().rightIsWaiting, right
           )
         if req.thiefID == myWorker().left:
@@ -232,11 +223,13 @@ proc evalSplit(task: Task, req: StealRequest, delegated: bool): int {.inline.}=
         guessThieves += approxNumThievesProxy(myWorker().left)
       if myWorker().rightIsWaiting:
         guessThieves += approxNumThievesProxy(myWorker().right)
-    return splitAdaptative(task, guessThieves)
+    # If not "workSharing" we also just dequeued the steal request currently being considered
+    # so we need to add it back
+    return splitAdaptative(task, 1+guessThieves)
   else:
     {.error: "Unreachable".}
 
-proc splitAndSend*(task: Task, req: sink StealRequest, delegated: bool) =
+proc splitAndSend*(task: Task, req: sink StealRequest, workSharing: bool) =
   ## Split a task and send a part to the thief
   preCondition: req.thiefID != myID()
 
@@ -250,7 +243,7 @@ proc splitAndSend*(task: Task, req: sink StealRequest, delegated: bool) =
 
     # Split iteration range according to given strategy
     # [start, stop) => [start, split) + [split, end)
-    let split = evalSplit(task, req, delegated)
+    let split = evalSplit(task, req, workSharing)
 
     # New task gets the upper half
     upperSplit.start = split
@@ -302,7 +295,7 @@ proc distributeWork(req: sink StealRequest): bool =
   # Otherwise try to split the current one
   if myTask().isSplittable():
     if req.thiefID != myID():
-      myTask().splitAndSend(req, delegated = true)
+      myTask().splitAndSend(req, workSharing = true)
       return true
     else:
       req.forget()
