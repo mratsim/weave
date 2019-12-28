@@ -12,16 +12,24 @@
 # to allow the common pattern or indexing an array by a thread ID.
 
 when defined(windows):
-  proc NtCurrentTeb(): int {.importc, cdecl, header:"<windows.h>".}
+  proc NtCurrentTeb(): pointer {.importc, cdecl, header:"<windows.h>".}
     ## Get pointer to Thread Environment Block
     # This is cdecl according to
     # https://undocumented.ntinternals.net/index.html?page=UserMode%2FUndocumented%20Functions%2FNT%20Objects%2FThread%2FNtCurrentTeb.html
+
+  when defined(cpp):
+    # GCC accepts the normal cast
+    proc reinterpret_cast[T, U](input: U): T
+      {.importcpp: "reinterpret_cast<'0>(@)".}
 
   func getMemThreadID*(): int {.inline.} =
     ## Returns a unique thread-local identifier.
     ## This is suitable for memory allocator thread-local identifier
     ## and never requires an expensive syscall.
-    NtcurrentTeb()
+    when defined(cpp):
+      reinterpret_cast[int, pointer](NtCurrentTeb())
+    else:
+      cast[int](NtCurrentTeb())
 
 elif (defined(gcc) or defined(clang) or defined(llvm_gcc)) and
   (defined(i386) or defined(amd64) or defined(arm) or defined(arm64)):

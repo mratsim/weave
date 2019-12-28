@@ -7,15 +7,19 @@
 
 import winlean
 
-type
-  SynchronizationBarrier*{.importc:"SYNCHRONIZATION_BARRIER", header:"<synchapi.h>".} = object
+# Technically in <synchapi.h> but MSVC complains with 
+# @m..@s..@sweave@sscheduler.nim.cpp
+# C:\Program Files (x86)\Windows Kits\10\include\10.0.17763.0\um\winnt.h(154): fatal error C1189: #error:  "No Target Architecture
 
-var SYNCHRONIZATION_BARRIER_FLAGS_NO_DELETE* {.importc, header: "<synchapi.h>".}: DWORD
+type
+  SynchronizationBarrier*{.importc:"SYNCHRONIZATION_BARRIER", header:"<windows.h>".} = object
+
+var SYNCHRONIZATION_BARRIER_FLAGS_NO_DELETE* {.importc, header: "<windows.h>".}: DWORD
   ## Skip expensive checks on barrier enter if a barrier is never deleted.
 
-proc EnterSynchronizationBarrier*(lpBarrier: var SynchronizationBarrier, dwFlags: DWORD): WINBOOL {.importc, stdcall, header: "<synchapi.h>".}
-proc DeleteSynchronizationBarrier*(lpBarrier: ptr SynchronizationBarrier) {.importc, stdcall, header: "<synchapi.h>".}
-proc InitializeSynchronizationBarrier*(lpBarrier: var SynchronizationBarrier, lTotalThreads: LONG, lSpinCount: LONG): WINBOOL {.importc, stdcall, header: "<synchapi.h>".}
+proc EnterSynchronizationBarrier*(lpBarrier: var SynchronizationBarrier, dwFlags: DWORD): WINBOOL {.importc, stdcall, header: "<windows.h>".}
+proc DeleteSynchronizationBarrier*(lpBarrier: ptr SynchronizationBarrier) {.importc, stdcall, header: "<windows.h>".}
+proc InitializeSynchronizationBarrier*(lpBarrier: var SynchronizationBarrier, lTotalThreads: LONG, lSpinCount: LONG): WINBOOL {.importc, stdcall, header: "<windows.h>".}
 
 when isMainModule:
   import os

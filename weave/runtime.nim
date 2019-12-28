@@ -51,7 +51,9 @@ proc init*(_: type Weave) =
 
   # Lead thread - pinned to CPU 0
   myID() = 0
-  pinToCpu(0)
+  when not(defined(cpp) and defined(vcc)):
+    # TODO: Nim casts between Windows Handles but that requires reinterpret cast for C++
+    pinToCpu(0)
 
   # Create workforce() - 1 worker threads
   for i in 1 ..< workforce():
@@ -62,7 +64,9 @@ proc init*(_: type Weave) =
     #       where both sibling cores will compete for L1 and L2 cache, effectively
     #       halving the memory bandwidth or worse, flushing what the other put in cache.
     #       Note that while 2x siblings is common, Xeon Phi has 4x Hyper-Threading.
-    pinToCpu(globalCtx.threadpool[i], i)
+    when not(defined(cpp) and defined(vcc)):
+      # TODO: Nim casts between Windows Handles but that requires reinterpret cast for C++
+      pinToCpu(globalCtx.threadpool[i], i)
 
   myMemPool().initialize()
 

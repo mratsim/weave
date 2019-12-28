@@ -136,14 +136,14 @@ proc cacheMaintenanceEx[T](lal: ptr LookAsideList[T]) =
 
   lal.recentAsk = 0
 
-when defined(cpp) and defined(clang):
-  # This is just for clang, GCC accepts the normal cast
+when defined(cpp):
+  # GCC accepts the normal cast
   proc reinterpret_cast[T, U](input: U): T
     {.importcpp: "reinterpret_cast<'0>(@)".}
 
 proc setCacheMaintenanceEx*[T](hook: var tuple[onHeartbeat: proc(env: pointer){.nimcall.}, env: pointer],
                  lal: var LookAsideList[T]) {.inline.} =
-  when defined(cpp) and defined(clang):
+  when defined(cpp):
     hook.onHeartbeat = reinterpret_cast[typeof hook.onHeartbeat, typeof cacheMaintenanceEx[T]](cacheMaintenanceEx[T])
   else:
     hook.onHeartbeat = cast[type hook.onHeartbeat](cacheMaintenanceEx[T])

@@ -7,7 +7,6 @@
 
 import winlean
 
-
 when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}
 

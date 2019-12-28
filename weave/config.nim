@@ -10,7 +10,7 @@ import strutils
 # Platform support
 # ----------------------------------------------------------------------------------
 
-when defined(cpp):
+when defined(cpp) and (defined(gcc) or defined(clang) or defined(llvm_gcc)):
   {.passC:"-std=c++11".}
 
 when defined(tlsEmulation):
