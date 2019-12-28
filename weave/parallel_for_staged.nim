@@ -29,6 +29,7 @@ template parallelStagedWrapper(
   ## Also poll steal requests in-between iterations
   ##
   ## remoteAccum and resultFlowvarType are unused
+  loadBalance(Weave)
 
   prologue
 

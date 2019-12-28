@@ -28,6 +28,7 @@ template parallelReduceWrapper(
   ## To be called within a loop task
   ## Gets the loop bounds and iterate the over them
   ## Also poll steal requests in-between iterations
+  loadBalance(Weave)
 
   prologue
 
