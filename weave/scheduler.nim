@@ -108,7 +108,7 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
 
   # Debug
   # -----------------------------------------------------------
-  debug: # TODO debugMem
+  debugMem:
     let (tStart, tStop) = myTodoBoxes().reservedMemRange()
     log("Worker %2d: tasks channels range       0x%.08x-0x%.08x\n",
       myID(), tStart, tStop
