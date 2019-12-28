@@ -77,6 +77,12 @@ implEvent(awaitFSA, AWE_HasChildTask):
 
 onEntry(awaitFSA, AW_CheckTask):
   task = myWorker().deque.popFirstIfChild(myTask())
+
+  when WV_StealEarly > 0:
+    if not task.isNil:
+      # If we have a big loop should we allow early thefts?
+      stealEarly()
+
   shareWork()
   # Check if someone requested to steal from us
   # Send them extra tasks if we have them

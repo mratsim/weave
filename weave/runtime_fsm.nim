@@ -78,7 +78,12 @@ implEvent(syncFSA, SYE_SoleWorker):
 
 onEntry(syncFSA, SY_CheckTask):
   task = myWorker().deque.popFirst()
-  # TODO steal early
+
+  when WV_StealEarly > 0:
+    if not task.isNil:
+      # If we have a big loop should we allow early thefts?
+      stealEarly()
+
   shareWork()
   # Check if someone requested to steal from us
   # Send them extra tasks if we have them
