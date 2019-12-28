@@ -56,7 +56,7 @@ static: assert WV_MemArenaSize > 4096, "WV_ArenaSize must be greater than a OS p
 static: assert WV_MemBlockSize.isPowerOfTwo(), "WV_MemBlockSize must be a power of 2"
 static: assert WV_MemBlockSize >= 256, "WV_MemBlockSize must be greater or equal to 256 bytes to hold tasks and channels."
 
-template debugMem(body: untyped) =
+template debugMem*(body: untyped) =
   when defined(WV_debugMem):
     {.noSideEffect.}:
       body

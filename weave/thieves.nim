@@ -90,7 +90,7 @@ proc findVictimAndSteal(req: sink StealRequest) {.inline.} =
   #   and debugging that in a multithreading runtime
   #   would probably be very painful.
   let target = findVictim(req)
-  debug: log("Worker %2d: sending own steal request to %d (Channel 0x%.08x)\n",
+  debug: log("Worker %2d: sending own steal request to %2d (Channel 0x%.08x)\n",
     myID(), target, globalCtx.com.thefts[target].addr)
   target.sendSteal(req)
 
