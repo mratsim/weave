@@ -77,7 +77,7 @@ proc findVictim*(req: var StealRequest): WorkerID =
     result = req.thiefID
 
     debug:
-      log("Worker %2d: relay thief {%d} -> no victim after %d tries (%u ones)\n",
+      log("Worker %2d: relay thief {%d} -> no victim after %d tries (%u victims left)\n",
         myID(), req.thiefID, req.retry, req.victims.len
       )
     # If no targets were found either the request originated from a coworker
