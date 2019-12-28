@@ -23,39 +23,36 @@ func splitHalf(task: Task): int {.inline.} =
   ## Split loop iteration range in half
   task.cur + ((task.stop - task.cur + task.stride-1) div task.stride) shr 1
 
-# TODO: removed - https://github.com/aprell/tasking-2.0/commit/61068370282335802c07fcbc6bab3c9904c8ee4b
-#
-# func splitGuided(task: Task): int {.inline.} =
-#   ## Split iteration range based on the number of workers
-#   let itersLeft = abs(task.stop - task.cur)
-#
-#   preCondition: task.chunks > 0
-#   preCondition: itersLeft > task.splitThreshold
-#
-#   if itersLeft <= task.chunks:
-#     return task.splitHalf()
-#
-#   debug: log("Worker %2d: sending %ld iterations\n", myID(), task.chunks)
-#   return task.stop - task.chunks
-
 func roundPrevMultipleOf(x: SomeInteger, step: SomeInteger): SomeInteger {.inline.} =
   ## Round the input to the previous multiple of "step"
   result = x - x mod step
 
+func splitGuided(task: Task): int {.inline.} =
+  ## Split iteration range based on the number of workers
+  let stepsLeft = (task.stop - task.cur + task.stride-1) div task.stride
+  preCondition: stepsLeft > 0
+
+  {.noSideEffect.}:
+    let numWorkers = workforce()
+  let chunk = max(((task.stop - task.start + task.stride-1) div task.stride) div numWorkers, 1)
+  if stepsLeft <= chunk:
+    return task.splitHalf()
+  return roundPrevMultipleOf(task.stop - chunk*task.stride, task.stride)
+
 func splitAdaptative(task: Task, approxNumThieves: int32): int {.inline.} =
   ## Split iteration range based on the number of steal requests
-  let chunksLeft = (task.stop - task.cur + task.stride-1) div task.stride
-  preCondition: chunksLeft > 1
+  let stepsLeft = (task.stop - task.cur + task.stride-1) div task.stride
+  preCondition: stepsLeft > 1
 
   debug:
-    log("Worker %2d: %ld chunks left (start: %d, current: %d, stop: %d, stride: %d, %d thieves)\n",
-      myID(), chunksLeft, task.start, task.cur, task.stop, task.stride, approxNumThieves)
+    log("Worker %2d: %ld steps left (start: %d, current: %d, stop: %d, stride: %d, %d thieves)\n",
+      myID(), stepsLeft, task.start, task.cur, task.stop, task.stride, approxNumThieves)
 
   # Send a chunk of work to all
-  let chunk = max(chunksLeft div (approxNumThieves + 1), 1)
+  let chunk = max(stepsLeft div (approxNumThieves + 1), 1)
 
   postCondition:
-    chunksLeft > chunk
+    stepsLeft > chunk
 
   result = roundPrevMultipleOf(task.stop - chunk*task.stride, task.stride)
 
