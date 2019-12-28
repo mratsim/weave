@@ -291,5 +291,3 @@ proc schedule*(task: sink Task) =
     dispatchElseDecline(req)
 
   profile_start(enq_deq_task)
-
-  ## TODO steal early

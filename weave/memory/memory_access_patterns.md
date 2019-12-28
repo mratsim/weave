@@ -187,10 +187,7 @@ In that case, they should have padding so that within the array, fields of 2 con
 #### Channels for steal requests
 
 Multi-Producer Single-Consumer channels with a dynamic but bounded capacity:
-  - "MaxSteal * number_of_workers" for a spawned thread
-  - "MaxSteal * number_of_workers * 2" for the master thread
-    (TODO: the 2x is/was needed when workers sent their state to a manager
-           thread for termination detection but a Djikstra toen-passing algorithm as been replaced by a dedicated tree algorithm by Dinan et al)
+  - "MaxSteal * number_of_workers"
 
 They serve as a mailbox for steal requests and are stored in a global array `array[MaxWorkers, Channel[StealRequest]]`.
 

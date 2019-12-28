@@ -54,12 +54,9 @@ type
   # Steal requests
   # ----------------------------------------------------------------------------------
 
-  # Padding shouldn't be needed as steal requests are used as value types
-  # and deep-copied between threads
   StealRequest* = ptr object
-    # TODO: padding to cache line
     # TODO: Remove workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
-    next*: Atomic[pointer]                        # For intrusive lists and queues
+    next*{.align:WV_CacheLinePadding.}: Atomic[pointer]                        # For intrusive lists and queues
     thiefAddr*: ptr ChannelSpscSinglePtr[Task]    # Channel for sending tasks back to the thief
     thiefID*: WorkerID
     retry*: int32                                 # 0 <= retry <= num_workers
