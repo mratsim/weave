@@ -42,10 +42,10 @@ proc runTask*(task: Task) {.inline, gcsafe.} =
   if task.isLoop:
     # We have executed |stop-start| iterations, for now only support forward iterations
     ascertain: task.stop > task.start
-    let iters = task.stop - task.start
+    let chunks = (task.stop - task.start + task.stride-1) div task.stride
     StealAdaptative:
-      myThefts().recentTasks += iters.int32 # overflow?
-    incCounter(tasksExec, iters)
+      myThefts().recentTasks += chunks.int32 # overflow?
+    incCounter(tasksExec, chunks)
   else:
     StealAdaptative:
       myThefts().recentTasks += 1
