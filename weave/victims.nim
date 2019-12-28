@@ -137,6 +137,8 @@ template receivedOwn(req: sink StealRequest) =
     if myWorker().deque.pendingTasks > WV_StealEarly or
         tasksLeft > WV_StealEarly:
       req.forget()
+    else:
+      decline(req)
   else:
     decline(req)
 

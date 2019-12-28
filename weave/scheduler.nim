@@ -134,7 +134,8 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
 # Scheduler
 # ----------------------------------------------------------------------------------
 
-proc nextTask*(childTask: bool): Task {.inline.} =
+proc nextTask*(childTask: static bool): Task {.inline.} =
+  # TODO: rewrite as a finite state machine
 
   profile(enq_deq_task):
     if childTask:
@@ -142,7 +143,10 @@ proc nextTask*(childTask: bool): Task {.inline.} =
     else:
       result = myWorker().deque.popFirst()
 
-  # TODO: steal early
+  when WV_StealEarly > 0:
+    if not result.isNil:
+      # If we have a big loop should we allow early thefts?
+      stealEarly()
 
   shareWork()
 
