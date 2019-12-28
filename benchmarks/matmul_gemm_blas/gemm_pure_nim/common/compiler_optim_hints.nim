@@ -17,7 +17,10 @@ template withCompilerOptimHints*() =
   # in a minimum amount of cache lines load
   # For example, the stack part of tensors are 128 bytes and can be loaded in 2 cache lines
   # but would require 3 loads if they are misaligned.
-  {.pragma: align_variable, codegenDecl: "$# $# __attribute__((aligned(" & $LASER_MEM_ALIGN & ")))".}
+  when defined(vcc):
+    {.pragma: align_variable, codegenDecl: "__declspec(align(" & $LASER_MEM_ALIGN & ")) $# $#".}
+  else:
+    {.pragma: align_variable, codegenDecl: "$# $# __attribute__((aligned(" & $LASER_MEM_ALIGN & ")))".}
 
   # Variable. Pointer does not alias any existing valid pointers.
   when not defined(vcc):
