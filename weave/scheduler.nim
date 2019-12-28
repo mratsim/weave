@@ -173,7 +173,7 @@ proc schedulingLoop() =
     # when all threads are ready.
 
     # 1. Private task deque
-    debug: log("Worker %2d: schedloop 1 - task from local deque\n", myID())
+    # debug: log("Worker %2d: schedloop 1 - task from local deque\n", myID())
     while (let task = nextTask(childTask = false); not task.isNil):
       # Prio is: children, then thieves then us
       ascertain: not task.fn.isNil
@@ -184,7 +184,7 @@ proc schedulingLoop() =
         localCtx.taskCache.add(task)
 
     # 2. Run out-of-task, become a thief
-    debug: log("Worker %2d: schedloop 2 - becoming a thief\n", myID())
+    # debug: log("Worker %2d: schedloop 2 - becoming a thief\n", myID())
     trySteal(isOutOfTasks = true)
     ascertain: myThefts().outstanding > 0
 
@@ -197,7 +197,7 @@ proc schedulingLoop() =
 
     # 3. We stole some task(s)
     ascertain: not task.fn.isNil
-    debug: log("Worker %2d: schedloop 3 - stoled tasks\n", myID())
+    # debug: log("Worker %2d: schedloop 3 - stoled tasks\n", myID())
     TargetLastVictim:
       if task.victim != Not_a_worker:
         myThefts().lastVictim = task.victim
@@ -213,11 +213,11 @@ proc schedulingLoop() =
       myThefts().recentThefts += 1
 
     # 4. Share loot with children
-    debug: log("Worker %2d: schedloop 4 - sharing work\n", myID())
+    # debug: log("Worker %2d: schedloop 4 - sharing work\n", myID())
     shareWork()
 
     # 5. Work on what is left
-    debug: log("Worker %2d: schedloop 5 - working on leftover\n", myID())
+    # debug: log("Worker %2d: schedloop 5 - working on leftover\n", myID())
     profile(run_task):
       runTask(task)
     profile(enq_deq_task):

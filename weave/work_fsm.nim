@@ -89,7 +89,7 @@ onExit(recvTaskFSA, RT_FoundTask):
   # Steal request fulfilled
   myThefts().outstanding -= 1
 
-  debug: log("Worker %2d: %d theft(s) outstanding after receiving a task\n", myID(), myThefts().outstanding)
+  # debug: log("Worker %2d: %d theft(s) outstanding after receiving a task\n", myID(), myThefts().outstanding)
   postCondition: myThefts().outstanding in 0 ..< WV_MaxConcurrentStealPerWorker
   postCondition: myThefts().dropped == 0
 

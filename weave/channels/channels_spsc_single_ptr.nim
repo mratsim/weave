@@ -73,10 +73,11 @@ func tryRecv*[T](chan: var ChannelSpscSinglePtr[T], dst: var T): bool {.inline.}
   ##
   ## ⚠ Use only in the consumer thread that reads from the channel.
   # Nim implicit conversion to pointer is not mutable
-  debug:
-    let data = chan.buffer.load(moAcquire)
-    if not data.isNil:
-      log("Channel SPSC 0x%.08x: receiving     0x%.08x\n", chan.addr, data)
+
+  # debug:
+  #   let data = chan.buffer.load(moAcquire)
+  #   if not data.isNil:
+  #     log("Channel SPSC 0x%.08x: receiving     0x%.08x\n", chan.addr, data)
 
   let p = chan.buffer.load(moAcquire)
   if p.isNil:
@@ -91,10 +92,11 @@ func trySend*[T](chan: var ChannelSpscSinglePtr[T], src: sink T): bool {.inline.
   ## Reurns true if successful (channel was empty)
   ##
   ## ⚠ Use only in the producer thread that writes from the channel.
-  debug:
-    let data = chan.buffer.load(moAcquire)
-    if not data.isNil:
-      log("Channel SPSC 0x%.08x: sending       0x%.08x\n", chan.addr, src)
+
+  # debug:
+  #   let data = chan.buffer.load(moAcquire)
+  #   if not data.isNil:
+  #     log("Channel SPSC 0x%.08x: sending       0x%.08x\n", chan.addr, src)
 
   preCondition:
     not src.isNil
