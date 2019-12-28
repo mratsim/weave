@@ -270,7 +270,7 @@ proc worker_entry_fn*(id: WorkerID) {.gcsafe.} =
 proc schedule*(task: sink Task) =
   ## Add a new task to be scheduled in parallel
   preCondition: not task.fn.isNil
-  debug: log("Worker %2d: scheduling task.fn 0x%.08x\n", myID(), task.fn)
+  debug: log("Worker %2d: scheduling task.fn 0x%.08x (%d pending)\n", myID(), task.fn, myWorker().deque.pendingTasks)
 
   myWorker().deque.addFirst task
 
