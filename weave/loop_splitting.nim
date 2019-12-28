@@ -74,7 +74,11 @@ func splitAdaptativeDelegated*(task: Task, approxNumThieves, delegateNumThieves:
   postCondition:
     stepsLeft > chunk
 
-  result = roundPrevMultipleOf(task.stop - delegateNumThieves*chunk*task.stride, task.stride)
+  let workPackage = delegateNumThieves*chunk*task.stride
+  if workPackage >= task.stop:
+    # Keep one iteration for us
+    return task.stride
+  return roundPrevMultipleOf(task.stop - workPackage, task.stride)
 
 template isSplittable*(t: Task): bool =
   not t.isNil and t.isLoop and (t.stop - t.cur + t.stride-1) div t.stride > 1

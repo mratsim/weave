@@ -220,7 +220,7 @@ proc evalSplit(task: Task, req: StealRequest, delegated: bool): int {.inline.}=
           right = approxNumThievesProxy(myWorker().right)
         guessThieves += left + right
         debug:
-          log("Worker %2d: thiefID %d, delegated split total %d, left{id: %d, waiting: %d, requests: %d}, right{id: %d, waiting: %d, requests: %d}\n",
+          log("Worker %2d: delegated split, thiefID %d, total subtree thieves %d, left{id: %d, waiting: %d, requests: %d}, right{id: %d, waiting: %d, requests: %d}\n",
             myID(), req.thiefID, guessThieves, myWorker().left, myWorker().leftIsWaiting, left, myWorker().right, myWorker().rightIsWaiting, right
           )
         if req.thiefID == myWorker().left:
