@@ -59,7 +59,8 @@ proc approxNumThieves(): int32 {.inline.} =
 Backoff:
   proc approxNumThievesProxy(worker: WorkerID): int32 =
     # Estimate the number of idle workers of a worker subtree
-    if worker == Not_a_worker: return 0
+    if worker == Not_a_worker:
+      return 1 # The child worker is also idling
     result = 0
     var count = 0'i32
     for w in traverseBreadthFirst(worker, maxID()):
@@ -218,7 +219,11 @@ proc evalSplit(task: Task, req: StealRequest, delegated: bool): int {.inline.}=
         if myWorker().rightIsWaiting:
           right = approxNumThievesProxy(myWorker().right)
         guessThieves += left + right
-        if req.thiefID == left:
+        debug:
+          log("Worker %2d: thiefID %d, delegated split total %d, left{id: %d, waiting: %d, requests: %d}, right{id: %d, waiting: %d, requests: %d}\n",
+            myID(), req.thiefID, guessThieves, myWorker().left, myWorker().leftIsWaiting, left, myWorker().right, myWorker().rightIsWaiting, right
+          )
+        if req.thiefID == myWorker().left:
           return splitAdaptativeDelegated(task, guessThieves, left)
         else:
           return splitAdaptativeDelegated(task, guessThieves, right)
