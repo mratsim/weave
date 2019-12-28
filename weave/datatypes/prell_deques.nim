@@ -19,15 +19,6 @@ type
     # task has a "fn" field with the proc to run
     task.fn is proc (param: pointer) {.nimcall.}
 
-    # TODO: checkout the liftLocal macro
-    #       to reimplement closures and allow
-    #
-    # var myArray: ptr UncheckedArray[int]
-    # parallel_loop(i, 0, 100000):
-    #   myArray[i] = i
-    #
-    # with "myArray" implicitly captured.
-
   PrellDeque*[T: StealableTask] = object
     ## Private Intrusive Work-Stealing Deque
     ## from PhD Thesis

@@ -63,7 +63,6 @@ const supportsFutex = defined(linux) or defined(windows)
 # that do not happen on MacOS.
 # Instead we use raw futex to replace both locks and condition variables.
 # They uses 20x less space and do not add useless logic for our use case.
-# TODO: Windows futex. Unfortunately BSDs including Mac do not provide a futex.
 
 type
   EventNotifier* = object

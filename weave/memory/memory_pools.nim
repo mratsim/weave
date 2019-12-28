@@ -493,8 +493,7 @@ proc recycle*[T](p: ptr T) {.gcsafe.} =
   ## block was returned, the main thread should now
   ## have ownership of the related arenas and can deallocate them.
 
-  # TODO: sink ptr T - parsing bug to raise
-  #   similar to https://github.com/nim-lang/Nim/issues/12091
+  # TODO: sink ptr T - parsing bug https://github.com/nim-lang/Nim/issues/12757
   preCondition: not p.isNil
 
   let p = cast[ptr MemBlock](p)
