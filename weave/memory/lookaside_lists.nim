@@ -6,7 +6,8 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../instrumentation/contracts
+  ../instrumentation/[contracts, sanitizers],
+  ./allocs
 
 type
   IntrusiveStackable* = concept x, type T
@@ -69,12 +70,14 @@ func add*[T](lal: var LookAsideList[T], elem: sink T) {.inline.} =
   preCondition(not elem.isNil)
 
   elem.next = lal.top
+  poisonMemRegion(elem, sizeof(deref(T)))
   lal.top = elem
 
   lal.count += 1
 
 proc popImpl[T](lal: var LookAsideList[T]): T {.inline.} =
   result = lal.top
+  unpoisonMemRegion(result, sizeof(deref(T)))
   lal.top = lal.top.next
   # result.next = nil - we assume it is being zero-ed
 
