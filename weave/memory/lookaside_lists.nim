@@ -188,6 +188,7 @@ when isMainModule:
   x.add c
   x.add d
 
-  echo x.repr
+  when not WV_SanitizeAddr:
+    echo x.repr
 
   delete(x)
