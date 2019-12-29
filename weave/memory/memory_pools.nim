@@ -30,7 +30,7 @@
 
 import
   ../channels/channels_mpsc_unbounded_batch,
-  ../instrumentation/[contracts, loggers],
+  ../instrumentation/[contracts, loggers, sanitizers],
   ../config,
   ./allocs, ./thread_id,
   std/atomics
@@ -170,6 +170,17 @@ const
   MaxSlowFrees = 8'i8
     ## In the slow path, up to 5 arenas can be considered for release at once.
 
+# Sanitizer
+template guardedAccess(memBlock: MemBlock, body: untyped): untyped =
+  unpoisonMemRegion(memBlock.addr, WV_MemBlockSize)
+  body
+  poisonMemRegion(memBlock.addr, WV_MemBlockSize)
+
+template guardedAccess(memBlock: ptr MemBlock, body: untyped): untyped =
+  unpoisonMemRegion(memBlock, WV_MemBlockSize)
+  body
+  poisonMemRegion(memBlock, WV_MemBlockSize)
+
 # Data structures
 # ----------------------------------------------------------------------------------
 
@@ -223,6 +234,7 @@ proc newArena(pool: var TLPoolAllocator): ptr Arena =
   ## and append it to the allocator
 
   result = wv_allocAligned(Arena, WV_MemArenaSize)
+  poisonMemRegion(result.blocks.addr, result.blocks.sizeof())
 
   debugMem:
     log("Pool    0x%.08x - TID %d - reserved Arena 0x%.08x\n",
@@ -235,9 +247,11 @@ proc newArena(pool: var TLPoolAllocator): ptr Arena =
 
   # Freelist
   result.meta.free = result.blocks[0].addr
-  result.blocks[^1].next.store(nil, moRelaxed)
+  guardedAccess(result.blocks[^1]):
+    result.blocks[^1].next.store(nil, moRelaxed)
   for i in 0 ..< result.blocks.len - 1:
-    result.blocks[i].next.store(result.blocks[i+1].addr, moRelaxed)
+    guardedAccess(result.blocks[i]):
+      result.blocks[i].next.store(result.blocks[i+1].addr, moRelaxed)
 
   # Pool
   result.prev = nil
@@ -298,7 +312,8 @@ func collect(arena: var Arena, force: bool) =
     elif force:
       # Very slow path: only on thread teardown
       for memBlock in arena.meta.localFree:
-        arena.meta.free.prepend(memBlock)
+        guardedAccess(memBlock):
+          arena.meta.free.prepend(memBlock)
       arena.meta.localFree = nil
       debugMem:
         log("Arena   0x%.08x - TID %d - collecting localFree, slow path (reclaimed %d)\n",
@@ -308,6 +323,7 @@ func collect(arena: var Arena, force: bool) =
     log("Arena   0x%.08x - TID %d - collect, remoteFree.peek() %d blocks (%d used or pending)\n",
       arena.addr, arena.meta.threadID.load(moRelaxed), arena.meta.remoteFree.peek(), arena.meta.used)
 
+  # TODO: while in the MPSC queue, the memory is not poisoned
   var first, last: ptr MemBlock
   let count = arena.meta.remoteFree.tryRecvBatch(first, last)
 
@@ -320,8 +336,18 @@ func collect(arena: var Arena, force: bool) =
       arena.meta.free = first
       last.next.store(nil, moRelaxed)
     else:
-      arena.meta.free.prepend(last)
+      guardedAccess(arena.meta.free):
+        arena.meta.free.prepend(last)
     arena.meta.used -= count
+    when WV_SanitizeAddr:
+      var cur = first
+      while true:
+        if cur == last:
+          poisonMemRegion(cur, WV_MemBlockSize)
+          break
+        let next = cur.next.load(moRelaxed)
+        poisonMemRegion(cur, WV_MemBlockSize)
+        cur = cast[ptr MemBlock](next)
 
   debugMem:
     log("Arena   0x%.08x - TID %d - collected garbage, reclaimed %d blocks (%d used)\n",
@@ -334,6 +360,7 @@ func allocBlock(arena: var Arena): ptr MemBlock {.inline.} =
 
   arena.meta.used += 1
   result = arena.meta.free
+  unpoisonMemRegion(result, WV_MemBlockSize)
   # The following acts as prefetching for the block that we are returning as well
   arena.meta.free = cast[ptr MemBlock](result.next.load(moRelaxed))
 
@@ -508,12 +535,13 @@ proc recycle*[T](p: ptr T) {.gcsafe.} =
       arena.meta.localFree = p
     else:
       arena.meta.localFree.prepend(p)
+    poisonMemRegion(p, WV_MemBlockSize)
     arena.meta.used -= 1
     if unlikely(arena.isUnused()):
       # If an arena is unused, we can try releasing it immediately
       arena.allocator[].considerRelease(arena)
   else:
-    # remote arena
+    # remote arena - TODO: Poisoning except from the MPSC Queue?
     let remoteRecycled = arena.meta.remoteFree.trySend(p)
     postCondition: remoteRecycled
 
