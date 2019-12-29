@@ -8,7 +8,7 @@
 import
   std/typetraits,
   ../config,
-  ../instrumentation/contracts,
+  ../instrumentation/[contracts, sanitizers],
   ../memory/allocs
 
 type
@@ -56,6 +56,7 @@ type
 # ------------------------------------------------------------------------------
 
 proc delete*[N: static int8, T](ps: var Persistack[N, T]) =
+  unpoisonMemRegion(ps.rawMem, N * sizeof(T))
   if not T.supportsCopyMem():
     # T has custom destructors or ref objects
     for i in 0 ..< N:
@@ -72,6 +73,7 @@ proc initialize*[N: static int8, T](ps: var Persistack[N, T]) =
   for i in 0 ..< N:
     ps.stack[i] = ps.rawMem[i].addr
   ps.len = N
+  poisonMemRegion(ps.rawMem, N * sizeof(T))
 
 func borrow*[N: static int8, T](ps: var Persistack[N, T]): ptr T {.inline.} =
   ## Provides a reference from the persistack
@@ -89,13 +91,15 @@ func borrow*[N: static int8, T](ps: var Persistack[N, T]): ptr T {.inline.} =
 
   ps.len -= 1
   result = move ps.stack[ps.len]
+  unpoisonMemRegion(result, sizeof(T))
 
 func recycle*[N: static int8, T](ps: var Persistack[N, T], reference: sink(ptr T)) {.inline.} =
   ## Returns a reference to the persistack.
   ## ⚠️ The lender thread must be the one recycling the reference
   preCondition:
     ps.len < N
-
+  
+  poisonMemRegion(reference, sizeof(T))
   `=sink`(ps.stack[ps.len], reference)
   ps.len += 1
 
@@ -106,6 +110,7 @@ func nowAvailable*[N: static int8, T](ps: var Persistack[N, T], index: SomeInteg
 
   ps.stack[ps.len] = ps.rawMem[index].addr
   ps.len += 1
+  poisonMemRegion(ps.rawMem[index].addr, sizeof(T))
 
 func access*[N: static int8, T](ps: Persistack[N, T], index: SomeInteger): var T {.inline.} =
   ## Access the object at `index`.
