@@ -23,9 +23,15 @@ func splitHalf*(task: Task): int {.inline.} =
   ## Split loop iteration range in half
   task.cur + ((task.stop - task.cur + task.stride-1) div task.stride) shr 1
 
-func roundPrevMultipleOf(x: SomeInteger, step: SomeInteger): SomeInteger {.inline.} =
+func roundPrevMultipleOf(x, step: SomeInteger): SomeInteger {.inline.} =
   ## Round the input to the previous multiple of "step"
   result = x - x mod step
+
+func roundNextMultipleOf(x, step: SomeInteger): SomeInteger {.inline.} =
+  ## Round the input to the next multiple
+  ## Note: roundNextMultipleOf(0, 10) == 10
+  ## which is desired as we don't want to return our last iteration
+  x + step - 1 - (x-1) mod step
 
 func splitGuided*(task: Task): int {.inline.} =
   ## Split iteration range based on the number of workers
@@ -70,15 +76,12 @@ func splitAdaptativeDelegated*(task: Task, approxNumThieves, delegateNumThieves:
 
   # Send a chunk of work to all
   let chunk = max(stepsLeft div (approxNumThieves + 1), 1)
-
-  postCondition:
-    stepsLeft > chunk
+  ascertain: stepsLeft > chunk
 
   let workPackage = delegateNumThieves*chunk*task.stride
-  if workPackage >= task.stop:
-    # Keep one iteration for us
-    return task.stride
-  return roundPrevMultipleOf(task.stop - workPackage, task.stride)
+  let nextIter = task.cur + task.stride
+  result = max(nextIter, roundNextMultipleOf(task.stop - workPackage, task.stride))
+  postCondition: result in nextIter ..< task.stop
 
 template isSplittable*(t: Task): bool =
   not t.isNil and t.isLoop and (t.stop - t.cur + t.stride-1) div t.stride > 1
