@@ -87,7 +87,7 @@ behavior(handleThievesFSA):
 
 behavior(handleThievesFSA):
   ini: IT_CanSplit
-  transition: splitAndSend(poppedTask, req)
+  transition: splitAndSend(poppedTask, req, workSharing = false)
   fin: IT_CheckTheft
 
 # -------------------------------------------

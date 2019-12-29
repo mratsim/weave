@@ -58,7 +58,7 @@ static: assert WV_MemBlockSize >= 256, "WV_MemBlockSize must be greater or equal
 
 template debugMem*(body: untyped) =
   when defined(WV_debugMem):
-    {.noSideEffect.}:
+    block: {.noSideEffect.}:
       body
 
 # Memory Pool types
