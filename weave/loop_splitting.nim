@@ -19,15 +19,21 @@ import
 # - Otherwise they stay on the worker optimizing cache reuse
 #   and minimizing useless scheduler overhead
 
-func splitHalf(task: Task): int {.inline.} =
+func splitHalf*(task: Task): int {.inline.} =
   ## Split loop iteration range in half
   task.cur + ((task.stop - task.cur + task.stride-1) div task.stride) shr 1
 
-func roundPrevMultipleOf(x: SomeInteger, step: SomeInteger): SomeInteger {.inline.} =
+func roundPrevMultipleOf(x, step: SomeInteger): SomeInteger {.inline.} =
   ## Round the input to the previous multiple of "step"
   result = x - x mod step
 
-func splitGuided(task: Task): int {.inline.} =
+func roundNextMultipleOf(x, step: SomeInteger): SomeInteger {.inline.} =
+  ## Round the input to the next multiple
+  ## Note: roundNextMultipleOf(0, 10) == 10
+  ## which is desired as we don't want to return our last iteration
+  x + step - 1 - (x-1) mod step
+
+func splitGuided*(task: Task): int {.inline.} =
   ## Split iteration range based on the number of workers
   let stepsLeft = (task.stop - task.cur + task.stride-1) div task.stride
   preCondition: stepsLeft > 0
@@ -39,7 +45,7 @@ func splitGuided(task: Task): int {.inline.} =
     return task.splitHalf()
   return roundPrevMultipleOf(task.stop - chunk*task.stride, task.stride)
 
-func splitAdaptative(task: Task, approxNumThieves: int32): int {.inline.} =
+func splitAdaptative*(task: Task, approxNumThieves: int32): int {.inline.} =
   ## Split iteration range based on the number of steal requests
   let stepsLeft = (task.stop - task.cur + task.stride-1) div task.stride
   preCondition: stepsLeft > 1
@@ -56,15 +62,26 @@ func splitAdaptative(task: Task, approxNumThieves: int32): int {.inline.} =
 
   result = roundPrevMultipleOf(task.stop - chunk*task.stride, task.stride)
 
-template split*(task: Task, approxNumThieves: int32): int =
-  when SplitStrategy == SplitKind.half:
-    splitHalf(task)
-  elif SplitStrategy == guided:
-    splitGuided(task)
-  elif SplitStrategy == SplitKind.adaptative:
-    splitAdaptative(task, approxNumThieves)
-  else:
-    {.error: "Unreachable".}
+func splitAdaptativeDelegated*(task: Task, approxNumThieves, delegateNumThieves: int32): int {.inline.} =
+  ## Split iteration range based on the number of steal requests
+  ## When a child subtree needs to be woken up, we need to send enough tasks
+  ## for its whole trees + all pending steal requests.
+  let stepsLeft = (task.stop - task.cur + task.stride-1) div task.stride
+  preCondition: stepsLeft > 1
+  preCondition: delegateNumThieves in 1 .. approxNumThieves
+
+  debug:
+    log("Worker %2d: %ld steps left (start: %d, current: %d, stop: %d, stride: %d, %d thieves)\n",
+      myID(), stepsLeft, task.start, task.cur, task.stop, task.stride, approxNumThieves)
+
+  # Send a chunk of work to all
+  let chunk = max(stepsLeft div (approxNumThieves + 1), 1)
+  ascertain: stepsLeft > chunk
+
+  let workPackage = delegateNumThieves*chunk*task.stride
+  let nextIter = task.cur + task.stride
+  result = max(nextIter, roundNextMultipleOf(task.stop - workPackage, task.stride))
+  postCondition: result in nextIter ..< task.stop
 
 template isSplittable*(t: Task): bool =
   not t.isNil and t.isLoop and (t.stop - t.cur + t.stride-1) div t.stride > 1

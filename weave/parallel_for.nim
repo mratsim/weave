@@ -32,6 +32,7 @@ template parallelForWrapper(
   ## Loop prologue, epilogue,
   ## remoteAccum, resultTy and returnStmt
   ## are unused
+  loadBalance(Weave)
 
   block:
     let this = myTask()

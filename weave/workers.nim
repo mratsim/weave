@@ -36,7 +36,7 @@ proc runTask*(task: Task) {.inline, gcsafe.} =
   # TODO - logic seems sketchy, why do we do this <-> task.
   let this = myTask()
   myTask() = task
-  debug: log("Worker %2d: running task.fn 0x%.08x\n", myID(), task.fn)
+  debug: log("Worker %2d: running task.fn 0x%.08x (%d pending)\n", myID(), task.fn, myWorker().deque.pendingTasks)
   task.fn(task.data.addr)
   myTask() = this
   if task.isLoop:
