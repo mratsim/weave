@@ -50,17 +50,20 @@ func splitAdaptative*(task: Task, approxNumThieves: int32): int {.inline.} =
   let stepsLeft = (task.stop - task.cur + task.stride-1) div task.stride
   preCondition: stepsLeft > 1
 
-  debug:
+  debugSplit:
     log("Worker %2d: %ld steps left (start: %d, current: %d, stop: %d, stride: %d, %d thieves)\n",
       myID(), stepsLeft, task.start, task.cur, task.stop, task.stride, approxNumThieves)
 
   # Send a chunk of work to all
   let chunk = max(stepsLeft div (approxNumThieves + 1), 1)
 
-  postCondition:
-    stepsLeft > chunk
+  ascertain: stepsLeft > chunk
 
-  result = roundPrevMultipleOf(task.stop - chunk*task.stride, task.stride)
+  let nextIter = task.cur + task.stride
+  let tentativeSplit = roundPrevMultipleOf(task.stop - chunk*task.stride, task.stride)
+
+  result = max(nextIter, tentativeSplit)
+  postCondition: result in nextIter ..< task.stop
 
 func splitAdaptativeDelegated*(task: Task, approxNumThieves, delegateNumThieves: int32): int {.inline.} =
   ## Split iteration range based on the number of steal requests
@@ -70,7 +73,7 @@ func splitAdaptativeDelegated*(task: Task, approxNumThieves, delegateNumThieves:
   preCondition: stepsLeft > 1
   preCondition: delegateNumThieves in 1 .. approxNumThieves
 
-  debug:
+  debugSplit:
     log("Worker %2d: %ld steps left (start: %d, current: %d, stop: %d, stride: %d, %d thieves)\n",
       myID(), stepsLeft, task.start, task.cur, task.stop, task.stride, approxNumThieves)
 
@@ -80,7 +83,9 @@ func splitAdaptativeDelegated*(task: Task, approxNumThieves, delegateNumThieves:
 
   let workPackage = delegateNumThieves*chunk*task.stride
   let nextIter = task.cur + task.stride
-  result = max(nextIter, roundNextMultipleOf(task.stop - workPackage, task.stride))
+  let tentativeSplit = roundNextMultipleOf(task.stop - workPackage, task.stride)
+
+  result = max(nextIter, tentativeSplit)
   postCondition: result in nextIter ..< task.stop
 
 template isSplittable*(t: Task): bool =

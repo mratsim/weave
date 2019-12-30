@@ -317,31 +317,31 @@ proc main(datasetSize = 20000'i64, batchSize = 256'i64, imageLabels = 1000'i64, 
   reportConfig("Sequential", 1, datasetSize, batchSize, imageLabels, textVocabulary)
   block:
     runBench(logsumexpSerial, datasetSize, batchSize, imageLabels)
-  # block:
-  #   runBench(logsumexpSerial, datasetSize, batchSize, textVocabulary)
+  block:
+    runBench(logsumexpSerial, datasetSize, batchSize, textVocabulary)
 
   const lazy = defined(WV_LazyFlowvar)
   const config = if lazy: " (lazy flowvars)"
                  else: " (eager flowvars)"
   init(Weave)
 
-  # reportConfig("Weave" & config, nthreads, datasetSize, batchSize, imageLabels, textVocabulary)
-  # block:
-  #   runBench(logsumexpWeaveReduce, datasetSize, batchSize, imageLabels)
-  # block:
-  #   runBench(logsumexpWeave, datasetSize, batchSize, textVocabulary)
+  reportConfig("Weave Reduce" & config, nthreads, datasetSize, batchSize, imageLabels, textVocabulary)
+  block:
+    runBench(logsumexpWeaveReduce, datasetSize, batchSize, imageLabels)
+  block:
+    runBench(logsumexpWeaveReduce, datasetSize, batchSize, textVocabulary)
 
-  # reportConfig("Weave (Collapsed)" & config, nthreads, datasetSize, batchSize, imageLabels, textVocabulary)
-  # block:
-  #   runBench(logsumexpWeaveCollapsed, datasetSize, batchSize, imageLabels)
-  # block:
-  #   runBench(logsumexpWeave, datasetSize, batchSize, textVocabulary)
+  reportConfig("Weave (Collapsed)" & config, nthreads, datasetSize, batchSize, imageLabels, textVocabulary)
+  block:
+    runBench(logsumexpWeaveCollapsed, datasetSize, batchSize, imageLabels)
+  block:
+    runBench(logsumexpWeaveCollapsed, datasetSize, batchSize, textVocabulary)
 
   reportConfig("Weave (Staged)" & config, nthreads, datasetSize, batchSize, imageLabels, textVocabulary)
   block:
     runBench(logsumexpWeaveStaged, datasetSize, batchSize, imageLabels)
-  # block:
-  #   runBench(logsumexpWeaveStaged, datasetSize, batchSize, textVocabulary)
+  block:
+    runBench(logsumexpWeaveStaged, datasetSize, batchSize, textVocabulary)
 
   exit(Weave)
 
