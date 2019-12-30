@@ -198,7 +198,7 @@ proc evalSplit(task: Task, req: StealRequest, workSharing: bool): int {.inline.}
     return splitGuided(task)
   elif SplitStrategy == SplitKind.adaptative:
     var guessThieves = myThieves().peek()
-    debug: log("Worker %2d: has %ld steal requests queued\n", myID(), guessThieves)
+    debugSplit: log("Worker %2d: has %ld steal requests queued\n", myID(), guessThieves)
     Backoff:
       if workSharing:
         # The real splitting will be done by the child worker
@@ -210,7 +210,7 @@ proc evalSplit(task: Task, req: StealRequest, workSharing: bool): int {.inline.}
         if myWorker().rightIsWaiting:
           right = approxNumThievesProxy(myWorker().right)
         guessThieves += left + right
-        debug:
+        debugSplit:
           log("Worker %2d: workSharing split, thiefID %d, total subtree thieves %d, left{id: %d, waiting: %d, requests: %d}, right{id: %d, waiting: %d, requests: %d}\n",
             myID(), req.thiefID, guessThieves, myWorker().left, myWorker().leftIsWaiting, left, myWorker().right, myWorker().rightIsWaiting, right
           )
@@ -253,9 +253,12 @@ proc splitAndSend*(task: Task, req: sink StealRequest, workSharing: bool) =
     # Current task continues with lower half
     task.stop = split
 
-  debug:
+  debugSplit:
     let steps = (upperSplit.stop-upperSplit.start + upperSplit.stride-1) div upperSplit.stride
     log("Worker %2d: Sending [%ld, %ld) to worker %d (%d steps)\n", myID(), upperSplit.start, upperSplit.stop, req.thiefID, steps)
+
+  ascertain: upperSplit.stop > upperSplit.start
+  ascertain: task.stop > task.cur
 
   profile(send_recv_task):
     if upperSplit.hasFuture:
@@ -278,8 +281,8 @@ proc splitAndSend*(task: Task, req: sink StealRequest, workSharing: bool) =
     let steps = (task.stop-task.cur + task.stride-1) div task.stride
     log("Worker %2d: Continuing with [%ld, %ld) (%d steps)\n", myID(), task.cur, task.stop, steps)
 
-proc distributeWork(req: sink StealRequest): bool =
-  ## Handle children work sharing requests
+proc distributeWork*(req: sink StealRequest, workSharing: bool): bool =
+  ## Distribute work during load balancing or work-sharing requests
   ## Returns true if we found work
   ## false otherwise
 
@@ -295,7 +298,7 @@ proc distributeWork(req: sink StealRequest): bool =
   # Otherwise try to split the current one
   if myTask().isSplittable():
     if req.thiefID != myID():
-      myTask().splitAndSend(req, workSharing = true)
+      myTask().splitAndSend(req, workSharing)
       return true
     else:
       req.forget()
@@ -319,7 +322,7 @@ proc shareWork*() {.inline.} =
     # Only dequeue if we find work
     let req = myWorker().workSharingRequests.peek()
     ascertain: req.thiefID == myWorker().left or req.thiefID == myWorker.right
-    if distributeWork(req): # Shouldn't this need a copy?
+    if distributeWork(req, workSharing = true): # Shouldn't this need a copy?
       if req.thiefID == myWorker().left:
         ascertain: myWorker().leftIsWaiting
         myWorker().leftIsWaiting = false

@@ -50,7 +50,7 @@ func splitAdaptative*(task: Task, approxNumThieves: int32): int {.inline.} =
   let stepsLeft = (task.stop - task.cur + task.stride-1) div task.stride
   preCondition: stepsLeft > 1
 
-  debug:
+  debugSplit:
     log("Worker %2d: %ld steps left (start: %d, current: %d, stop: %d, stride: %d, %d thieves)\n",
       myID(), stepsLeft, task.start, task.cur, task.stop, task.stride, approxNumThieves)
 
@@ -70,7 +70,7 @@ func splitAdaptativeDelegated*(task: Task, approxNumThieves, delegateNumThieves:
   preCondition: stepsLeft > 1
   preCondition: delegateNumThieves in 1 .. approxNumThieves
 
-  debug:
+  debugSplit:
     log("Worker %2d: %ld steps left (start: %d, current: %d, stop: %d, stride: %d, %d thieves)\n",
       myID(), stepsLeft, task.start, task.cur, task.stop, task.stride, approxNumThieves)
 

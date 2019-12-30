@@ -104,6 +104,10 @@ template debug*(body: untyped): untyped =
   when defined(WV_Debug):
     block: {.noSideEffect, gcsafe.}: body
 
+template debugSplit*(body: untyped): untyped =
+  when defined(WV_DebugSplit):
+    block: {.noSideEffect, gcsafe.}: body
+
 template StealAdaptative*(body: untyped): untyped =
   when StealStrategy == StealKind.adaptative:
     body
