@@ -10,11 +10,11 @@ import
   system/ansi_c, strformat, os, strutils, cpuinfo, math,
   random, locks,
   # Weave
-  ../../../weave,
+  ../../weave,
   # 3rd party
   cligen,
   # bench
-  ../../wtime, ../../resources
+  ../wtime, ../resources
 
 # Helpers
 # -------------------------------------------------------
