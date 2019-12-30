@@ -25,3 +25,10 @@ The main issue with OpenMP-based GEMM is that it is not composable
 as OpenMP does not properly support nested parallelism and many algorithms
 especially in deep learning would benefits from launch multiple GEMMs
 on batches of matrices or as parallel subtree of a computation graph.
+
+Note that most matrix multiplication in other multithreading benchmark runtime
+are actually memory-bandwidth bound and any measure of parallelism is flawed.
+On my machine, for a matrix multiplication of 1920x1920 matrices,
+a naive triple-for loop would reach 2GFlop/s single-threaded
+while industry-grade Intel-MKL reaches over 200GFlop/s single threaded,
+with the speed difference growing in n^3 rate with the size of the matrices.
