@@ -12,8 +12,8 @@ import
   ./config,
   ./instrumentation/[profilers, loggers, contracts]
 
-metrics:
-  import system/ansi_c
+when defined(WV_metrics):
+  import system/ansi_c, ./primitives/barriers
 
 Backoff:
   import ./channels/event_notifiers
@@ -154,9 +154,6 @@ template decCounter*(name: untyped{ident}) =
   metrics:
     # Assumes localCtx is in the calling context
     localCtx.counters.name -= 1
-
-metrics:
-  import ./primitives/barriers
 
 proc workerMetrics*() =
   metrics:
