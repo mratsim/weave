@@ -83,7 +83,7 @@ type
 const
   WV_Steal{.strdefine.} = "adaptative"
   WV_Split{.strdefine.} = "adaptative"
-  WV_Target{.strdefine.} = "LastVictim"
+  WV_Target{.strdefine.} = "Random"
 
   StealStrategy* = parseEnum[StealKind](WV_Steal)
   SplitStrategy* = parseEnum[SplitKind](WV_Split)
