@@ -57,10 +57,13 @@ func splitAdaptative*(task: Task, approxNumThieves: int32): int {.inline.} =
   # Send a chunk of work to all
   let chunk = max(stepsLeft div (approxNumThieves + 1), 1)
 
-  postCondition:
-    stepsLeft > chunk
+  ascertain: stepsLeft > chunk
 
-  result = roundPrevMultipleOf(task.stop - chunk*task.stride, task.stride)
+  let nextIter = task.cur + task.stride
+  let tentativeSplit = roundPrevMultipleOf(task.stop - chunk*task.stride, task.stride)
+
+  result = max(nextIter, tentativeSplit)
+  postCondition: result in nextIter ..< task.stop
 
 func splitAdaptativeDelegated*(task: Task, approxNumThieves, delegateNumThieves: int32): int {.inline.} =
   ## Split iteration range based on the number of steal requests
@@ -80,7 +83,9 @@ func splitAdaptativeDelegated*(task: Task, approxNumThieves, delegateNumThieves:
 
   let workPackage = delegateNumThieves*chunk*task.stride
   let nextIter = task.cur + task.stride
-  result = max(nextIter, roundNextMultipleOf(task.stop - workPackage, task.stride))
+  let tentativeSplit = roundNextMultipleOf(task.stop - workPackage, task.stride)
+
+  result = max(nextIter, tentativeSplit)
   postCondition: result in nextIter ..< task.stop
 
 template isSplittable*(t: Task): bool =
