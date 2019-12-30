@@ -276,7 +276,7 @@ proc splitAndSend*(task: Task, req: sink StealRequest, workSharing: bool) =
 
     req.send(upperSplit)
 
-  incCounter(tasksSplit)
+  incCounter(loopsSplit)
   debug:
     let steps = (task.stop-task.cur + task.stride-1) div task.stride
     log("Worker %2d: Continuing with [%ld, %ld) (%d steps)\n", myID(), task.cur, task.stop, steps)
