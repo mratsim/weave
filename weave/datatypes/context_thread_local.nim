@@ -82,7 +82,8 @@ type
   Counters* = object
     tasksExec*: int
     tasksSent*: int
-    tasksSplit*: int
+    loopsSplit*: int
+    loopsIterExec*: int
     stealSent*: int
     stealHandled*: int
     stealDeclined*: int

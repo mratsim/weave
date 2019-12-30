@@ -39,14 +39,12 @@ proc runTask*(task: Task) {.inline, gcsafe.} =
   debug: log("Worker %2d: running task.fn 0x%.08x (%d pending)\n", myID(), task.fn, myWorker().deque.pendingTasks)
   task.fn(task.data.addr)
   myTask() = this
-  if task.isLoop:
-    # We have executed |stop-start| iterations, for now only support forward iterations
-    ascertain: task.stop > task.start
-    let chunks = (task.stop - task.start + task.stride-1) div task.stride
-    StealAdaptative:
-      myThefts().recentTasks += chunks.int32 # overflow?
-    incCounter(tasksExec, chunks)
-  else:
-    StealAdaptative:
-      myThefts().recentTasks += 1
-    incCounter(tasksExec)
+  ascertain:
+    if task.isLoop: task.stop > task.start
+    else: true
+  StealAdaptative:
+    myThefts().recentTasks += 1 # A loop counts for 1 task here.
+  incCounter(tasksExec, 1)
+  incCounter(loopsIterExec):
+    if not task.isLoop: 0
+    else: (task.stop - task.start + task.stride-1) div task.stride
