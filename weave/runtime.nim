@@ -119,7 +119,7 @@ proc loadBalance*(_: type Weave) {.gcsafe.} =
       myWorker().rightIsWaiting and hasThievesProxy(myWorker().right):
     var req: StealRequest
     while recv(req):
-      dispatchElseDecline(req)
+      discard distributeWork(req, workSharing = false)
 
 proc getThreadId*(_: type Weave): int {.inline.} =
   ## Returns the Weave ID of the current executing thread
