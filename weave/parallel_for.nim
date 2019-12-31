@@ -14,7 +14,7 @@ import
   macros,
   # Internal
   ./parallel_macros, ./parallel_reduce,
-  ./contexts, ./runtime,
+  ./contexts, ./runtime, ./config,
   ./instrumentation/contracts,
   ./datatypes/flowvars
 
@@ -47,6 +47,65 @@ template parallelForWrapper(
       idx += this.stride
       this.cur += this.stride
       loadBalance(Weave)
+
+template parallelForAwaitableWrapper(
+    idx: untyped{ident},
+    prologue, loopBody, epilogue,
+    remoteAccum, resultTy,
+    returnStmt: untyped): untyped =
+  ## To be called within a loop task
+  ## Gets the loop bounds and iterate the over them
+  ## Also poll steal requests in-between iterations.
+  ##
+  ## For awaitable loops, the thread that spawned the loop
+  ## will be blocked at the end until all the other parallel
+  ## loop iterations are finished. The other threads
+  ## only waits for their loop iterations and the loop splits they produced.
+  ##
+  ## For example for a range 0 ..< 100 spawned by thread 0
+  ## Thread 1 might get 50 ..< 100 then distribute
+  ## 75 ..< 100 to thread 2. After finishing 75 ..< 100
+  ## thread 2 is not blocked. Thread 1 needs to wait for thread 2.
+  ##
+  ## Blocking doesn't prevent processing tasks or scheduling.
+  ##
+  ## Loop prologue, epilogue,
+  ## remoteAccum, resultTy and returnStmt
+  ## are unused
+  loadBalance(Weave)
+
+  let this = myTask()
+  block:
+    ascertain: this.isLoop
+    ascertain: this.start == this.cur
+
+    var idx {.inject.} = this.start
+    this.cur += this.stride
+    while idx < this.stop:
+      loopBody
+      idx += this.stride
+      this.cur += this.stride
+      loadBalance(Weave)
+
+  debug: log("Worker %2d: Finished loop task 0x%.08x (iterations [%ld, %ld)) (futures: 0x%.08x)\n", myID(), this.fn, this.start, this.stop, this.futures)
+  block: # Wait for the child loop iterations
+    while not this.futures.isNil:
+      let fvNode = cast[FlowvarNode](this.futures)
+      this.futures = cast[pointer](fvNode.next)
+
+      LazyFV:
+        let dummyFV = cast[Flowvar[Dummy]](fvNode.lfv)
+      EagerFV:
+        let dummyFV = cast[Flowvar[Dummy]](fvNode.chan)
+
+      debug: log("Worker %2d: loop task 0x%.08x (iterations [%ld, %ld)) waiting for the remainder\n", myID(), this.fn, this.start, this.stop)
+      sync(dummyFV)
+      debug: log("Worker %2d: loop task 0x%.08x (iterations [%ld, %ld)) complete\n", myID(), this.fn, this.start, this.stop)
+
+      # The "sync" in the merge statement should have recycled the flowvar channel already
+      # For LazyFlowVar, the LazyFlowvar itself was allocated on the heap, so we need to recycle it as well
+      # 2 deallocs for eager FV and 3 for Lazy FV
+      recycleFVN(fvNode)
 
 macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped =
   ## Parallel for loop
@@ -85,10 +144,13 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
 
   # Package the body in a proc
   # --------------------------------------------------------
-  let parForName = ident"weaveParallelForSection"
+  let parForName = if withFuture: ident"weaveParallelForAwaitableSection"
+                   else: ident"weaveParallelForSection"
   let env = ident("weaveParForClosureEnv_") # typed pointer to data
+  let wrapper = if withFuture: bindSym"parallelForAwaitableWrapper"
+                else: bindSym"parallelForWrapper"
   result.add packageParallelFor(
-                parForName, bindSym"parallelForWrapper",
+                parForName, wrapper,
                 # prologue, loopBody, epilogue,
                 nil, body, nil,
                 # remoteAccum, return statement
@@ -100,7 +162,8 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
 
   # Create the async function (that calls the proc that packages the loop body)
   # --------------------------------------------------------
-  let parForTask = ident("weaveTask_ParallelFor_")
+  let parForTask = if withFuture: ident("weaveTask_ParallelForAwaitable_")
+                   else: ident("weaveTask_ParallelFor_")
   var fnCall = newCall(parForName)
   if withArgs:
     fnCall.add(env)
@@ -141,7 +204,7 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
     futureIdent = future, resultFutureType = futTy
   )
 
-  echo result.toStrLit
+  # echo result.toStrLit
 
 macro parallelFor*(loopParams: untyped, body: untyped): untyped =
   if (body[0].kind == nnkCall and body[0][0].eqIdent"reduce") or
@@ -165,84 +228,92 @@ macro parallelForStrided*(loopParams: untyped, stride: Positive, body: untyped):
 when isMainModule:
   import ./instrumentation/loggers, ./runtime, ./runtime_fsm, ./await_fsm
 
-  block:
-    proc main() =
-      init(Weave)
+  # block:
+  #   proc main() =
+  #     init(Weave)
 
-      parallelFor i in 0 ..< 100:
-        log("%d (thread %d)\n", i, myID())
+  #     parallelFor i in 0 ..< 100:
+  #       log("%d (thread %d)\n", i, myID())
 
-      exit(Weave)
+  #     exit(Weave)
 
-    echo "Simple parallel for"
-    echo "-------------------------"
-    main()
-    echo "-------------------------"
+  #   echo "Simple parallel for"
+  #   echo "-------------------------"
+  #   main()
+  #   echo "-------------------------"
 
-  block: # Capturing outside scope
-    proc main2() =
-      init(Weave)
+  # block: # Capturing outside scope
+  #   proc main2() =
+  #     init(Weave)
 
-      var a = 100
-      var b = 10
-      # expandMacros:
-      parallelFor i in 0 ..< 10:
-        captures: {a, b}
-        log("a+b+i = %d (thread %d)\n", a+b+i, myID())
+  #     var a = 100
+  #     var b = 10
+  #     # expandMacros:
+  #     parallelFor i in 0 ..< 10:
+  #       captures: {a, b}
+  #       log("a+b+i = %d (thread %d)\n", a+b+i, myID())
 
-      exit(Weave)
-
-
-    echo "\n\nCapturing outside variables"
-    echo "-------------------------"
-    main2()
-    echo "-------------------------"
+  #     exit(Weave)
 
 
-  block: # Nested loops
-    proc main3() =
-      init(Weave)
+  #   echo "\n\nCapturing outside variables"
+  #   echo "-------------------------"
+  #   main2()
+  #   echo "-------------------------"
 
-      parallelFor i in 0 ..< 4:
-        parallelFor j in 0 ..< 8:
-          captures: {i}
-          log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
 
-      exit(Weave)
+  # block: # Nested loops
+  #   proc main3() =
+  #     init(Weave)
 
-    echo "\n\nNested loops"
-    echo "-------------------------"
-    main3()
-    echo "-------------------------"
+  #     parallelFor i in 0 ..< 4:
+  #       parallelFor j in 0 ..< 8:
+  #         captures: {i}
+  #         log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
 
-  block: # Strided Nested loops
-    proc main4() =
-      init(Weave)
+  #     exit(Weave)
 
-      # expandMacros:
-      parallelForStrided i in 0 ..< 200, stride = 30:
-        parallelForStrided j in 0 ..< 400, stride = 60:
-          captures: {i}
-          log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
+  #   echo "\n\nNested loops"
+  #   echo "-------------------------"
+  #   main3()
+  #   echo "-------------------------"
 
-      exit(Weave)
+  # block: # Strided Nested loops
+  #   proc main4() =
+  #     init(Weave)
 
-    echo "\n\nStrided Nested loops"
-    echo "-------------------------"
-    main4()
-    echo "-------------------------"
+  #     # expandMacros:
+  #     parallelForStrided i in 0 ..< 200, stride = 30:
+  #       parallelForStrided j in 0 ..< 400, stride = 60:
+  #         captures: {i}
+  #         log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
+
+  #     exit(Weave)
+
+  #   echo "\n\nStrided Nested loops"
+  #   echo "-------------------------"
+  #   main4()
+  #   echo "-------------------------"
 
   block: # Awaitable for loops
     proc main5() =
+      var M = createSharedU(array[1000..1099, array[200, int]])
+
       init(Weave)
 
-      parallelFor i in 0 ..< 4:
-        parallelFor j in 0 ..< 8:
-          captures: {i}
+      parallelFor i in 1000 ..< 1100:
+        captures: {M}
+        parallelFor j in 0 ..< 200:
+          captures: {i, M}
           awaitable: innerJ
-          log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
+          M[i][j] = 1000 * i + 1000 * j
 
         sync(innerJ)
+        # Check that the sync worked
+        for j in 0 ..< 200:
+          let Mij = M[i][j]
+          let expected = 1000 * i + 1000 * j
+          ascertain: Mij == expected
 
       exit(Weave)
 
