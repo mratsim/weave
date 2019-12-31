@@ -252,6 +252,8 @@ proc addLoopTask*(
     statement.add quote do:
       when not declared(`futureIdent`):
         var `futureIdent`: `resultFutureType`
+      assert not isSpawned(`futureIdent`), "Trying to override an allocated Flowvar."
+      `futureIdent` = newFlowvar(myMemPool(), `resultFutureType`.T)
 
       if likely(`stop`-`start` != 0):
         when defined(WV_profile):
@@ -268,8 +270,6 @@ proc addLoopTask*(
           task.stride = `stride`
           task.hasFuture = true
           task.futureSize = uint8(sizeof(`resultFutureType`.T))
-          assert not isSpawned(`futureIdent`), "Trying to override an allocated Flowvar."
-          `futureIdent` = newFlowvar(myMemPool(), `resultFutureType`.T)
           when bool(`withArgs`):
             cast[ptr (`resultFutureType`, `CapturedTySym`)](task.data.addr)[] = (`futureIdent`, `capturedVars`)
           else:
@@ -277,6 +277,8 @@ proc addLoopTask*(
           schedule(task)
           when defined(WV_profile):
             timer_stop(timer_enq_deq_task)
+      else:
+        `futureIdent`.readyWith(default(`resultFutureType`.T))
   else:
     statement.add quote do:
       if likely(`stop`-`start` != 0):

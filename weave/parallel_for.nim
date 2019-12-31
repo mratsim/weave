@@ -207,6 +207,34 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
   # echo result.toStrLit
 
 macro parallelFor*(loopParams: untyped, body: untyped): untyped =
+  ## Parallel for loop.
+  ## Syntax:
+  ##
+  ## parallelFor i in 0 ..< 10:
+  ##   echo(i)
+  ##
+  ## Variables from the external scope needs to be explicitly captured
+  ##
+  ##  var a = 100
+  ##  var b = 10
+  ##  parallelFor i in 0 ..< 10:
+  ##    captures: {a, b}
+  ##    echo a + b + i
+  ##
+  ## A parallel for loop can be awaited
+  ##
+  ##  var a = 100
+  ##  var b = 10
+  ##  parallelFor i in 0 ..< 10:
+  ##    captures: {a, b}
+  ##    awaitable: myLoopHandle
+  ##    echo a + b + i
+  ##
+  ##  sync(myLoopHandle)
+  ##
+  ## In templates and generic procedures, you need to use "mixin myLoopHandle"
+  ## or declare the awaitable handle before the loop to workaround Nim early symbol resolution
+
   if (body[0].kind == nnkCall and body[0][0].eqIdent"reduce") or
      (body.len >= 2 and
      body[1].kind == nnkCall and body[1][0].eqIdent"reduce"):
