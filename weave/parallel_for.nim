@@ -15,7 +15,8 @@ import
   # Internal
   ./parallel_macros, ./parallel_reduce,
   ./contexts, ./runtime,
-  ./instrumentation/contracts
+  ./instrumentation/contracts,
+  ./datatypes/flowvars
 
 when not compileOption("threads"):
   {.error: "This requires --threads:on compilation flag".}
@@ -68,12 +69,11 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
   # --------------------------------------------------------
   let (idx, start, stop) = extractLP(loopParams)
 
-  # Extract captured variables
+  # Extract resulting flowvar and captured variables
   # --------------------------------------------------------
-  var captured, capturedTy: NimNode
-  if body[0].kind == nnkCall and body[0][0].eqIdent"captures":
-    (captured, capturedTy) = extractCaptures(body, 0)
+  let (future, captured, capturedTy) = body.extractFutureAndCaptures()
 
+  let withFuture = not future.isNil
   let withArgs = capturedTy.len > 0
 
   let CapturedTy = ident"CapturedTy"
@@ -105,21 +105,43 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
   if withArgs:
     fnCall.add(env)
 
-  result.add quote do:
-    proc `parForTask`(param: pointer) {.nimcall, gcsafe.} =
-      let this = myTask()
-      assert not isRootTask(this)
+  var futTy: NimNode
 
-      when bool(`withArgs`):
-        let `env` = cast[ptr `CapturedTy`](param)
-      `fnCall`
+  if not withFuture:
+    result.add quote do:
+      proc `parForTask`(param: pointer) {.nimcall, gcsafe.} =
+        let this = myTask()
+        assert not isRootTask(this)
+
+        when bool(`withArgs`):
+          let `env` = cast[ptr `CapturedTy`](param)
+        `fnCall`
+  else:
+    let dummyFut = ident"dummyFut"
+    futTy = nnkBracketExpr.newTree(
+      bindSym"Flowvar", bindSym"Dummy"
+    )
+    result.add quote do:
+      proc `parForTask`(param: pointer) {.nimcall, gcsafe.} =
+        let this = myTask()
+        assert not isRootTask(this)
+
+        let `dummyFut` = cast[ptr `futTy`](param)
+        when bool(`withArgs`):
+          # This requires lazy futures to have a fixed max buffer size
+          let offset = cast[pointer](cast[ByteAddress](param) +% sizeof(`futTy`))
+          let `env` = cast[ptr `CapturedTy`](offset)
+        `fnCall`
+        `dummyFut`[].readyWith(Dummy())
 
   # Create the task
   # --------------------------------------------------------
   result.addLoopTask(
     parForTask, start, stop, stride, captured, CapturedTy,
-    futureIdent = nil, resultFutureType = nil
+    futureIdent = future, resultFutureType = futTy
   )
+
+  echo result.toStrLit
 
 macro parallelFor*(loopParams: untyped, body: untyped): untyped =
   if (body[0].kind == nnkCall and body[0][0].eqIdent"reduce") or
@@ -141,7 +163,7 @@ macro parallelForStrided*(loopParams: untyped, stride: Positive, body: untyped):
 # --------------------------------------------------------
 
 when isMainModule:
-  import ./instrumentation/loggers, ./runtime, ./runtime_fsm
+  import ./instrumentation/loggers, ./runtime, ./runtime_fsm, ./await_fsm
 
   block:
     proc main() =
@@ -208,4 +230,24 @@ when isMainModule:
     echo "\n\nStrided Nested loops"
     echo "-------------------------"
     main4()
+    echo "-------------------------"
+
+  block: # Awaitable for loops
+    proc main5() =
+      init(Weave)
+
+      parallelFor i in 0 ..< 4:
+        parallelFor j in 0 ..< 8:
+          captures: {i}
+          awaitable: innerJ
+          log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
+
+        sync(innerJ)
+
+      exit(Weave)
+
+
+    echo "\n\nNested awaitable for-loop"
+    echo "-------------------------"
+    main5()
     echo "-------------------------"

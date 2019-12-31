@@ -126,6 +126,27 @@ proc extractCaptures*(body: NimNode, c: int): tuple[captured, capturedTy: NimNod
   # Remove the captures section
   body[c] = nnkDiscardStmt.newTree(body[c].toStrLit)
 
+proc extractFutureAndCaptures*(body: NimNode): tuple[future, captured, capturedTy: NimNode] =
+  ## Extract the result future/flowvar and the vaptured variables if any
+  ## out of a parallelFor / parallelForStrided / parallelForStaged / parallelForStagedStrided
+  ## Returns a future, the captured variable and the captured type
+  template findCapturesAwaitable(idx: int) =
+    if body[idx][0].eqIdent"captures":
+      assert result.captured.isNil and result.capturedTy.isNil, "The captured section can only be set once for a loop."
+      (result.captured, result.capturedTy) = extractCaptures(body, 0)
+    elif body[idx][0].eqIdent"awaitable":
+      body[idx][1].expectKind(nnkStmtList)
+      body[idx][1][0].expectKind(nnkIdent)
+      assert result.future.isNil, "The awaitable section can only be set once for a loop."
+      result.future = body[idx][1][0]
+      # Remove the awaitable section
+      body[idx] = nnkDiscardStmt.newTree(body[idx].toStrLit)
+
+  if body[0].kind == nnkCall:
+    findCapturesAwaitable(0)
+    if body.len > 1 and body[1].kind == nnkCall:
+      findCapturesAwaitable(1)
+
 proc addSanityChecks*(statement, capturedTypes, capturedTypesSym: NimNode) =
   if capturedTypes.len > 0:
     statement.add quote do:
@@ -228,6 +249,9 @@ proc addLoopTask*(
 
   if hasFuture:
     statement.add quote do:
+      when not declared(`futureIdent`):
+        var `futureIdent`: `resultFutureType`
+
       if likely(`stop`-`start` != 0):
         when defined(WV_profile):
           # TODO profiling templates visibility issue

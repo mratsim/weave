@@ -168,5 +168,22 @@ proc recycleFVN*(fvNode: sink FlowvarNode) {.inline.} =
 # Public
 # -------------------------------------------
 
+type Dummy* = object
+  ## A dummy return type (Flowvar[Dummy])
+  ## for waitable for-loops
+
 proc sync*[T](fv: FlowVar[T]): T {.inline.} =
+  ## Blocks the current thread until the flowvar is available
+  ## and returned.
+  ## The thread is not idle and will complete pending tasks.
   fv.forceComplete(result)
+
+template sync*(fv: FlowVar[Dummy]) =
+  ## Blocks the current thread until the full loop task
+  ## associated with the dummy has finished
+  ## The thread is not idle and will complete pending tasks.
+  # This must be a template to avoid recursive dependency
+  # as forceFuture is in await_fsm and await_fsm depends
+  # on this module.
+  var dummy: Dummy
+  fv.forceComplete(dummy)
