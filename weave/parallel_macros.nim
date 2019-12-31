@@ -107,7 +107,8 @@ proc extractCaptures*(body: NimNode, c: int): tuple[captured, capturedTy: NimNod
   #   Call
   #     Ident "captures"
   #     StmtList
-  #       Ident "a"
+  #       Curly
+  #         Ident "a"
   #   Rest of the body
 
   body.expectKind(nnkStmtList)
