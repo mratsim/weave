@@ -70,6 +70,9 @@ func isSpawned*(fv: Flowvar): bool {.inline.}=
     return not fv.chan.isNil
 
 EagerFV:
+  proc recycleChannel*(fv: Flowvar) {.inline.} =
+    recycle(fv.chan)
+
   proc newFlowVar*(pool: var TLPoolAllocator, T: typedesc): Flowvar[T] {.inline.} =
     result.chan = pool.borrow(typeof result.chan[])
     result.chan[].initialize(sizeof(T))
@@ -80,13 +83,13 @@ EagerFV:
     let resultSent = fv.chan[].trySend(childResult)
     postCondition: resultSent
 
-  proc forceComplete*[T](fv: Flowvar[T], parentResult: var T) {.inline.} =
-    ## From the parent thread awaiting on the result, force its computation
-    ## by eagerly processing only the child tasks spawned by the awaited task
-    fv.forceFuture(parentResult)
-    recycle(fv.chan)
+  template isFutReady*(fv: Flowvar): bool =
+    fv.chan[].tryRecv(parentResult)
 
 LazyFV:
+  proc recycleChannel*(fv: Flowvar) {.inline.} =
+    recycle(fv.lfv.lazy.chan)
+
   # Templates everywhere as we use alloca
   template newFlowVar*(pool: TLPoolAllocator, T: typedesc): Flowvar[T] =
     var fv = cast[Flowvar[T]](alloca(LazyFlowVar))
@@ -105,15 +108,12 @@ LazyFV:
       ascertain: not fv.lfv.lazy.chan.isNil
       discard fv.lfv.lazy.chan[].trySend(childResult)
 
-  template forceComplete*[T](fv: Flowvar[T], parentResult: var T) =
-    fv.forceFuture(parentResult)
-    # Reclaim memory
-    if not fv.lfv.hasChannel:
-      ascertain: fv.lfv.isReady
-      parentResult = cast[ptr T](fv.lfv.lazy.buf.addr)[]
-    else:
+  template isFutReady*(fv: Flowvar): bool =
+    if fv.lfv.hasChannel:
       ascertain: not fv.lfv.lazy.chan.isNil
-      recycle(fv.lfv.lazy.chan)
+      fv.lfv.lazy.chan[].tryRecv(parentResult)
+    else:
+      fv.lfv.isReady
 
   import sync_types
 
@@ -164,26 +164,3 @@ proc recycleFVN*(fvNode: sink FlowvarNode) {.inline.} =
 
 # TODO destructors for automatic management
 #      of the user-visible flowvars
-
-# Public
-# -------------------------------------------
-
-type Dummy* = object
-  ## A dummy return type (Flowvar[Dummy])
-  ## for waitable for-loops
-
-proc sync*[T](fv: FlowVar[T]): T {.inline.} =
-  ## Blocks the current thread until the flowvar is available
-  ## and returned.
-  ## The thread is not idle and will complete pending tasks.
-  fv.forceComplete(result)
-
-template sync*(fv: FlowVar[Dummy]) =
-  ## Blocks the current thread until the full loop task
-  ## associated with the dummy has finished
-  ## The thread is not idle and will complete pending tasks.
-  # This must be a template to avoid recursive dependency
-  # as forceFuture is in await_fsm and await_fsm depends
-  # on this module.
-  var dummy: Dummy
-  fv.forceComplete(dummy)

@@ -50,19 +50,8 @@ setTerminalState(awaitFSA, AW_Exit)
 
 # -------------------------------------------
 
-EagerFV:
-  template isFutReady(): untyped =
-    fv.chan[].tryRecv(parentResult)
-LazyFV:
-  template isFutReady(): untyped =
-    if fv.lfv.hasChannel:
-      ascertain: not fv.lfv.lazy.chan.isNil
-      fv.lfv.lazy.chan[].tryRecv(parentResult)
-    else:
-      fv.lfv.isReady
-
 implEvent(awaitFSA, AWE_FutureReady):
-  isFutReady()
+  isFutReady(fv)
 
 behavior(awaitFSA):
   # In AW_Steal we might recv tasks and steal requests which get stuck in our queues
@@ -184,3 +173,47 @@ behavior(awaitFSA):
 
 synthesize(awaitFSA):
   proc forceFuture*[T](fv: Flowvar[T], parentResult: var T)
+
+# -------------------------------------------
+
+EagerFV:
+  proc forceComplete*[T](fv: Flowvar[T], parentResult: var T) {.inline.} =
+    ## From the parent thread awaiting on the result, force its computation
+    ## by eagerly processing only the child tasks spawned by the awaited task
+    fv.forceFuture(parentResult)
+    recycleChannel(fv)
+
+LazyFV:
+  template forceComplete*[T](fv: Flowvar[T], parentResult: var T) =
+    fv.forceFuture(parentResult)
+    # Reclaim memory
+    if not fv.lfv.hasChannel:
+      ascertain: fv.lfv.isReady
+      parentResult = cast[ptr T](fv.lfv.lazy.buf.addr)[]
+    else:
+      ascertain: not fv.lfv.lazy.chan.isNil
+      recycleChannel(fv)
+
+# Public
+# -------------------------------------------
+
+type Dummy* = object
+  ## A dummy return type (Flowvar[Dummy])
+  ## for waitable for-loops
+  # Do we add a dummy field to avoid a size of 0?
+
+proc sync*[T](fv: FlowVar[T]): T {.inline.} =
+  ## Blocks the current thread until the flowvar is available
+  ## and returned.
+  ## The thread is not idle and will complete pending tasks.
+  fv.forceComplete(result)
+
+template sync*(fv: FlowVar[Dummy]) =
+  ## Blocks the current thread until the full loop task
+  ## associated with the dummy has finished
+  ## The thread is not idle and will complete pending tasks.
+  # This must be a template to avoid recursive dependency
+  # as forceFuture is in await_fsm and await_fsm depends
+  # on this module.
+  var dummy: Dummy
+  forceComplete(fv, dummy)

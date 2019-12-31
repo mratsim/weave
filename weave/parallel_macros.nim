@@ -268,7 +268,7 @@ proc addLoopTask*(
           task.stride = `stride`
           task.hasFuture = true
           task.futureSize = uint8(sizeof(`resultFutureType`.T))
-          assert not `futureIdent`.isSpawned(), "Trying to override an allocated Flowvar."
+          assert not isSpawned(`futureIdent`), "Trying to override an allocated Flowvar."
           `futureIdent` = newFlowvar(myMemPool(), `resultFutureType`.T)
           when bool(`withArgs`):
             cast[ptr (`resultFutureType`, `CapturedTySym`)](task.data.addr)[] = (`futureIdent`, `capturedVars`)

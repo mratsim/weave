@@ -161,11 +161,11 @@ proc gemm_impl[T; ukernel: static MicroKernel](
     # First time writing to C, we scale it, otherwise accumulate
     let beta = if pc == 0: beta else: 1.T
 
-    syncRoot(Weave) # TODO: this cannot be nested
     # ####################################
     # 3. for ic = 0,...,m−1 in steps of mc
     parallelFor icb in 0 ..< tiles.ic_num_tasks:
       captures: {pc, tiles, nc, kc, alpha, beta, vA, vC, M}
+      awaitable: icLoop
 
       let packA = tiles.a + icb * tiles.upanelA_size
       prefetch(packA, Write, LowTemporalLocality)
@@ -180,7 +180,7 @@ proc gemm_impl[T; ukernel: static MicroKernel](
           alpha, packA, tiles.b,                      #    αA[ic:ic+mc, pc:pc+kc] * B[pc:pc+kc, jc:jc+nc] +
           beta, vC.stride(ic, 0)                      #    βC[ic:ic+mc, jc:jc+nc]
         )
-    syncRoot(Weave) # TODO: this cannot be nested
+    sync(icLoop)
 
 # ############################################################
 #
@@ -253,7 +253,6 @@ proc gemm_strided*[T: SomeNumber](
       if hasAvx512f():   dispatch(x86_AVX512)
       elif hasSse2():   dispatch(x86_SSE2)
   dispatch(x86_Generic)
-  syncRoot(Weave)
 
 # ############################################################
 #

@@ -16,7 +16,7 @@ import
   ./parallel_macros, ./parallel_reduce,
   ./contexts, ./runtime, ./config,
   ./instrumentation/contracts,
-  ./datatypes/flowvars
+  ./datatypes/flowvars, ./await_fsm
 
 when not compileOption("threads"):
   {.error: "This requires --threads:on compilation flag".}
@@ -195,7 +195,7 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
           let offset = cast[pointer](cast[ByteAddress](param) +% sizeof(`futTy`))
           let `env` = cast[ptr `CapturedTy`](offset)
         `fnCall`
-        `dummyFut`[].readyWith(Dummy())
+        readyWith(`dummyFut`[], Dummy())
 
   # Create the task
   # --------------------------------------------------------
@@ -226,7 +226,7 @@ macro parallelForStrided*(loopParams: untyped, stride: Positive, body: untyped):
 # --------------------------------------------------------
 
 when isMainModule:
-  import ./instrumentation/loggers, ./runtime, ./runtime_fsm, ./await_fsm
+  import ./instrumentation/loggers, ./runtime, ./runtime_fsm
 
   block:
     proc main() =
