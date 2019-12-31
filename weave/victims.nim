@@ -262,7 +262,7 @@ proc splitAndSend*(task: Task, req: sink StealRequest, workSharing: bool) =
       let fvNode = newFlowvarNode(upperSplit.futureSize)
       # Redirect the result channel of the upperSplit
       LazyFv:
-        cast[ptr ptr ChannelSPSCSingle](upperSplit.data.addr)[] = fvNode.lfv.lazy.chan
+        cast[ptr ptr LazyFlowVar](upperSplit.data.addr)[] = fvNode.lfv
       EagerFv:
         cast[ptr ptr ChannelSPSCSingle](upperSplit.data.addr)[] = fvNode.chan
       fvNode.next = cast[FlowvarNode](task.futures)
