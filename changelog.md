@@ -6,8 +6,10 @@
 
 `parallelFor`, `parallelForStrided`, `parallelForStaged`, `parallelForStagedStrided`
 now support an "awaitable" statement to allow fine-grain sync.
-It is recommended to use it instead of `syncRoot()` to allow composable parallelism.
-`syncRoot()` should be seldom needed.
+
+Fine-grained data-dependencies are under research (for example launch a task when the first 50 iterations are done out of a 100 iteration loops), "awaitable" may change
+to have an unified syntax for delayed tasks depending on a task, a whole loop or a subset of it.
+If possible, it is recommended to use "awaitable" instead of `syncRoot()` to allow composable parallelism, `syncRoot()` can only be called in a serial section of the code.
 
 Weave can now be compiled with Microsoft Visual Studio in C++ mode.
 
