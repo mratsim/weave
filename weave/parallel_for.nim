@@ -87,7 +87,7 @@ template parallelForAwaitableWrapper(
       this.cur += this.stride
       loadBalance(Weave)
 
-  debug: log("Worker %2d: Finished loop task 0x%.08x (iterations [%ld, %ld)) (futures: 0x%.08x)\n", myID(), this.fn, this.start, this.stop, this.futures)
+  debugSplit: log("Worker %2d: Finished loop task 0x%.08x (iterations [%ld, %ld)) (futures: 0x%.08x)\n", myID(), this.fn, this.start, this.stop, this.futures)
   block: # Wait for the child loop iterations
     while not this.futures.isNil:
       let fvNode = cast[FlowvarNode](this.futures)
@@ -98,9 +98,9 @@ template parallelForAwaitableWrapper(
       EagerFV:
         let dummyFV = cast[Flowvar[Dummy]](fvNode.chan)
 
-      debug: log("Worker %2d: loop task 0x%.08x (iterations [%ld, %ld)) waiting for the remainder\n", myID(), this.fn, this.start, this.stop)
+      debugSplit: log("Worker %2d: loop task 0x%.08x (iterations [%ld, %ld)) waiting for the remainder\n", myID(), this.fn, this.start, this.stop)
       sync(dummyFV)
-      debug: log("Worker %2d: loop task 0x%.08x (iterations [%ld, %ld)) complete\n", myID(), this.fn, this.start, this.stop)
+      debugSplit: log("Worker %2d: loop task 0x%.08x (iterations [%ld, %ld)) complete\n", myID(), this.fn, this.start, this.stop)
 
       # The "sync" in the merge statement should have recycled the flowvar channel already
       # For LazyFlowVar, the LazyFlowvar itself was allocated on the heap, so we need to recycle it as well
@@ -228,72 +228,72 @@ macro parallelForStrided*(loopParams: untyped, stride: Positive, body: untyped):
 when isMainModule:
   import ./instrumentation/loggers, ./runtime, ./runtime_fsm, ./await_fsm
 
-  # block:
-  #   proc main() =
-  #     init(Weave)
+  block:
+    proc main() =
+      init(Weave)
 
-  #     parallelFor i in 0 ..< 100:
-  #       log("%d (thread %d)\n", i, myID())
+      parallelFor i in 0 ..< 100:
+        log("%d (thread %d)\n", i, myID())
 
-  #     exit(Weave)
+      exit(Weave)
 
-  #   echo "Simple parallel for"
-  #   echo "-------------------------"
-  #   main()
-  #   echo "-------------------------"
+    echo "Simple parallel for"
+    echo "-------------------------"
+    main()
+    echo "-------------------------"
 
-  # block: # Capturing outside scope
-  #   proc main2() =
-  #     init(Weave)
+  block: # Capturing outside scope
+    proc main2() =
+      init(Weave)
 
-  #     var a = 100
-  #     var b = 10
-  #     # expandMacros:
-  #     parallelFor i in 0 ..< 10:
-  #       captures: {a, b}
-  #       log("a+b+i = %d (thread %d)\n", a+b+i, myID())
+      var a = 100
+      var b = 10
+      # expandMacros:
+      parallelFor i in 0 ..< 10:
+        captures: {a, b}
+        log("a+b+i = %d (thread %d)\n", a+b+i, myID())
 
-  #     exit(Weave)
-
-
-  #   echo "\n\nCapturing outside variables"
-  #   echo "-------------------------"
-  #   main2()
-  #   echo "-------------------------"
+      exit(Weave)
 
 
-  # block: # Nested loops
-  #   proc main3() =
-  #     init(Weave)
+    echo "\n\nCapturing outside variables"
+    echo "-------------------------"
+    main2()
+    echo "-------------------------"
 
-  #     parallelFor i in 0 ..< 4:
-  #       parallelFor j in 0 ..< 8:
-  #         captures: {i}
-  #         log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
 
-  #     exit(Weave)
+  block: # Nested loops
+    proc main3() =
+      init(Weave)
 
-  #   echo "\n\nNested loops"
-  #   echo "-------------------------"
-  #   main3()
-  #   echo "-------------------------"
+      parallelFor i in 0 ..< 4:
+        parallelFor j in 0 ..< 8:
+          captures: {i}
+          log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
 
-  # block: # Strided Nested loops
-  #   proc main4() =
-  #     init(Weave)
+      exit(Weave)
 
-  #     # expandMacros:
-  #     parallelForStrided i in 0 ..< 200, stride = 30:
-  #       parallelForStrided j in 0 ..< 400, stride = 60:
-  #         captures: {i}
-  #         log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
+    echo "\n\nNested loops"
+    echo "-------------------------"
+    main3()
+    echo "-------------------------"
 
-  #     exit(Weave)
+  block: # Strided Nested loops
+    proc main4() =
+      init(Weave)
 
-  #   echo "\n\nStrided Nested loops"
-  #   echo "-------------------------"
-  #   main4()
-  #   echo "-------------------------"
+      # expandMacros:
+      parallelForStrided i in 0 ..< 200, stride = 30:
+        parallelForStrided j in 0 ..< 400, stride = 60:
+          captures: {i}
+          log("Matrix[%d, %d] (thread %d)\n", i, j, myID())
+
+      exit(Weave)
+
+    echo "\n\nStrided Nested loops"
+    echo "-------------------------"
+    main4()
+    echo "-------------------------"
 
   block: # Awaitable for loops
     proc main5() =

@@ -298,11 +298,14 @@ proc addLoopTask*(
           when defined(WV_profile):
             timer_stop(timer_enq_deq_task)
 
+type Example = enum
+  Reduce
+  Staged
 
-template parSumExample() {.dirty.}=
+template parReduceExample() {.dirty.}=
   # Used for a nice error message
 
-  proc parallelSumExample(n: int): int =
+  proc parallelReduceExample(n: int): int =
 
     ## First declare the future/flowvar that will
     ## hold the reduction result
@@ -330,13 +333,52 @@ template parSumExample() {.dirty.}=
     ## Await the parallel reduction
     return sync(waitableSum)
 
-proc printExampleSyntax() =
-  let example = getAst(parSumExample())
-  echo example.toStrLit
+template parStagedExample() {.dirty.} =
+  # Used for a nice error message
 
-proc testKind(nn: NimNode, nnk: NimNodeKind) =
+  proc parallelStagedSumExample(n: int): int =
+    ## We will do a sum reduction to illustrate
+    ## staged parallel for
+
+    ## First take the address of the result
+    let res = result.addr
+
+    ## Then describe the reduction loop
+    parallelForStaged i in 0 .. n:
+      ## stride is optional
+      captures: {res}
+      awaitable: myParallelLoop
+      prologue:
+        ## Declare anything needed before the for-loop
+        ## This will be thread-local, so each thread will run this section idnependently.
+        ## The loop increment is not available here
+        var localSum = 0
+      loop:
+        ## This is the parallel loop
+        localSum += i
+      epilogue:
+        ## Once the loop is finished, you have a final opportunity for processing.
+        ## Thread-local cleanup should happen here as well
+        ## Here we print the localSum and atomically increment the global sum
+        ## before ending the task.
+        echo "Thread ", getThreadID(Weave), ": localsum = ", localSum
+        res[].atomicInc(localSum)
+
+    ## Await the parallel reduction
+    return sync(waitableSum)
+
+proc printReduceExample() =
+  let example = getAst(parReduceExample())
+  echo example.toStrLit()
+proc printStagedExample() =
+  let example = getAst(parStagedExample())
+  echo example.toStrLit()
+
+proc testKind(nn: NimNode, nnk: NimNodeKind, kind: Example) =
   if nn.kind != nnk:
-    printExampleSyntax()
+    case kind
+    of Reduce: printReduceExample()
+    of Staged: printStagedExample()
     nn.expectKind(nnk) # Gives nice line numbers
 
 proc extractReduceConfig*(body: NimNode, withArgs: bool): tuple[
@@ -381,12 +423,12 @@ proc extractReduceConfig*(body: NimNode, withArgs: bool): tuple[
   let config = if withArgs: body[1] else: body[0]
   doAssert config[0].eqident"reduce"
 
-  config.testKind(nnkCall)
-  config[1].testKind(nnkIdent)
-  config[2].testKind(nnkStmtList)
+  config.testKind(nnkCall, Reduce)
+  config[1].testKind(nnkIdent, Reduce)
+  config[2].testKind(nnkStmtList, Reduce)
 
   if config[2].len != 4:
-    printExampleSyntax()
+    printReduceExample()
     error "A reduction should have 4 sections named: prologue, fold, merge and a return statement"
 
   let
@@ -399,23 +441,23 @@ proc extractReduceConfig*(body: NimNode, withArgs: bool): tuple[
     returnStmt = config[2][3]
 
   # Sanity checks
-  prologue.testKind(nnkCall)
-  fold.testKind(nnkCall)
-  merge.testKind(nnkCall)
-  remoteAccum.testKind(nnkIdent)
-  returnStmt.testKind(nnkReturnStmt)
+  prologue.testKind(nnkCall, Reduce)
+  fold.testKind(nnkCall, Reduce)
+  merge.testKind(nnkCall, Reduce)
+  remoteAccum.testKind(nnkIdent, Reduce)
+  returnStmt.testKind(nnkReturnStmt, Reduce)
   if not (prologue[0].eqIdent"prologue" and fold[0].eqIdent"fold" and merge[0].eqIdent"merge"):
-    printExampleSyntax()
+    printReduceExample()
     error "A reduction should have 4 sections named: prologue, fold, merge and a return statement"
-  prologue[1].testKind(nnkStmtList)
-  fold[1].testKind(nnkStmtList)
-  merge[2].testKind(nnkStmtList)
+  prologue[1].testKind(nnkStmtList, Reduce)
+  fold[1].testKind(nnkStmtList, Reduce)
+  merge[2].testKind(nnkStmtList, Reduce)
 
   result = (prologue[1], fold[1], merge[2],
             remoteAccum, resultFvTy,
             returnStmt, finalAccum)
 
-proc extractStagedConfig*(body: NimNode, withArgs: bool): tuple[
+proc extractStagedConfig*(body: NimNode, withArgs, awaitable: bool): tuple[
     prologue, loopBody, epilogue: NimNode
   ] =
   # The body tree representation is
@@ -439,17 +481,13 @@ proc extractStagedConfig*(body: NimNode, withArgs: bool): tuple[
   #   Call
   #     Ident "epilogue"
   #     StmtList
-  #       Infix
-  #         Ident "+="
-  #         Ident "localSum"
-  #         Call
-  #           Ident "sync"
-  #           Ident "remoteSum"
-  let idx = int(withArgs) # if arguments, we have a capture section at index 0
+  #       (increment of the result variable)
 
+  # Offset by the captures and awaitable section
+  let idx = int(withArgs) + int(awaitable)
 
   if body.len != idx + 3:
-    printExampleSyntax()
+    printStagedExample()
     error "A staged for loop should have 3 sections named: prologue, loop and epilogue"
 
   let
@@ -458,14 +496,14 @@ proc extractStagedConfig*(body: NimNode, withArgs: bool): tuple[
     epilogue = body[idx+2]
 
   # Sanity checks
-  prologue.testKind(nnkCall)
-  loop.testKind(nnkCall)
-  epilogue.testKind(nnkCall)
+  prologue.testKind(nnkCall, Staged)
+  loop.testKind(nnkCall, Staged)
+  epilogue.testKind(nnkCall, Staged)
   if not (prologue[0].eqIdent"prologue" and loop[0].eqIdent"loop" and epilogue[0].eqIdent"epilogue"):
-    printExampleSyntax()
+    printStagedExample()
     error "A staged for loop should have 3 sections named: prologue, loop and epilogue"
-  prologue[1].testKind(nnkStmtList)
-  loop[1].testKind(nnkStmtList)
-  epilogue[1].testKind(nnkStmtList)
+  prologue[1].testKind(nnkStmtList, Staged)
+  loop[1].testKind(nnkStmtList, Staged)
+  epilogue[1].testKind(nnkStmtList, Staged)
 
   result = (prologue[1], loop[1], epilogue[1])
