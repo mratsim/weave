@@ -42,7 +42,7 @@ type
     #       Also a side benefit is LazyFlowvar for FlowvarNode requires 3 allocations,
     #       while eager requires 2.
     when defined(WV_LazyFlowvar):
-      lfv: ptr LazyFlowVar # usually alloca allocated
+      lfv*: ptr LazyFlowVar # usually alloca allocated
     else:
       chan: ptr ChannelSPSCSingle
 
