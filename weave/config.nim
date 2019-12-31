@@ -105,7 +105,7 @@ template debug*(body: untyped): untyped =
     block: {.noSideEffect, gcsafe.}: body
 
 template debugSplit*(body: untyped): untyped =
-  when defined(WV_DebugSplit):
+  when defined(WV_DebugSplit) or defined(WV_Debug):
     block: {.noSideEffect, gcsafe.}: body
 
 template StealAdaptative*(body: untyped): untyped =
