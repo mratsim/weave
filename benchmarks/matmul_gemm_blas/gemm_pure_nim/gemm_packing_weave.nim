@@ -59,7 +59,6 @@ proc pack_A_mc_kc*[T; ukernel: static MicroKernel](
 #                    Packing B
 #
 # ############################################################
-
 proc pack_B_kc_nc*[T; ukernel: static MicroKernel](
       packedB: ptr UncheckedArray[T],
       kc, nc: int,
@@ -70,6 +69,8 @@ proc pack_B_kc_nc*[T; ukernel: static MicroKernel](
   ## Concretely the outer dimension of packed matrices
   ## is k so that C[i, j] = A[i, k] * B[k, j]
   ## does not require strided access
+  mixin packingLoop
+
   let buffer{.restrict.} = assume_aligned packedB
   const NR = ukernel.extract_nr()
   let unroll_stop = nc.round_step_down(NR)
@@ -91,3 +92,5 @@ proc pack_B_kc_nc*[T; ukernel: static MicroKernel](
         offBuf[k*NR + j] = B[k, unroll_stop+j]
       for j in remainder ..< NR: # Pad with 0 if packing over the edge
         offBuf[k*NR + j] = 0.T
+
+  syncRoot(Weave)

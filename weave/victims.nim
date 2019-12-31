@@ -253,10 +253,6 @@ proc splitAndSend*(task: Task, req: sink StealRequest, workSharing: bool) =
     # Current task continues with lower half
     task.stop = split
 
-  debugSplit:
-    let steps = (upperSplit.stop-upperSplit.start + upperSplit.stride-1) div upperSplit.stride
-    log("Worker %2d: Sending [%ld, %ld) to worker %d (%d steps)\n", myID(), upperSplit.start, upperSplit.stop, req.thiefID, steps)
-
   ascertain: upperSplit.stop > upperSplit.start
   ascertain: task.stop > task.cur
 
@@ -266,20 +262,24 @@ proc splitAndSend*(task: Task, req: sink StealRequest, workSharing: bool) =
       let fvNode = newFlowvarNode(upperSplit.futureSize)
       # Redirect the result channel of the upperSplit
       LazyFv:
-        cast[ptr ptr ChannelSPSCSingle](upperSplit.data.addr)[] = fvNode.lfv.lazy.chan
+        cast[ptr ptr LazyFlowVar](upperSplit.data.addr)[] = fvNode.lfv
       EagerFv:
         cast[ptr ptr ChannelSPSCSingle](upperSplit.data.addr)[] = fvNode.chan
-      fvNode.next = cast[FlowvarNode](myTask().futures)
-      myTask().futures = cast[pointer](fvNode)
+      fvNode.next = cast[FlowvarNode](task.futures)
+      task.futures = cast[pointer](fvNode)
       # Don't share the required futures with the child
       upperSplit.futures = nil
+
+    debugSplit:
+      let steps = (upperSplit.stop-upperSplit.start + upperSplit.stride-1) div upperSplit.stride
+      log("Worker %2d: Sending [%ld, %ld) to worker %d (%d steps) (hasFuture: %d, dependsOnFutures: 0x%.08x)\n", myID(), upperSplit.start, upperSplit.stop, req.thiefID, steps, upperSplit.hasFuture, upperSplit.futures)
 
     req.send(upperSplit)
 
   incCounter(loopsSplit)
   debug:
     let steps = (task.stop-task.cur + task.stride-1) div task.stride
-    log("Worker %2d: Continuing with [%ld, %ld) (%d steps)\n", myID(), task.cur, task.stop, steps)
+    log("Worker %2d: Continuing with [%ld, %ld) (%d steps) (hasFuture: %d, dependsOnFutures: 0x%.08x)\n", myID(), task.cur, task.stop, steps, task.hasFuture, task.futures)
 
 proc distributeWork*(req: sink StealRequest, workSharing: bool): bool =
   ## Distribute work during load balancing or work-sharing requests

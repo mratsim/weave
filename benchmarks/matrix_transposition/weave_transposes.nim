@@ -204,7 +204,7 @@ template runBench(transposeName: typed, reorderCompute, isSequential: bool): unt
       for _ in 0 ..< nrounds:
         transposeName(M, N, bufIn, bufOut)
       if not isSequential:
-        sync(Weave)
+        syncRoot(Weave)
       when not defined(windows):
         let stop = wtime_msec()
         mxnTime = stop - start
@@ -215,7 +215,7 @@ template runBench(transposeName: typed, reorderCompute, isSequential: bool): unt
       for _ in 0 ..< nrounds:
         transposeName(N, M, bufIn, bufOut)
       if not isSequential:
-        sync(Weave)
+        syncRoot(Weave)
       when not defined(windows):
         let stop = wtime_msec()
         nxmTime = stop - start
@@ -238,7 +238,7 @@ template runBench(transposeName: typed, reorderCompute, isSequential: bool): unt
       for _ in 0 ..< nrounds:
         transposeName(N, M, bufIn, bufOut)
       if not isSequential:
-        sync(Weave)
+        syncRoot(Weave)
       when not defined(windows):
         let stop = wtime_msec()
         nxmTime = stop - start
@@ -249,7 +249,7 @@ template runBench(transposeName: typed, reorderCompute, isSequential: bool): unt
       for _ in 0 ..< nrounds:
         transposeName(M, N, bufIn, bufOut)
       if not isSequential:
-        sync(Weave)
+        syncRoot(Weave)
       when not defined(windows):
         let stop = wtime_msec()
         mxnTime = stop - start

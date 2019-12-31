@@ -115,7 +115,7 @@ proc main() =
 
   # spc_produce_seq(NumTasksTotal)
   spc_produce(NumTasksTotal)
-  sync(Weave)
+  syncRoot(Weave)
 
   let stop = wtime_msec()
 

@@ -32,8 +32,8 @@ template parallelReduceWrapper(
 
   prologue
 
+  let this = myTask()
   block: # Loop body
-    let this = myTask()
     ascertain: this.isLoop
     ascertain: this.start == this.cur
 
@@ -47,7 +47,6 @@ template parallelReduceWrapper(
       loadBalance(Weave)
 
   block: # Merging with flowvars from remote threads
-    let this = myTask()
     while not this.futures.isNil:
       let fvNode = cast[FlowvarNode](this.futures)
       this.futures = cast[pointer](fvNode.next)
@@ -234,7 +233,7 @@ macro parallelReduceImpl*(loopParams: untyped, stride: int, body: untyped): unty
 
 
 when isMainModule:
-  import ./runtime, ./runtime_fsm
+  import ./runtime, ./runtime_fsm, ./await_fsm
 
   block:
     proc sumReduce(n: int): int =

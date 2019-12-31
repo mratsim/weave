@@ -249,6 +249,7 @@ proc maxWeaveStaged[T: SomeFloat](M: Matrix[T]) : T =
 
   parallelForStaged i in 0 ..< M.nrows:
     captures:{maxAddr, lockAddr, M}
+    awaitable: maxLoop
     prologue:
       var localMax = T(-Inf)
     loop:
@@ -260,7 +261,7 @@ proc maxWeaveStaged[T: SomeFloat](M: Matrix[T]) : T =
       maxAddr[] = max(maxAddr[], localMax)
       lockAddr[].release()
 
-  sync(Weave)
+  sync(maxLoop)
   lock.deinitLock()
 
 proc logsumexpWeaveStaged[T: SomeFloat](M: Matrix[T]): T =
@@ -279,6 +280,7 @@ proc logsumexpWeaveStaged[T: SomeFloat](M: Matrix[T]): T =
 
   parallelForStaged i in 0 ..< M.nrows:
     captures:{lseAddr, lockAddr, alpha, M}
+    awaitable: logSumExpLoop
     prologue:
       var localLSE = 0.T
     loop:
@@ -290,7 +292,7 @@ proc logsumexpWeaveStaged[T: SomeFloat](M: Matrix[T]): T =
       lseAddr[] += localLSE
       lockAddr[].release()
 
-  sync(Weave)
+  sync(logSumExpLoop)
   result = alpha + ln(lse)
   lock.deinitLock()
 

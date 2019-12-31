@@ -216,6 +216,7 @@ proc generateHistogramWeaveStaged[T](matrix: Matrix[T], hist: Histogram): T =
   # Parallel reduction
   parallelForStaged i in 1 ..< matrix.ld-1:
     captures: {maxAddr, lockAddr, hist, matrix, boxes}
+    awaitable: histoLoop
     prologue:
       let threadHist = newHistogram(boxes)
       var threadMax = T(-Inf)
@@ -239,7 +240,7 @@ proc generateHistogramWeaveStaged[T](matrix: Matrix[T], hist: Histogram): T =
       lockAddr[].release()
       wv_free(threadHist.buffer)
 
-  sync(Weave)
+  sync(histoLoop)
   lock.deinitLock()
   return max
 
