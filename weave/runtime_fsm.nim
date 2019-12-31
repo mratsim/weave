@@ -40,43 +40,48 @@ type
     SYE_Quiescent
     SYE_ReceivedTask
 
-declareAutomaton(syncFSA, SyncState, SyncEvent)
+declareAutomaton(syncRootFSA, SyncState, SyncEvent)
 
-setPrologue(syncFSA):
-  ## Global barrier for the Weave runtime
-  ## This is only valid in the root task
+setPrologue(syncRootFSA):
+  ## Root task barrier for the Weave runtime
+  ##
+  ## The main thread stops until all worker threads run out of tasks.
+  ##
+  ## This is only valid in the root task and main thread
+  ## Usage in a region that can be called from multiple threads
+  ## will result in undefined behavior.
   Worker: return
   debugTermination:
     log(">>> Worker %2d enters barrier <<<\n", myID())
   preCondition: myTask().isRootTask()
 
-  debug: log("Worker %2d: globalsync 1 - task from local deque\n", myID())
+  debug: log("Worker %2d: syncRoot 1 - task from local deque\n", myID())
   var task: Task
 
-setEpilogue(syncFSA):
+setEpilogue(syncRootFSA):
   # Execution continues but the runtime is quiescent until new tasks
   # are created
   postCondition: localCtx.runtimeIsQuiescent
   debugTermination:
     log(">>> Worker %2d leaves barrier <<<\n", myID())
 
-setInitialState(syncFSA, SY_CheckTask)
-setTerminalState(syncFSA, SY_Exit)
+setInitialState(syncRootFSA, SY_CheckTask)
+setTerminalState(syncRootFSA, SY_Exit)
 
 # -------------------------------------------
 
-implEvent(syncFSA, SYE_HasTask):
+implEvent(syncRootFSA, SYE_HasTask):
   not task.isNil
 
-implEvent(syncFSA, SYE_Quiescent):
+implEvent(syncRootFSA, SYE_Quiescent):
   localCtx.runtimeIsQuiescent
 
-implEvent(syncFSA, SYE_SoleWorker):
+implEvent(syncRootFSA, SYE_SoleWorker):
   workforce() == 1
 
 # -------------------------------------------
 
-onEntry(syncFSA, SY_CheckTask):
+onEntry(syncRootFSA, SY_CheckTask):
   task = myWorker().deque.popFirst()
 
   when WV_StealEarly > 0:
@@ -90,7 +95,7 @@ onEntry(syncFSA, SY_CheckTask):
   # or split our popped task if possible
   handleThieves(task)
 
-behavior(syncFSA):
+behavior(syncRootFSA):
   ini: SY_CheckTask
   event: SYE_HasTask
   transition:
@@ -100,31 +105,31 @@ behavior(syncFSA):
       localCtx.taskCache.add(task)
   fin: SY_CheckTask
 
-behavior(syncFSA):
+behavior(syncRootFSA):
   ini: SY_CheckTask
   transition: discard
   fin: SY_OutOfTasks
 
 # -------------------------------------------
 
-behavior(syncFSA):
+behavior(syncRootFSA):
   ini: SY_OutOfTasks
   event: SYE_SoleWorker
   transition: localCtx.runtimeIsQuiescent = true
   fin: SY_Exit
 
-behavior(syncFSA):
+behavior(syncRootFSA):
   ini: SY_OutOfTasks
   event: SYE_Quiescent
   transition: discard
   fin: SY_Exit
 
-behavior(syncFSA):
+behavior(syncRootFSA):
   ini: SY_OutOfTasks
   transition:
     # 2. Run out-of-task, become a thief and help other threads
     #    to reach the barrier faster
-    debug: log("Worker %2d: globalsync 2 - becoming a thief\n", myID())
+    debug: log("Worker %2d: syncRoot 2 - becoming a thief\n", myID())
     trySteal(isOutOfTasks = true)
     ascertain: myThefts().outstanding > 0
     profile_start(idle)
@@ -132,25 +137,25 @@ behavior(syncFSA):
 
 # -------------------------------------------
 
-onEntry(syncFSA, SY_Steal):
+onEntry(syncRootFSA, SY_Steal):
   let lootedTask = recvElseSteal(task, isOutOfTasks = true)
 
-implEvent(syncFSA, SYE_ReceivedTask):
+implEvent(syncRootFSA, SYE_ReceivedTask):
   lootedTask
 
-behavior(syncFSA):
+behavior(syncRootFSA):
   ini: SY_Steal
   interrupt: SYE_Quiescent
   transition: profile_stop(idle)
   fin: SY_Exit
 
-behavior(syncFSA):
+behavior(syncRootFSA):
   ini: SY_Steal
   event: SYE_ReceivedTask
   transition: profile_stop(idle)
   fin: SY_SuccessfulTheft
 
-behavior(syncFSA):
+behavior(syncRootFSA):
   steady: SY_Steal
   transition:
     ascertain: myWorker().deque.isEmpty()
@@ -159,11 +164,11 @@ behavior(syncFSA):
 
 # -------------------------------------------
 
-behavior(syncFSA):
+behavior(syncRootFSA):
   ini: SY_SuccessfulTheft
   transition:
     # 3. We stole some task(s)
-    debug: log("Worker %2d: globalsync 3 - stoled tasks\n", myID())
+    debug: log("Worker %2d: syncRoot 3 - stoled tasks\n", myID())
     ascertain: not task.fn.isNil
     TargetLastVictim:
       if task.victim != Not_a_worker:
@@ -181,11 +186,11 @@ behavior(syncFSA):
       myThefts().recentThefts += 1
 
     # 4. Share loot with children
-    debug: log("Worker %2d: globalsync 4 - sharing work\n", myID())
+    debug: log("Worker %2d: syncRoot 4 - sharing work\n", myID())
     shareWork()
 
     # 5. Work on what is left
-    debug: log("Worker %2d: globalsync 5 - working on leftover\n", myID())
+    debug: log("Worker %2d: syncRoot 5 - working on leftover\n", myID())
     profile(run_task):
       runTask(task)
     profile(enq_deq_task):
@@ -195,8 +200,8 @@ behavior(syncFSA):
 
 # -------------------------------------------
 
-synthesize(syncFSA):
-  proc sync*(_: type Weave) {.gcsafe.}
+synthesize(syncRootFSA):
+  proc syncRoot*(_: type Weave) {.gcsafe.}
 
 proc globalCleanup() =
   for i in 1 ..< workforce():
@@ -220,7 +225,7 @@ proc globalCleanup() =
     log("+========================================+\n")
 
 proc exit*(_: type Weave) =
-  sync(_)
+  syncRoot(_)
   signalTerminate(nil)
   localCtx.signaledTerminate = true
 

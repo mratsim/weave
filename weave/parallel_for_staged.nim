@@ -161,7 +161,7 @@ when isMainModule:
           echo "Thread ", getThreadID(Weave), ": localsum = ", localSum
           res[].atomicInc(localSum)
 
-      sync(Weave)
+      syncRoot(Weave)
 
     init(Weave)
     let sum1M = sumReduce(1000000)

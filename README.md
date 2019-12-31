@@ -135,7 +135,7 @@ exit(Weave)
 - `init(Weave)`, `exit(Weave)` to start and stop the runtime. Forgetting this will give you nil pointer exceptions on spawn.
 - `spawn fnCall(args)` which spawns a function that may run on another thread and gives you an awaitable Flowvar handle.
 - `sync(Flowvar)` will await a Flowvar and block until you receive a result.
-- `sync(Weave)` is a global barrier for the main thread on the main task. Allowing nestable barriers for any thread is work-in-progress.
+- `syncRoot(Weave)` is a global barrier for the main thread on the main task.
 - `parallelFor`, `parallelForStrided`, `parallelForStaged`, `parallelForStagedStrided` are described above and in the experimental section.
 - `loadBalance(Weave)` gives the runtime the opportunity to distribute work. Insert this within long computation as due to Weave design, it's busy workers hat are also in charge of load balancing. This is done automatically when using `parallelFor`.
 - `isSpawned` allows you to build speculative algorithm where a thread is spawned only if certain conditions are valid. See the `nqueens` benchmark for an example.

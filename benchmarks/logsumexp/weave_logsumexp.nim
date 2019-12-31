@@ -260,7 +260,7 @@ proc maxWeaveStaged[T: SomeFloat](M: Matrix[T]) : T =
       maxAddr[] = max(maxAddr[], localMax)
       lockAddr[].release()
 
-  sync(Weave)
+  syncRoot(Weave)
   lock.deinitLock()
 
 proc logsumexpWeaveStaged[T: SomeFloat](M: Matrix[T]): T =
@@ -290,7 +290,7 @@ proc logsumexpWeaveStaged[T: SomeFloat](M: Matrix[T]): T =
       lseAddr[] += localLSE
       lockAddr[].release()
 
-  sync(Weave)
+  syncRoot(Weave)
   result = alpha + ln(lse)
   lock.deinitLock()
 

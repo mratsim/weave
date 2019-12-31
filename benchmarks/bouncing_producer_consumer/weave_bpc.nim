@@ -124,7 +124,7 @@ proc main() =
   let start = wtime_msec()
 
   bpc_produce(NumTasksPerDepth, Depth)
-  sync(Weave)
+  syncRoot(Weave)
 
   let stop = wtime_msec()
 
