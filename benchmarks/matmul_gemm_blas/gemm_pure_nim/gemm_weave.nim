@@ -165,7 +165,6 @@ proc gemm_impl[T; ukernel: static MicroKernel](
     # 3. for ic = 0,...,m−1 in steps of mc
     parallelFor icb in 0 ..< tiles.ic_num_tasks:
       captures: {pc, tiles, nc, kc, alpha, beta, vA, vC, M}
-      awaitable: icLoop
 
       let packA = tiles.a + icb * tiles.upanelA_size
       prefetch(packA, Write, LowTemporalLocality)
@@ -180,7 +179,7 @@ proc gemm_impl[T; ukernel: static MicroKernel](
           alpha, packA, tiles.b,                      #    αA[ic:ic+mc, pc:pc+kc] * B[pc:pc+kc, jc:jc+nc] +
           beta, vC.stride(ic, 0)                      #    βC[ic:ic+mc, jc:jc+nc]
         )
-    sync(icLoop)
+    syncRoot(Weave)
 
 # ############################################################
 #

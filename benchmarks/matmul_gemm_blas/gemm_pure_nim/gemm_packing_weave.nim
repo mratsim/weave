@@ -78,7 +78,6 @@ proc pack_B_kc_nc*[T; ukernel: static MicroKernel](
   # 1. Pack n matrices of size kc*nr, n = nc/nr
   parallelForStrided j in 0 ..< unroll_stop, stride = NR:
     captures: {kc, buffer, B}
-    awaitable: packingLoop
     parallelFor k in 0 ..< kc:
       captures: {j, kc, buffer, B}
       for jj in 0 ..< NR:
@@ -94,4 +93,4 @@ proc pack_B_kc_nc*[T; ukernel: static MicroKernel](
       for j in remainder ..< NR: # Pad with 0 if packing over the edge
         offBuf[k*NR + j] = 0.T
 
-  sync(packingLoop)
+  syncRoot(Weave)
