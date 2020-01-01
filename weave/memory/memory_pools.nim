@@ -168,7 +168,7 @@ const
   MostlyUsedRatio = 8
     ## Beyond 7/8 of its capacity an arena is considered mostly used.
   MaxSlowFrees = 8'i8
-    ## In the slow path, up to 5 arenas can be considered for release at once.
+    ## In the slow path, up to 8 arenas can be considered for release at once.
 
 # Sanitizer
 template guardedAccess(memBlock: MemBlock, body: untyped): untyped =
@@ -266,7 +266,6 @@ func getArena(p: pointer): ptr Arena {.inline.} =
   result = cast[ptr Arena](arenaAddr)
 
   # Sanity check to ensure we're in an Arena
-  # TODO: LLVM ASAN, poisoning/unpoisoning?
   postCondition: not result.isNil
   postCondition: not result.allocator.isNil
   postCondition: result.meta.used in 0 .. result.blocks.len
@@ -456,7 +455,7 @@ proc allocEx(pool: var TLPoolAllocator): ptr MemBlock =
 proc initialize*(pool: var TLPoolAllocator) =
   ## Initialize a thread-local memory pool
   ## This automatically reserves one arena
-  ## of WV_MemArenaSize (default 32kB) that can
+  ## of WV_MemArenaSize (default 16kB) that can
   ## serve fixed size memory block for types
   ## of size up to WV_MemBlockSize (default 256B)
   ##
@@ -512,7 +511,6 @@ proc recycle*[T](p: ptr T) {.gcsafe.} =
   ## Returns a memory block to its memory pool.
   ##
   ## This is thread-safe, any thread can call it.
-  ## It must indicates its ID.
   ## A fast path is used if it's the ID of the borrowing thread,
   ## otherwise a slow path will be used.
   ##
