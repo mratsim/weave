@@ -1,6 +1,8 @@
 # Changelog
 
-### v0.3.0 - unreleased
+### v0.x.x - Unreleased
+
+### v0.3.0 - January 2020
 
 `sync(Weave)` has been renamed `syncRoot(Weave)` to highlight that it is only valid on the root task in the main thread. In particular, a procedure that uses syncRoot should not be called be in a multithreaded section. This is a breaking change. In the future such changes will have a deprecation path but the library is only 2 weeks old at the moment.
 
