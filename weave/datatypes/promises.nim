@@ -79,3 +79,48 @@ proc fulfill*(prom: Promise) {.inline.}:
   preCondition: prom.isEmpty
   let wasDelivered = chan.trySend(dummy)
   postCondition: wasDelivered
+
+# Promise ranges
+# ----------------------------------------------------
+# A promise range is a generalization of promises
+# to support a for-loop range
+# It is necessary to use loop tiling to process
+# large loops with dependencies (i.e. depends on tile [0, 32), [32, 64), ...)
+
+type
+  PackedPromises = object
+    # A pack of 256 promises (WV_MemBlockSize) that
+    # fit in a memory pool block.
+    proms: array[WV_MemBlockSize, bool]
+
+  PromiseRange* = ptr object
+    ## A promise range allows expressing dependencies over a for-loop.
+    ## A PromiseRange can at most express up to 7168 iteration dependencies
+    ##
+    ## For example you can express dependencies for
+    ##
+    ## parallelFor 0 ..< 7168:
+    ##   ...
+    ##
+    ## or
+    ##
+    ## parallelFor 0 ..< 458752, stride = 64:
+    ##   ...
+    ##
+    ## Use tiling to express dependencies on large loop ranges:
+    ##
+    ## const tileSize = 64
+    ## parallelForStrided i in 0 ..< M, stride = tileSize:
+    ##   for ii in i ..< min(i+tileSize, M):
+    ##     ...
+    ##
+    ## Tiling significantly improve cache usage and compute locality
+    ## also significantly diminishes scheduling overhead.
+
+    # TODO: this is using shared-memory in a message-passing based runtime!
+    # Max promises on 64-bit: (256 - 4*32) div 8 * 256 = 7168
+    refCount: Atomic[int32]
+    start: int
+    stop: int   # Non-inclusive stop
+    stride: int
+    promises: array[(WV_MemBlockSize - 4*sizeof(int)) div sizeof(pointer), ptr PackedPromises]
