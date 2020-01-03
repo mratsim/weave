@@ -35,26 +35,40 @@ type
     fulfilled*: ptr UncheckedArray[Atomic[int32]]
     numBuckets*: int32
 
+# Internal
+# ----------------------------------------------------
+# Refcounting is started from 0 and we avoid fetchSub with release semantics
+# in the common case of only one reference being live.
+
+
 proc `=destroy`*(prom: var ProducersLoopPromises) {.inline.} =
-  let oldCount = fetchSub(prom.lp.refCount, 1, moRelease)
-  ascertain: oldCount > 0
-  ascertain: not prom.lp.fulfilled.isNil
-  if oldCount == 1:
+  if prom.lp.isNil:
+    return
+
+  if prom.lp.refCount.load(moRelaxed) == 0:
     fence(moAcquire)
-    # Return memory
-    wv_free(prom.lp.fulfilled)
-    recycle(prom.lp)
+    # We have the last reference
+    if not prom.lp.isNil:
+      # Return memory
+      ascertain: not prom.lp.fulfilled.isNil
+      wv_free(prom.lp.fulfilled)
+      recycle(prom.lp)
+  else:
+    discard fetchSub(prom.lp.refCount, 1, moRelease)
 
 proc `=sink`*(dst: var ProducersLoopPromises, src: ProducersLoopPromises) {.inline.} =
   # Don't pay for atomic refcounting when compiler can prove there is no ref change.
-  if dst.lp.refCount.load(moRelaxed) > 0:
-    `=destroy`(dst)
+  `=destroy`(dst)
   system.`=sink`(dst.lp, src.lp)
 
 proc `=`*(dst: var ProducersLoopPromises, src: ProducersLoopPromises) {.inline.} =
-  let oldCount = fetchAdd(src.lp.refCount, 1, moRelaxed)
-  ascertain: oldCount > 0
+  preCondition: not src.lp.isNil
+
+  discard fetchAdd(src.lp.refCount, 1, moRelaxed)
   dst.lp = src.lp
+
+# Public (only exposed within the library)
+# ----------------------------------------------------
 
 proc initialize*(plp: var ProducersLoopPromises, pool: var TLPoolAllocator, start, stop, stride: int32) =
   ## Allocate loop promises (producer side)
@@ -64,7 +78,7 @@ proc initialize*(plp: var ProducersLoopPromises, pool: var TLPoolAllocator, star
   preCondition: stride > 0
 
   plp.lp = pool.borrow(typeof plp.lp[])
-  plp.lp.refCount.store(1, moRelaxed)
+  plp.lp.refCount.store(0, moRelaxed) # We start our refcount at 0
   plp.lp.start = start
   plp.lp.stop = stop
   plp.lp.stride = stride

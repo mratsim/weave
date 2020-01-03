@@ -55,23 +55,31 @@ const dummy = cast[DummyPtr](0xFACADE)
 
 # Internal
 # ----------------------------------------------------
+# Refcounting is started from 0 and we avoid fetchSub with release semantics
+# in the common case of only one reference being live.
 
 proc `=destroy`*(prom: var Promise) {.inline.} =
-  let oldCount = fetchSub(prom.p.refCount, 1, moRelease)
-  if oldCount == 1:
+  if prom.p.isNil:
+    return
+
+  if prom.p.refCount.load(moRelaxed) == 0:
     fence(moAcquire)
-    # Return memory to the memory pool
-    recycle(prom.p)
+    # We have the last reference
+    if not prom.p.isNil:
+      # Return memory to the memory pool
+      recycle(prom.p)
+  else:
+    discard fetchSub(prom.p.refCount, 1, moRelease)
 
 proc `=sink`*(dst: var Promise, src: Promise) {.inline.} =
   # Don't pay for atomic refcounting when compiler can prove there is no ref change
-  if dst.p.refCount.load(moRelaxed) > 0:
-    `=destroy`(dst)
+  `=destroy`(dst)
   system.`=sink`(dst.p, src.p)
 
 proc `=`*(dst: var Promise, src: Promise) {.inline.} =
-  let oldCount = fetchAdd(src.p.refCount, 1, moRelaxed)
-  ascertain: oldCount > 0
+  preCondition: src.p.isNil
+
+  discard fetchAdd(src.p.refCount, 1, moRelaxed)
   dst.p = src.p
 
 proc isFulfilled*(prom: Promise): bool {.inline.} =
@@ -88,7 +96,7 @@ proc newPromise*(pool: var TLPoolAllocator): Promise {.inline.} =
   ## Promise allows to express fine-grain task dependencies
   ## Task dependent on promises will be delayed until it is fulfilled.
   result.p = pool.borrow(typeof result.p[])
-  result.p.refCount.store(1, moRelaxed)
+  result.p.refCount.store(0, moRelaxed) # We start our refcount at 0
 
 proc fulfill*(prom: Promise) {.inline.} =
   ## Deliver on a Promise
