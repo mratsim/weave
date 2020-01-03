@@ -527,6 +527,8 @@ proc recycle*[T](p: ptr T) {.gcsafe.} =
   # Find the owning arena
   let arena = p.getArena()
 
+  # TODO: optional double-frees detection
+
   if getMemThreadID() == arena.meta.threadID.load(moRelaxed):
     # thread-local free
     if arena.meta.localFree.isNil:

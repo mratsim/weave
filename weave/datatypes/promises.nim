@@ -56,24 +56,44 @@ const dummy = cast[DummyPtr](0xFACADE)
 # Internal
 # ----------------------------------------------------
 
-proc `=destroy`*(prom: var Promise) {.inline.} =
+# For now promises must be manually managed due to
+# - https://github.com/nim-lang/Nim/issues/13024
+# Additionally https://github.com/nim-lang/Nim/issues/13025
+# requires workaround
+#
+# proc `=destroy`*(prom: var Promise) {.inline.} =
+#   let oldCount = fetchSub(prom.p.refCount, 1, moRelease)
+#   if oldCount == 1:
+#     fence(moAcquire)
+#     # Return memory to the memory pool
+#     recycle(prom.p)
+#
+# proc `=`*(dst: var Promise, src: Promise) {.inline.}
+#   # Workaround: https://github.com/nim-lang/Nim/issues/13025
+#
+# # Pending https://github.com/nim-lang/Nim/issues/13024
+# proc `=sink`*(dst: var Promise, src: Promise) {.inline.} =
+#   # Don't pay for atomic refcounting when compiler can prove there is no ref change
+#   system.`=sink`(dst, src)
+#
+# proc `=`*(dst: var Promise, src: Promise) {.inline.} =
+#   let oldCount = fetchAdd(src.p.refCount, 1, moRelaxed)
+#   ascertain: oldCount > 0
+#   system.`=`(dst, src)
+
+func incRef*(prom: var Promise) {.inline.} =
+  ## Manual atomic refcounting - workaround https://github.com/nim-lang/Nim/issues/13024
+  let oldCount = fetchAdd(prom.p.refCount, 1, moRelaxed)
+  ascertain: oldCount > 0
+
+func decRef*(prom: var Promise) {.inline.} =
+  ## Manual atomic refcounting - workaround https://github.com/nim-lang/Nim/issues/13024
   let oldCount = fetchSub(prom.p.refCount, 1, moRelease)
+  ascertain: oldCount > 0
   if oldCount == 1:
     fence(moAcquire)
     # Return memory to the memory pool
     recycle(prom.p)
-
-proc `=`*(dst: var Promise, src: Promise) {.inline.}
-  # Workaround: https://github.com/nim-lang/Nim/issues/13025
-
-proc `=sink`*(dst: var Promise, src: Promise) {.inline.} =
-  # Don't pay for atomic refcounting when compiler can prove there is no ref change
-  system.`=sink`(dst, src)
-
-proc `=`*(dst: var Promise, src: Promise) {.inline.} =
-  let oldCount = fetchAdd(src.p.refCount, 1, moRelaxed)
-  ascertain: oldCount > 0
-  system.`=`(dst, src)
 
 proc isFulfilled*(prom: Promise): bool {.inline.} =
   ## Check if a promise is fulfilled.
@@ -125,7 +145,7 @@ proc dispatch(clp: ConsumerLoopPromises, bucket: int32) =
   var idx = bucket
   while idx != 0:
     clp.dispatched[idx] += 1
-    idx = idx shr 1
+    idx = (idx-1) shr 1
 
   clp.dispatched[0] += 1
 
@@ -168,7 +188,6 @@ proc anyFulfilled*(clp: ConsumerLoopPromises): tuple[foundNew: bool, bucket: int
 #       since SPMC broadcast channels can be tested with a single thread-local consumer.
 
 when isMainModule:
-
   proc main() =
     # Promises can't be globals, Nim bug: https://github.com/nim-lang/Nim/issues/13024
     echo "Testing Loop promises (producer + Consumer)"
@@ -188,7 +207,7 @@ when isMainModule:
 
     block:
       let promise = clp.anyFulfilled()
-      doAssert promise.foundNew and promise.bucket == 7
+      doAssert promise.foundNew and promise.bucket == 7, "promise: " & $promise
 
     block:
       let promise = clp.anyFulfilled()
@@ -199,22 +218,22 @@ when isMainModule:
 
     block:
       let promise = clp.anyFulfilled()
-      doAssert promise.foundNew and promise.bucket == 2
+      doAssert promise.foundNew and promise.bucket == 2, "promise: " & $promise
 
     plp.ready(3)
     plp.ready(4)
 
     block:
       let promise = clp.anyFulfilled()
-      doAssert promise.foundNew and promise.bucket == 3
+      doAssert promise.foundNew and promise.bucket == 3, "promise: " & $promise
 
     block:
       let promise = clp.anyFulfilled()
-      doAssert promise.foundNew and promise.bucket == 4
+      doAssert promise.foundNew and promise.bucket == 4, "promise: " & $promise
 
     block:
       let promise = clp.anyFulfilled()
-      doAssert promise.foundNew and promise.bucket == 0
+      doAssert promise.foundNew and promise.bucket == 0, "promise: " & $promise
 
     block:
       let promise = clp.anyFulfilled()

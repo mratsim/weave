@@ -138,7 +138,7 @@ proc ready*(pr: ProducersRangePromises, index: int32) =
 
   while idx != 0:
     pr.fulfilled[idx] += 1
-    idx = idx shr 1
+    idx = (idx-1) shr 1
 
   pr.fulfilled[0] += 1
 
@@ -165,7 +165,7 @@ proc dispatch*(cr: var ConsumerRangeDelayedTasks, internalIndex: int32) =
 
   while idx != 0:
     cr.dispatched[idx] += 1
-    idx = idx shr 1
+    idx = (idx-1) shr 1
 
   cr.dispatched[0] += 1
 

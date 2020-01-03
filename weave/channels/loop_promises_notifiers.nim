@@ -35,26 +35,48 @@ type
     fulfilled*: ptr UncheckedArray[Atomic[int32]]
     numBuckets*: int32
 
-proc `=destroy`*(prom: var ProducersLoopPromises) {.inline.} =
+# For now promises must be manually managed due to
+# - https://github.com/nim-lang/Nim/issues/13024
+# Additionally https://github.com/nim-lang/Nim/issues/13025
+# requires workaround
+#
+# proc `=destroy`*(prom: var ProducersLoopPromises) {.inline.} =
+#   let oldCount = fetchSub(prom.lp.refCount, 1, moRelease)
+#   ascertain: oldCount > 0
+#   ascertain: not prom.lp.fulfilled.isNil
+#   if oldCount == 1:
+#     fence(moAcquire)
+#     # Return memory
+#     wv_free(prom.lp.fulfilled)
+#
+# proc `=`*(dst: var ProducersLoopPromises, src: ProducersLoopPromises) {.inline.}
+#   # Workaround: https://github.com/nim-lang/Nim/issues/13025
+#
+# # Pending https://github.com/nim-lang/Nim/issues/13024
+# proc `=sink`*(dst: var ProducersLoopPromises, src: ProducersLoopPromises) {.inline.} =
+#   # Don't pay for atomic refcounting when compiler can prove there is no ref change.
+#   system.`=sink`(dst, src)
+#
+# proc `=`*(dst: var ProducersLoopPromises, src: ProducersLoopPromises) {.inline.} =
+#   let oldCount = fetchAdd(src.lp.refCount, 1, moRelaxed)
+#   ascertain: oldCount > 0
+#   system.`=`(dst, src)
+
+func incRef*(prom: var ProducersLoopPromises) {.inline.} =
+  ## Manual atomic refcounting - workaround https://github.com/nim-lang/Nim/issues/13024
+  let oldCount = fetchAdd(prom.lp.refCount, 1, moRelaxed)
+  ascertain: oldCount > 0
+
+func decRef*(prom: var ProducersLoopPromises) {.inline.} =
+  ## Manual atomic refcounting - workaround https://github.com/nim-lang/Nim/issues/13024
   let oldCount = fetchSub(prom.lp.refCount, 1, moRelease)
   ascertain: oldCount > 0
   ascertain: not prom.lp.fulfilled.isNil
   if oldCount == 1:
     fence(moAcquire)
-    # Return memory to the memory pool
+    # Return memory
+    wv_free(prom.lp.fulfilled)
     recycle(prom.lp)
-
-proc `=`*(dst: var ProducersLoopPromises, src: ProducersLoopPromises) {.inline.}
-  # Workaround: https://github.com/nim-lang/Nim/issues/13025
-
-proc `=sink`*(dst: var ProducersLoopPromises, src: ProducersLoopPromises) {.inline.} =
-  # Don't pay for atomic refcounting when compiler can prove there is no ref change.
-  system.`=sink`(dst, src)
-
-proc `=`*(dst: var ProducersLoopPromises, src: ProducersLoopPromises) {.inline.} =
-  let oldCount = fetchAdd(src.lp.refCount, 1, moRelaxed)
-  ascertain: oldCount > 0
-  system.`=`(dst, src)
 
 proc initialize*(plp: var ProducersLoopPromises, pool: var TLPoolAllocator, start, stop, stride: int32) =
   ## Allocate loop promises (producer side)
@@ -90,11 +112,10 @@ proc ready*(pr: ProducersLoopPromises, index: int32) =
   # see if a new promise was delivered upon in O(1) time.
   preCondition: index in pr.lp.start ..< pr.lp.stop
   var idx = pr.getBucket(index)
-  ascertain: pr.lp.fulfilled[idx].load(moRelaxed) == 0
 
   while idx != 0:
     discard pr.lp.fulfilled[idx].fetchAdd(1, moRelaxed)
-    idx = idx shr 1
+    idx = (idx-1) shr 1
 
   discard pr.lp.fulfilled[0].fetchAdd(1, moRelaxed)
 
@@ -104,19 +125,20 @@ proc ready*(pr: ProducersLoopPromises, index: int32) =
 # TODO: multithreaded test case
 
 when isMainModule:
+  echo "Testing Loop Promises (Producer)"
 
-  proc main() =
-    # Promises can't be globals, Nim bug: https://github.com/nim-lang/Nim/issues/13024
-    echo "Testing Loop Promises (Producer)"
+  var pool: TLPoolAllocator
+  pool.initialize()
 
-    var pool: TLPoolAllocator
-    pool.initialize()
+  block:
+    var plp: ProducersLoopPromises
+    plp.initialize(pool, 0, 10, 1)
+    doAssert plp.getBucket(0) == 0
 
-    block: # Fulfilling all promises
-      var prodLoopPromises: ProducersLoopPromises
-      prodLoopPromises.initialize(pool, 0, 10000, 1)
-      for i in 0'i32 ..< 10000:
-        prodLoopPromises.ready(i)
-      doAssert prodLoopPromises.lp.fulfilled[0].load(moRelaxed) == 10000
 
-  main()
+  block: # Fulfilling all promises
+    var prodLoopPromises: ProducersLoopPromises
+    prodLoopPromises.initialize(pool, 0, 10000, 1)
+    for i in 0'i32 ..< 10000:
+      prodLoopPromises.ready(i)
+    doAssert prodLoopPromises.lp.fulfilled[0].load(moRelaxed) == 10000
