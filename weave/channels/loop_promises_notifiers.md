@@ -57,8 +57,26 @@ In both cases the space cost is O(n)
 
 Due to the bounded worst-case performance of the binary-tree solution, I lean toward that.
 However, what if all the dependent tasks or a large contiguous proportion (half) are ready?
-It seems like a waste to back to the root of the tree every time
-I sense there is an optimization to be done
+It seems like a waste to back to the root of the tree every time.
+
+I sense there is an optimization to be done. For example,
+the search for promises could return [start, stop), the largest contiguous
+available promise range.
+This changes the costs to:
+- if n tasks are ready: cost is O(1)
+- if only 1 task is ever ready at a time: cost is O(n log(n)) (amortized over n checks, same as baseline)
+- if half the tasks are ready, none contiguous: cost is O(2 * n/2 log(n)) (2 costly instances of n/2 log(n) retrievals, same as baseline)
+- otherwise this can be significantly more efficient than the baseline o(n log(n)) cumulated cost
+
+It is however very important to keep memory usage bounded at O(n)
+as any increased memory usage will be scaled by the number of dependant tasks,
+i.e. introducing an extra int32 field doubles the memory requirement.
+If 2 tasks are dependant on that promise it's 4x the memory usage ...
+
+Even worse allocating/releasing memory from a random thread
+is probably the single biggest source of overhead in a multithreaded runtime (the main reason why LazyFlowvar allocated on the stack with `alloca` exist)
+Assuming we find a way to go from O(n log(n)) binary-tree access to O(log(n)),
+if the cost is O(2n) memory space, we win locally but will pay it dearly in memory management overhead.
 
 ## Implementation
 
@@ -92,7 +110,7 @@ type
     # The main issue is false-sharing / cache-ping pong if many thread are fulfilling
     # promises stored in the same cache lin, but padding would be very memory inefficient.
     start, stop, stride: int32
-    fullfilled: seq[int32]
+    fulfilled: seq[int32]
 
 proc newPromiseRange(start, stop, stride: int32): ProducersRangePromises =
   assert stop > start
@@ -104,21 +122,21 @@ proc newPromiseRange(start, stop, stride: int32): ProducersRangePromises =
   result.stride = stride
 
   let bufLen = (result.stop - result.start + result.stride-1) div result.stride
-  result.fullfilled.newSeq(bufLen)
+  result.fulfilled.newSeq(bufLen)
 
 proc getInternalIndex(pr: ProducersRangePromises, iterIndex: int32): int32 {.inline.} =
   assert iterIndex in pr.start ..< pr.stop
   result = (iterIndex - pr.start) div pr.stride
 
 proc len(pr: ProducersRangePromises): int32 {.inline.} =
-  pr.fullfilled.len.int32
+  pr.fulfilled.len.int32
 
 proc ready*(pr: ProducersRangePromises, index: int32) =
   ## requires the public iteration index in [start, stop) range.
   assert index in pr.start ..< pr.stop
   var idx = pr.getInternalIndex(index)
   while true:
-    pr.fullfilled[idx] += 1
+    pr.fulfilled[idx] += 1
     idx = idx shr 1
     if idx == 0:
       break
@@ -138,7 +156,7 @@ type
 
 proc newConsumerRangeDelayedTasks(pr: ProducersRangePromises): ConsumerRangeDelayedTasks =
   result.promises = pr
-  result.dispatched.newSeq(pr.fullfilled.len)
+  result.dispatched.newSeq(pr.fulfilled.len)
 
 proc dispatch*(cr: var ConsumerRangeDelayedTasks, internalIndex: int32) =
   ## requires the internal index in [0, dispatched.len) range.
@@ -153,7 +171,7 @@ proc anyAvailable(cr: ConsumerRangeDelayedTasks, index: int32): bool {.inline.} 
   let pr = cr.promises
   if index >= pr.len:
     return false
-  return pr.fullfilled[index] > cr.dispatched[index]
+  return pr.fulfilled[index] > cr.dispatched[index]
 
 proc anyFulfilled*(cr: var ConsumerRangeDelayedTasks): tuple[foundNew: bool, index: int32] =
   ## This search for a fulfilled promise that wasn't already
