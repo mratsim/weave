@@ -56,44 +56,23 @@ const dummy = cast[DummyPtr](0xFACADE)
 # Internal
 # ----------------------------------------------------
 
-# For now promises must be manually managed due to
-# - https://github.com/nim-lang/Nim/issues/13024
-# Additionally https://github.com/nim-lang/Nim/issues/13025
-# requires workaround
-#
-# proc `=destroy`*(prom: var Promise) {.inline.} =
-#   let oldCount = fetchSub(prom.p.refCount, 1, moRelease)
-#   if oldCount == 1:
-#     fence(moAcquire)
-#     # Return memory to the memory pool
-#     recycle(prom.p)
-#
-# proc `=`*(dst: var Promise, src: Promise) {.inline.}
-#   # Workaround: https://github.com/nim-lang/Nim/issues/13025
-#
-# # Pending https://github.com/nim-lang/Nim/issues/13024
-# proc `=sink`*(dst: var Promise, src: Promise) {.inline.} =
-#   # Don't pay for atomic refcounting when compiler can prove there is no ref change
-#   system.`=sink`(dst, src)
-#
-# proc `=`*(dst: var Promise, src: Promise) {.inline.} =
-#   let oldCount = fetchAdd(src.p.refCount, 1, moRelaxed)
-#   ascertain: oldCount > 0
-#   system.`=`(dst, src)
-
-func incRef*(prom: var Promise) {.inline.} =
-  ## Manual atomic refcounting - workaround https://github.com/nim-lang/Nim/issues/13024
-  let oldCount = fetchAdd(prom.p.refCount, 1, moRelaxed)
-  ascertain: oldCount > 0
-
-func decRef*(prom: var Promise) {.inline.} =
-  ## Manual atomic refcounting - workaround https://github.com/nim-lang/Nim/issues/13024
+proc `=destroy`*(prom: var Promise) {.inline.} =
   let oldCount = fetchSub(prom.p.refCount, 1, moRelease)
-  ascertain: oldCount > 0
   if oldCount == 1:
     fence(moAcquire)
     # Return memory to the memory pool
     recycle(prom.p)
+
+proc `=sink`*(dst: var Promise, src: Promise) {.inline.} =
+  # Don't pay for atomic refcounting when compiler can prove there is no ref change
+  if dst.p.refCount.load(moRelaxed) > 0:
+    `=destroy`(dst)
+  system.`=sink`(dst.p, src.p)
+
+proc `=`*(dst: var Promise, src: Promise) {.inline.} =
+  let oldCount = fetchAdd(src.p.refCount, 1, moRelaxed)
+  ascertain: oldCount > 0
+  dst.p = src.p
 
 proc isFulfilled*(prom: Promise): bool {.inline.} =
   ## Check if a promise is fulfilled.

@@ -35,40 +35,7 @@ type
     fulfilled*: ptr UncheckedArray[Atomic[int32]]
     numBuckets*: int32
 
-# For now promises must be manually managed due to
-# - https://github.com/nim-lang/Nim/issues/13024
-# Additionally https://github.com/nim-lang/Nim/issues/13025
-# requires workaround
-#
-# proc `=destroy`*(prom: var ProducersLoopPromises) {.inline.} =
-#   let oldCount = fetchSub(prom.lp.refCount, 1, moRelease)
-#   ascertain: oldCount > 0
-#   ascertain: not prom.lp.fulfilled.isNil
-#   if oldCount == 1:
-#     fence(moAcquire)
-#     # Return memory
-#     wv_free(prom.lp.fulfilled)
-#
-# proc `=`*(dst: var ProducersLoopPromises, src: ProducersLoopPromises) {.inline.}
-#   # Workaround: https://github.com/nim-lang/Nim/issues/13025
-#
-# # Pending https://github.com/nim-lang/Nim/issues/13024
-# proc `=sink`*(dst: var ProducersLoopPromises, src: ProducersLoopPromises) {.inline.} =
-#   # Don't pay for atomic refcounting when compiler can prove there is no ref change.
-#   system.`=sink`(dst, src)
-#
-# proc `=`*(dst: var ProducersLoopPromises, src: ProducersLoopPromises) {.inline.} =
-#   let oldCount = fetchAdd(src.lp.refCount, 1, moRelaxed)
-#   ascertain: oldCount > 0
-#   system.`=`(dst, src)
-
-func incRef*(prom: var ProducersLoopPromises) {.inline.} =
-  ## Manual atomic refcounting - workaround https://github.com/nim-lang/Nim/issues/13024
-  let oldCount = fetchAdd(prom.lp.refCount, 1, moRelaxed)
-  ascertain: oldCount > 0
-
-func decRef*(prom: var ProducersLoopPromises) {.inline.} =
-  ## Manual atomic refcounting - workaround https://github.com/nim-lang/Nim/issues/13024
+proc `=destroy`*(prom: var ProducersLoopPromises) {.inline.} =
   let oldCount = fetchSub(prom.lp.refCount, 1, moRelease)
   ascertain: oldCount > 0
   ascertain: not prom.lp.fulfilled.isNil
@@ -77,6 +44,17 @@ func decRef*(prom: var ProducersLoopPromises) {.inline.} =
     # Return memory
     wv_free(prom.lp.fulfilled)
     recycle(prom.lp)
+
+proc `=sink`*(dst: var ProducersLoopPromises, src: ProducersLoopPromises) {.inline.} =
+  # Don't pay for atomic refcounting when compiler can prove there is no ref change.
+  if dst.lp.refCount.load(moRelaxed) > 0:
+    `=destroy`(dst)
+  system.`=sink`(dst.lp, src.lp)
+
+proc `=`*(dst: var ProducersLoopPromises, src: ProducersLoopPromises) {.inline.} =
+  let oldCount = fetchAdd(src.lp.refCount, 1, moRelaxed)
+  ascertain: oldCount > 0
+  dst.lp = src.lp
 
 proc initialize*(plp: var ProducersLoopPromises, pool: var TLPoolAllocator, start, stop, stride: int32) =
   ## Allocate loop promises (producer side)
