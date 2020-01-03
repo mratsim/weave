@@ -57,7 +57,7 @@ In both cases the space cost is O(n)
 
 Due to the bounded worst-case performance of the binary-tree solution, I lean toward that.
 However, what if all the dependent tasks or a large contiguous proportion (half) are ready?
-It seems like a waste to back to the root of the tree every time.
+It seems like a waste to start from the root of the tree every time.
 
 I sense there is an optimization to be done. For example,
 the search for promises could return [start, stop), the largest contiguous
@@ -69,9 +69,9 @@ This changes the costs to:
 - otherwise this can be significantly more efficient than the baseline o(n log(n)) cumulated cost
 
 It is however very important to keep memory usage bounded at O(n)
-as any increased memory usage will be scaled by the number of dependant tasks,
-i.e. introducing an extra int32 field doubles the memory requirement.
-If 2 tasks are dependant on that promise it's 4x the memory usage ...
+as any increased memory usage will be scaled by the number of dependent tasks,
+i.e. introducing an extra int32 field per node doubles the memory requirement.
+If 2 tasks are dependent on that promise it's 4x the memory usage ...
 
 Even worse allocating/releasing memory from a random thread
 is probably the single biggest source of overhead in a multithreaded runtime (the main reason why LazyFlowvar allocated on the stack with `alloca` exist)
@@ -103,7 +103,7 @@ import sequtils
 
 type
   ProducersRangePromises = ref object
-    ## This is a "distributed" binary indexed tree
+    ## This is a "concurrent" binary array tree
     ## that holds promises over a for-loop range.
     ## The producers which fulfill a promise updates this tree.
     # In the threaded-case, this is easily thread-safe as only monotonic increment are used
@@ -135,11 +135,12 @@ proc ready*(pr: ProducersRangePromises, index: int32) =
   ## requires the public iteration index in [start, stop) range.
   assert index in pr.start ..< pr.stop
   var idx = pr.getInternalIndex(index)
-  while true:
+
+  while idx != 0:
     pr.fulfilled[idx] += 1
     idx = idx shr 1
-    if idx == 0:
-      break
+
+  pr.fulfilled[0] += 1
 
 # Consumers' side
 # ----------------------------------------------------
@@ -161,11 +162,12 @@ proc newConsumerRangeDelayedTasks(pr: ProducersRangePromises): ConsumerRangeDela
 proc dispatch*(cr: var ConsumerRangeDelayedTasks, internalIndex: int32) =
   ## requires the internal index in [0, dispatched.len) range.
   var idx = internalIndex
-  while true:
+
+  while idx != 0:
     cr.dispatched[idx] += 1
     idx = idx shr 1
-    if idx == 0:
-      break
+
+  cr.dispatched[0] += 1
 
 proc anyAvailable(cr: ConsumerRangeDelayedTasks, index: int32): bool {.inline.} =
   let pr = cr.promises

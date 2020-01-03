@@ -82,6 +82,7 @@ const SizeofMetadata: int = (block:
   ## update this const
 
 const MaxBlocks = (WV_MemArenaSize - SizeofMetadata) div WV_MemBlockSize
+  ## 62
 
 type
   MemBlock {.union.} = object
