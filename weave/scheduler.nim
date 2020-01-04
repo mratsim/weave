@@ -8,7 +8,8 @@
 import
   ./instrumentation/[contracts, profilers, loggers],
   ./primitives/barriers,
-  ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars, sparsesets, binary_worker_trees, bounded_queues],
+  ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars, sparsesets],
+  ./datatypes/[binary_worker_trees, bounded_queues, promises],
   ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_spsc_single],
   ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
   ./contexts, ./config,
@@ -291,3 +292,46 @@ proc schedule*(task: sink Task) =
     dispatchElseDecline(req)
 
   profile_start(enq_deq_task)
+
+proc scheduleDelayedTasks*() =
+  ## A worker checks its collection of dependent tasks
+  ## and the associated promises. If a promise is fulfilled
+  ## the task enters normal schedule.
+  ## This greedily schedules as much tasks as possible to expose as
+  ## much parallelism as possible.
+  preCondition: myWorker().promises.len == myWorker().dependentTasks.len
+  preCondition: myWorker().loopPromises.len == myWorker().dependentLoopTasks.len
+
+  # TODO: tasks can depend on multiple promises and a mix of normal and loop tasks.
+  #       the data structure must be changed.
+  profile(timer_enq_deq_delayed_task):
+    # Promise for classic tasks
+    var i = 0
+    while i < myWorker().promises.len:
+      if myWorker().promises[i].isFulfilled:
+        myWorker().deque.addFirst myWorker().dependentTasks[i]
+        # del is O(1), it replaces the deleted item with the last
+        # Also Nim sequences in oldruntime don't automatically call `=destroy` so we do it manually
+        # TODO: when a stable release of Nim uses seq with destructors
+        #       remove the manual calls
+        `=destroy`(myWorker().promises[i])
+        myWorker().dependentTasks.del(i)
+        myWorker().promises.del(i)
+        # don't increment i here, the last task was dragged in this position.
+      else:
+        i += 1
+
+    # Promise for loop tasks
+    i = 0
+    while i < myWorker().loopPromises.len:
+      # TODO: We assume that a worker holds the whole set of loop tasks
+      while (let promise = myWorker().loopPromises[i].anyFulfilled();
+             promise.foundNew):
+        myWorker().deque.addFirst myWorker().dependentLoopTasks[i][promise.bucket]
+
+        if myWorker().loopPromises[i].allDispatched():
+          myWorker().loopPromises.del(i)
+          myWorker().dependentLoopTasks.del(i)
+          # the last loop tasks/promises are dragged in position i
+          # and we restart a new inner while
+      i += 1

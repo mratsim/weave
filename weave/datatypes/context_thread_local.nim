@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ./bounded_queues, ./sync_types, ./prell_deques, ./binary_worker_trees,
+  ./bounded_queues, ./sync_types, ./prell_deques, ./binary_worker_trees, ./promises,
   ../config,
   ../memory/[lookaside_lists, persistacks, allocs],
   ../instrumentation/contracts,
@@ -42,8 +42,19 @@ type
     left*: WorkerID
     right*: WorkerID
     parent*: WorkerID
+
     workSharingRequests*: BoundedQueue[2, StealRequest]
     deque*: PrellDeque[Task]
+    # ⚠️ - without gc:destructors / gc:arc / newruntime, the destructors
+    #      are not properly triggered, and those are refcounted types.
+    #      The promises will also clog the memory pool.
+    # TODO: tasks can depend on multiple promises and a mix of normal and loop tasks.
+    # TODO: We assume that a worker holds the whole set of loop tasks
+    promises*: seq[Promise]
+    dependentTasks*: seq[Task]
+    loopPromises*: seq[ConsumerLoopPromises]
+    dependentLoopTasks*: seq[seq[Task]]
+
     currentTask*: Task
     leftIsWaiting*: bool
     rightIsWaiting*: bool

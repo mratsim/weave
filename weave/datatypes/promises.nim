@@ -30,10 +30,12 @@ import
 #
 # Details, use-cases, competing approaches provided at: https://github.com/mratsim/weave/issues/31
 
+# TODO: type erasure via a variant
+
 type
   DummyPtr = ptr object
 
-  Promise = object
+  Promise* = object
     ## A promise is a placeholder for the input of a task.
     ## Tasks that depend on a promise are delayed until that
     ## promise is delivered.
@@ -70,6 +72,7 @@ proc `=destroy`*(prom: var Promise) {.inline.} =
       recycle(prom.p)
   else:
     discard fetchSub(prom.p.refCount, 1, moRelease)
+  prom.p = nil
 
 proc `=sink`*(dst: var Promise, src: Promise) {.inline.} =
   # Don't pay for atomic refcounting when compiler can prove there is no ref change
@@ -168,6 +171,10 @@ proc anyFulfilled*(clp: ConsumerLoopPromises): tuple[foundNew: bool, bucket: int
   result.foundNew = true
   ascertain: result.bucket in 0 ..< clp.producers.lp.numBuckets
   clp.dispatch(result.bucket)
+
+proc allDispatched*(clp: ConsumerLoopPromises): bool =
+  ## Returns true if no more promises are expected
+  return clp.dispatched[0] == clp.producers.lp.numBuckets
 
 # Sanity checks
 # ------------------------------------------------------------------------------

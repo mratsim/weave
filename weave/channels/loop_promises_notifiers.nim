@@ -56,6 +56,8 @@ proc `=destroy`*(prom: var ProducersLoopPromises) {.inline.} =
   else:
     discard fetchSub(prom.lp.refCount, 1, moRelease)
 
+  prom.lp = nil
+
 proc `=sink`*(dst: var ProducersLoopPromises, src: ProducersLoopPromises) {.inline.} =
   # Don't pay for atomic refcounting when compiler can prove there is no ref change.
   `=destroy`(dst)

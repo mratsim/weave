@@ -24,7 +24,7 @@ const
 
 template checkName(name: untyped) {.used.} =
   static:
-    if astToStr(name) notin ["run_task", "enq_deq_task", "send_recv_task", "send_recv_req", "idle"]:
+    if astToStr(name) notin ["run_task", "enq_deq_task", "enq_deq_delayed_task", "send_recv_task", "send_recv_req", "idle"]:
       raise newException(
         ValueError,
         "Invalid profile name: \"" & astToStr(name) & "\"\n" &
@@ -81,12 +81,14 @@ when defined(WV_Profile):
       timer_elapsed(timer_send_recv_req, tkMicroseconds),
       timer_elapsed(timer_send_recv_task, tkMicroseconds),
       timer_elapsed(timer_enq_deq_task, tkMicroseconds),
+      timer_elapsed(timer_enq_deq_delayed_task, tkMicroseconds),
       timer_elapsed(timer_idle, tkMicroseconds),
       timers_elapsed(
         timer_run_task,
         timer_send_recv_req,
         timer_send_recv_task,
         timer_enq_deq_task,
+        timer_enq_deq_delayed_task,
         timer_idle,
         tkMicroseconds
       )
