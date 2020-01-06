@@ -136,15 +136,13 @@ proc fulfill*(pledge: Pledge) =
   ## Fulfills a pledge
   ## All ready tasks that depended on that pledge will be scheduled immediately.
   ## A ready task is a task that has all its pledged dependencies fulfilled.
-  fulfillImpl():
-    myWorker().deque.addFirst task
+  fulfillImpl(pledge, myWorker().deque, addFirst)
 
 proc fulfill*(pledge: Pledge, index: SomeInteger) =
   ## Fulfills an iteration pledge
   ## All ready tasks that depended on that pledge will be scheduled immediately.
   ## A ready task is a task that has all its pledged dependencies fulfilled.
-  fulfillIterImpl(int32(index)):
-    myWorker().deque.addFirst task
+  fulfillIterImpl(pledge, int32(index), myWorker().deque, addFirst)
 
 # Dynamic Scopes
 # ----------------------------------------------------------------------------------

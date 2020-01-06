@@ -14,13 +14,14 @@ import
   # Internal
   ./scheduler, ./contexts, ./await_fsm,
   ./datatypes/[flowvars, sync_types],
-  ./instrumentation/[contracts, profilers]
+  ./instrumentation/[contracts, profilers],
+  ./channels/pledges
 
 # workaround visibility issues
 export forceFuture
 export profilers, contexts
 
-macro spawn*(funcCall: typed): untyped =
+proc spawnImpl(pledge: NimNode, pledgeIndex: NimNode, funcCall: NimNode): NimNode =
   # We take typed argument so that overloading resolution
   # is already done and arguments are semchecked
   funcCall.expectKind(nnkCall)
@@ -63,6 +64,27 @@ macro spawn*(funcCall: typed): untyped =
   var fnCall = newCall(fn)
   let data = ident("data")   # typed pointer to data
 
+  # Schedule immediately or delay on dependencies
+  var scheduleBlock: NimNode
+  let task = ident"task"
+  if pledge.isNil:
+    scheduleBlock = newCall(bindSym"schedule", task)
+  elif pledgeIndex.kind == nnkIntLit and pledgeIndex.intVal == NoIter:
+    scheduleBlock = newCall(
+        bindSym"delayedUntil",
+        task,
+        pledge,
+        newCall(bindSym"myMemPool")
+      )
+  else:
+    scheduleBlock = newCall(
+        bindSym"delayedUntil",
+        task,
+        pledge,
+        newCall(ident"int32", pledgeIndex),
+        newCall(bindSym"myMemPool")
+    )
+
   if not needFuture: # TODO: allow awaiting on a Flowvar[void]
     if funcCall.len == 2:
       # With only 1 arg, the tuple syntax doesn't construct a tuple
@@ -89,12 +111,12 @@ macro spawn*(funcCall: typed): untyped =
         # TODO profiling templates visibility issue
         timer_start(timer_enq_deq_task)
       block enq_deq_task:
-        let task = newTaskFromCache()
-        task.parent = myTask()
-        task.fn = `async_fn`
+        let `task` = newTaskFromCache()
+        `task`.parent = myTask()
+        `task`.fn = `async_fn`
         when bool(`withArgs`):
-          cast[ptr `argsTy`](task.data.addr)[] = `args`
-        schedule(task)
+          cast[ptr `argsTy`](`task`.data.addr)[] = `args`
+        `scheduleBlock`
       when defined(WV_profile):
         timer_stop(timer_enq_deq_task)
 
@@ -136,14 +158,14 @@ macro spawn*(funcCall: typed): untyped =
         # TODO profiling templates visibility issue
         timer_start(timer_enq_deq_task)
       block enq_deq_task:
-        let task = newTaskFromCache()
-        task.parent = myTask()
-        task.fn = `async_fn`
-        task.has_future = true
-        task.futureSize = uint8(sizeof(`retType`))
+        let `task` = newTaskFromCache()
+        `task`.parent = myTask()
+        `task`.fn = `async_fn`
+        `task`.has_future = true
+        `task`.futureSize = uint8(sizeof(`retType`))
         let `fut` = newFlowvar(myMemPool(), `freshIdent`)
-        cast[ptr `futArgsTy`](task.data.addr)[] = `futArgs`
-        schedule(task)
+        cast[ptr `futArgsTy`](`task`.data.addr)[] = `futArgs`
+        `scheduleBlock`
         when defined(WV_profile):
           timer_stop(timer_enq_deq_task)
         # Return the future
@@ -152,6 +174,9 @@ macro spawn*(funcCall: typed): untyped =
   # Wrap in a block for namespacing
   result = nnkBlockStmt.newTree(newEmptyNode(), result)
   # echo result.toStrLit
+
+macro spawn(fnCall: typed): untyped =
+  result = spawnImpl(nil, newLit(-1), fnCall)
 
 # Sanity checks
 # --------------------------------------------------------

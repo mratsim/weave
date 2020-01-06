@@ -174,7 +174,7 @@ type
     deferredOut: Atomic[int32]
     fulfilled: Atomic[bool]
 
-const NoIter = -1
+const NoIter* = -1
 
 # Internal
 # ----------------------------------------------------
@@ -323,15 +323,15 @@ proc delayedUntil*(task: Task, pledge: Pledge, pool: var TLPoolAllocator): bool 
   discard pledge.p.impl.deferredOut.fetchAdd(1, moRelaxed)
   return true
 
-template fulfillImpl*(pledge: Pledge, enqueueStmt: untyped) =
+template fulfillImpl*(pledge: Pledge, queue, enqueue: typed) =
   ## A producer thread fulfills a pledge.
   ## A pledge can only be fulfilled once.
   ## A producer will immediately scheduled all tasks dependent on that pledge
   ## unless they also depend on another unfulfilled pledge.
   ## Dependent tasks scheduled at a later time will be scheduled immediately
   ##
-  ## `enqueueStmt` is a statement to enqueue a single task in the worker queue.
-  ## a `task` symbol will be injected and usable at the caller site
+  ## `queue` is the data structure for ready tasks
+  ## `enqueue` is the correspondig enqueing proc
   ## This should be wrapped in a proc to avoid code-bloat as the template is big
   preCondition: not pledge.p.isNil
   preCondition: pledge.p.kind == Single
@@ -343,7 +343,7 @@ template fulfillImpl*(pledge: Pledge, enqueueStmt: untyped) =
 
   # TODO: some state machine here?
   while true:
-    var task {.inject.}: Task
+    var task: Task
     var taskNode: TaskNode
     while pledge.p.impl.chan[].tryRecv(taskNode):
       ascertain: taskNode.bucketID == NoIter
@@ -357,7 +357,7 @@ template fulfillImpl*(pledge: Pledge, enqueueStmt: untyped) =
         recycle(taskNode)
         taskNode = depNode
       if not wasDelayed:
-        enqueueStmt
+        enqueue(queue, task)
         recycle(taskNode)
 
     if pledge.p.impl.deferredOut.load(moAcquire) != pledge.p.impl.deferredIn.load(moAcquire):
@@ -431,7 +431,7 @@ proc delayedUntil*(task: Task, pledge: Pledge, index: int32, pool: var TLPoolAll
   discard pledge.p.impls[bucket].deferredOut.fetchAdd(1, moRelaxed)
   return true
 
-template fulfillIterImpl*(pledge: Pledge, index: int32, enqueueStmt: untyped) =
+template fulfillIterImpl*(pledge: Pledge, index: int32, queue, enqueue: typed) =
   ## A producer thread fulfills a pledge.
   ## A pledge can only be fulfilled once.
   ## A producer will immediately scheduled all tasks dependent on that pledge
@@ -467,7 +467,7 @@ template fulfillIterImpl*(pledge: Pledge, index: int32, enqueueStmt: untyped) =
         recycle(taskNode)
         taskNode = depNode
       if not wasDelayed:
-        enqueueStmt
+        enqueue(queue, task)
         recycle(taskNode)
 
     if pledge.p.impls[bucket].deferredOut.load(moAcquire) != pledge.p.impls[bucket].deferredIn.load(moAcquire):
@@ -512,8 +512,7 @@ when isMainModule:
 
     doAssert stack.count == 0
 
-    pledge1.fulfillImpl():
-      stack.add task
+    pledge1.fulfillImpl(stack, add)
 
     doAssert stack.count == 1
 
@@ -538,8 +537,7 @@ when isMainModule:
         doAssert delayed
 
     doAssert stack.count == 1
-    pledge2.fulfillImpl():
-      stack.add task
+    pledge2.fulfillImpl(stack, add)
     doAssert stack.count == 3
 
   mainSingle()
@@ -556,8 +554,7 @@ when isMainModule:
 
     doAssert stack.count == 0
 
-    pledge1.fulfillIterImpl(3):
-      stack.add task
+    pledge1.fulfillIterImpl(3, stack, add)
 
     doAssert stack.count == 1
 
@@ -582,8 +579,7 @@ when isMainModule:
         doAssert delayed
 
     doAssert stack.count == 1
-    pledge2.fulfillIterImpl(4):
-      stack.add task
+    pledge2.fulfillIterImpl(4, stack, add)
     doAssert stack.count == 3
 
   mainLoop()
