@@ -9,8 +9,8 @@ import
   # stdlib
   atomics,
   # Internals
-  ../channels/channels_mpsc_unbounded_batch,
-  ./sync_types,
+  ./channels_mpsc_unbounded_batch,
+  ../datatypes/sync_types,
   ../memory/[allocs, memory_pools],
   ../instrumentation/contracts,
   ../config
@@ -149,8 +149,6 @@ type
 
   PledgePtr = ptr object
     refCount: Atomic[int32]
-    deferredIn: Atomic[int32]
-    deferredOut: Atomic[int32]
     case kind: PledgeKind
     of Single:
       impl: PledgeImpl
@@ -171,6 +169,8 @@ type
     #   As a compromise instead of padding by 2x cachelines
     #   we could have Consumer | count | Producer with only cache-line padding.
     chan{.align: WV_CacheLinePadding.}: ptr ChannelMpscUnboundedBatch[TaskNode]
+    deferredIn: Atomic[int32]
+    deferredOut: Atomic[int32]
     fulfilled: Atomic[bool]
 
 const NoIter = -1
@@ -241,11 +241,11 @@ proc delayedUntil*(task: Task, pledge: Pledge, pool: var TLPoolAllocator): bool 
     return false
 
   # Mutual exclusion / prevent races
-  discard pledge.p.deferredIn.fetchAdd(1, moRelaxed)
+  discard pledge.p.impl.deferredIn.fetchAdd(1, moRelaxed)
 
   if pledge.p.impl.fulfilled.load(moRelaxed):
     fence(moAcquire)
-    discard pledge.p.deferredOut.fetchAdd(1, moRelaxed)
+    discard pledge.p.impl.deferredOut.fetchAdd(1, moRelaxed)
     return false
 
   # Send the task to the pledge fulfiller
@@ -255,7 +255,7 @@ proc delayedUntil*(task: Task, pledge: Pledge, pool: var TLPoolAllocator): bool 
   taskNode.pledge = default(Pledge) # Don't need to store the pledge reference if there is only the current one
   taskNode.iterID = NoIter
   discard pledge.p.impl.chan[].trySend(taskNode)
-  discard pledge.p.deferredOut.fetchAdd(1, moRelaxed)
+  discard pledge.p.impl.deferredOut.fetchAdd(1, moRelaxed)
   return true
 
 proc delayedUntil(taskNode: TaskNode, curTask: Task): bool =
@@ -270,11 +270,11 @@ proc delayedUntil(taskNode: TaskNode, curTask: Task): bool =
     return false
 
   # Mutual exclusion / prevent races
-  discard taskNode.pledge.p.deferredIn.fetchAdd(1, moRelaxed)
+  discard taskNode.pledge.p.impl.deferredIn.fetchAdd(1, moRelaxed)
 
   if taskNode.pledge.p.impl.fulfilled.load(moRelaxed):
     fence(moAcquire)
-    discard taskNode.pledge.p.deferredOut.fetchAdd(1, moRelaxed)
+    discard taskNode.pledge.p.impl.deferredOut.fetchAdd(1, moRelaxed)
     return false
 
   # Send the task to the pledge fulfiller
@@ -282,7 +282,7 @@ proc delayedUntil(taskNode: TaskNode, curTask: Task): bool =
   let pledge = taskNode.pledge
   taskNode.pledge = default(Pledge)
   discard pledge.p.impl.chan[].trySend(taskNode)
-  discard pledge.p.deferredOut.fetchAdd(1, moRelaxed)
+  discard pledge.p.impl.deferredOut.fetchAdd(1, moRelaxed)
   return true
 
 template fulfill*(pledge: Pledge, enqueueStmt: untyped) =
@@ -321,7 +321,7 @@ template fulfill*(pledge: Pledge, enqueueStmt: untyped) =
         enqueueStmt
         recycle(taskNode)
 
-    if pledge.p.deferredOut.load(moAcquire) != pledge.p.deferredIn.load(moAcquire):
+    if pledge.p.impl.deferredOut.load(moAcquire) != pledge.p.impl.deferredIn.load(moAcquire):
       cpuRelax()
     else:
       break
