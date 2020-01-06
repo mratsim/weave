@@ -323,7 +323,7 @@ proc delayedUntil*(task: Task, pledge: Pledge, pool: var TLPoolAllocator): bool 
   discard pledge.p.impl.deferredOut.fetchAdd(1, moRelaxed)
   return true
 
-template fulfill*(pledge: Pledge, enqueueStmt: untyped) =
+template fulfillImpl*(pledge: Pledge, enqueueStmt: untyped) =
   ## A producer thread fulfills a pledge.
   ## A pledge can only be fulfilled once.
   ## A producer will immediately scheduled all tasks dependent on that pledge
@@ -431,7 +431,7 @@ proc delayedUntil*(task: Task, pledge: Pledge, index: int32, pool: var TLPoolAll
   discard pledge.p.impls[bucket].deferredOut.fetchAdd(1, moRelaxed)
   return true
 
-template fulfillIter*(pledge: Pledge, index: int32, enqueueStmt: untyped) =
+template fulfillIterImpl*(pledge: Pledge, index: int32, enqueueStmt: untyped) =
   ## A producer thread fulfills a pledge.
   ## A pledge can only be fulfilled once.
   ## A producer will immediately scheduled all tasks dependent on that pledge
@@ -512,7 +512,7 @@ when isMainModule:
 
     doAssert stack.count == 0
 
-    pledge1.fulfill():
+    pledge1.fulfillImpl():
       stack.add task
 
     doAssert stack.count == 1
@@ -538,7 +538,7 @@ when isMainModule:
         doAssert delayed
 
     doAssert stack.count == 1
-    pledge2.fulfill():
+    pledge2.fulfillImpl():
       stack.add task
     doAssert stack.count == 3
 
@@ -556,7 +556,7 @@ when isMainModule:
 
     doAssert stack.count == 0
 
-    pledge1.fulfillIter(3):
+    pledge1.fulfillIterImpl(3):
       stack.add task
 
     doAssert stack.count == 1
@@ -582,7 +582,7 @@ when isMainModule:
         doAssert delayed
 
     doAssert stack.count == 1
-    pledge2.fulfillIter(4):
+    pledge2.fulfillIterImpl(4):
       stack.add task
     doAssert stack.count == 3
 

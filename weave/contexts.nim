@@ -7,7 +7,7 @@
 
 import
   ./datatypes/[context_global, context_thread_local, sync_types, prell_deques, binary_worker_trees],
-  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch],
+  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, pledges],
   ./memory/[persistacks, lookaside_lists, memory_pools, allocs],
   ./config,
   ./instrumentation/[profilers, loggers, contracts]
@@ -128,6 +128,23 @@ proc flushAndDispose*(dq: var PrellDeque) =
   let leftovers = flush(dq)
   for task in items(leftovers):
     recycle(task)
+
+# Pledges
+# ----------------------------------------------------------------------------------
+
+proc fulfill*(pledge: Pledge) =
+  ## Fulfills a pledge
+  ## All ready tasks that depended on that pledge will be scheduled immediately.
+  ## A ready task is a task that has all its pledged dependencies fulfilled.
+  fulfillImpl():
+    myWorker().deque.addFirst task
+
+proc fulfill*(pledge: Pledge, index: SomeInteger) =
+  ## Fulfills an iteration pledge
+  ## All ready tasks that depended on that pledge will be scheduled immediately.
+  ## A ready task is a task that has all its pledged dependencies fulfilled.
+  fulfillIterImpl(int32(index)):
+    myWorker().deque.addFirst task
 
 # Dynamic Scopes
 # ----------------------------------------------------------------------------------
