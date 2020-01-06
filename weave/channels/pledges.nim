@@ -141,7 +141,7 @@ type
     # Next task dependency if it has multiple
     nextDep: TaskNode
     pledge: Pledge
-    iterID: int32
+    bucketID: int32
 
   PledgeKind = enum
     Single
@@ -153,7 +153,8 @@ type
     of Single:
       impl: PledgeImpl
     of Iteration:
-      numIter: int32
+      numBuckets: int32
+      start, stop, stride: int32
       impls: ptr UncheckedArray[PledgeImpl]
 
   PledgeImpl = object
@@ -191,7 +192,7 @@ proc `=destroy`*(pledge: var Pledge) =
       if pledge.p.kind == Single:
         wv_free(pledge.p.impl.chan) # TODO: mem-pool compat
       else:
-        for i in 0 ..< pledge.p.numIter:
+        for i in 0 ..< pledge.p.numBuckets:
           wv_free(pledge.p.impls[i].chan)
         wv_free(pledge.p.impls)
       # Return memory to the memory pool
@@ -211,7 +212,71 @@ proc `=`*(dst: var Pledge, src: Pledge) {.inline.} =
   discard fetchAdd(src.p.refCount, 1, moRelaxed)
   dst.p = src.p
 
-# Public
+# Multi-Dependencies pledges
+# ----------------------------------------------------
+
+proc delayedUntilSingle(taskNode: TaskNode, curTask: Task): bool =
+  ## Redelay a task that depends on multiple pledges
+  ## with 1 or more pledge fulfilled but still some unfulfilled.
+  ## field is a place holder for impl / impls[bucket]
+  preCondition: not taskNode.pledge.p.isNil
+
+  if taskNode.pledge.p.impl.fulfilled.load(moRelaxed):
+    fence(moAcquire)
+    return false
+
+  # Mutual exclusion / prevent races
+  discard taskNode.pledge.p.impl.deferredIn.fetchAdd(1, moRelaxed)
+
+  if taskNode.pledge.p.impl.fulfilled.load(moRelaxed):
+    fence(moAcquire)
+    discard taskNode.pledge.p.impl.deferredOut.fetchAdd(1, moRelaxed)
+    return false
+
+  # Send the task to the pledge fulfiller
+  taskNode.task = curTask
+  let pledge = taskNode.pledge
+  taskNode.pledge = default(Pledge)
+  discard pledge.p.impl.chan[].trySend(taskNode)
+  discard pledge.p.impl.deferredOut.fetchAdd(1, moRelaxed)
+  return true
+
+proc delayedUntilIter(taskNode: TaskNode, curTask: Task): bool =
+  ## Redelay a task that depends on multiple pledges
+  ## with 1 or more pledge fulfilled but still some unfulfilled.
+  ## field is a place holder for impl / impls[bucket]
+  preCondition: not taskNode.pledge.p.isNil
+
+  if taskNode.pledge.p.impls[taskNode.bucketID].fulfilled.load(moRelaxed):
+    fence(moAcquire)
+    return false
+
+  # Mutual exclusion / prevent races
+  discard taskNode.pledge.p.impls[taskNode.bucketID].deferredIn.fetchAdd(1, moRelaxed)
+
+  if taskNode.pledge.p.impls[taskNode.bucketID].fulfilled.load(moRelaxed):
+    fence(moAcquire)
+    discard taskNode.pledge.p.impls[taskNode.bucketID].deferredOut.fetchAdd(1, moRelaxed)
+    return false
+
+  # Send the task to the pledge fulfiller
+  taskNode.task = curTask
+  let pledge = taskNode.pledge
+  taskNode.pledge = default(Pledge)
+  discard pledge.p.impls[taskNode.bucketID].chan[].trySend(taskNode)
+  discard pledge.p.impls[taskNode.bucketID].deferredOut.fetchAdd(1, moRelaxed)
+  return true
+
+proc delayedUntil(taskNode: TaskNode, curTask: Task): bool =
+  ## Redelay a task that depends on multiple pledges
+  ## with 1 or more pledge fulfilled but still some unfulfilled.
+  preCondition: not taskNode.pledge.p.isNil
+  if taskNode.pledge.p.kind == Single:
+    delayedUntilSingle(taskNode, curTask)
+  else:
+    delayedUntilIter(taskNode, curTask)
+
+# Public - single task pledge
 # ----------------------------------------------------
 
 proc initialize*(pledge: var Pledge, pool: var TLPoolAllocator) =
@@ -253,34 +318,7 @@ proc delayedUntil*(task: Task, pledge: Pledge, pool: var TLPoolAllocator): bool 
   taskNode.task = task
   taskNode.next.store(nil, moRelaxed)
   taskNode.pledge = default(Pledge) # Don't need to store the pledge reference if there is only the current one
-  taskNode.iterID = NoIter
-  discard pledge.p.impl.chan[].trySend(taskNode)
-  discard pledge.p.impl.deferredOut.fetchAdd(1, moRelaxed)
-  return true
-
-proc delayedUntil(taskNode: TaskNode, curTask: Task): bool =
-  ## Redelay a task that depends on multiple pledges
-  ## with 1 or more pledge fulfilled but still some unfulfilled.
-  preCondition: not taskNode.pledge.p.isNil
-  preCondition: taskNode.pledge.p.kind == Single
-  preCondition: taskNode.iterID == NoIter
-
-  if taskNode.pledge.p.impl.fulfilled.load(moRelaxed):
-    fence(moAcquire)
-    return false
-
-  # Mutual exclusion / prevent races
-  discard taskNode.pledge.p.impl.deferredIn.fetchAdd(1, moRelaxed)
-
-  if taskNode.pledge.p.impl.fulfilled.load(moRelaxed):
-    fence(moAcquire)
-    discard taskNode.pledge.p.impl.deferredOut.fetchAdd(1, moRelaxed)
-    return false
-
-  # Send the task to the pledge fulfiller
-  taskNode.task = curTask
-  let pledge = taskNode.pledge
-  taskNode.pledge = default(Pledge)
+  taskNode.bucketID = NoIter
   discard pledge.p.impl.chan[].trySend(taskNode)
   discard pledge.p.impl.deferredOut.fetchAdd(1, moRelaxed)
   return true
@@ -308,6 +346,7 @@ template fulfill*(pledge: Pledge, enqueueStmt: untyped) =
     var task {.inject.}: Task
     var taskNode: TaskNode
     while pledge.p.impl.chan[].tryRecv(taskNode):
+      ascertain: taskNode.bucketID == NoIter
       task = taskNode.task
       var wasDelayed = false
       while not taskNode.nextDep.isNil:
@@ -322,6 +361,112 @@ template fulfill*(pledge: Pledge, enqueueStmt: untyped) =
         recycle(taskNode)
 
     if pledge.p.impl.deferredOut.load(moAcquire) != pledge.p.impl.deferredIn.load(moAcquire):
+      cpuRelax()
+    else:
+      break
+
+# Public - iteration task pledge
+# ----------------------------------------------------
+
+proc initialize*(pledge: var Pledge, start, stop, stride: int32, pool: var TLPoolAllocator) =
+  ## Initialize a pledge for iteration tasks
+
+  preCondition: stop > start
+  preCondition: stride > 0
+  preCondition: pledge.p.isNil
+
+  pledge.p = pool.borrow(deref(PledgePtr))
+  zeroMem(pledge.p, sizeof(deref(PledgePtr))) # We start refcount at 0
+
+  pledge.p.kind = Iteration
+  pledge.p.numBuckets = (stop - start + stride-1) div stride
+
+  pledge.p.impls = wv_alloc(PledgeImpl, pledge.p.numBuckets)
+  zeroMem(pledge.p.impls, pledge.p.numBuckets * sizeof(PledgeImpl))
+
+  for i in 0 ..< pledge.p.numBuckets:
+    pledge.p.impls[i].chan = wv_alloc(ChannelMpscUnboundedBatch[TaskNode])
+    pledge.p.impl.chan[].initialize()
+
+proc getBucket(pledge: Pledge, index: int32): int32 {.inline.} =
+  ## Convert a possibly offset and/or strided for-loop iteration index
+  ## to a pledge bucket in the range [0, numBuckets)
+  preCondition: index in pledge.p.start ..< pledge.p.stop
+  result = (index - pledge.p.start) div pledge.p.stride
+
+proc delayedUntil*(task: Task, pledge: Pledge, index: int32, pool: var TLPoolAllocator): bool =
+  ## Defers a task until a pledge[index] is fulfilled
+  ## Returns true if the task has been delayed.
+  ## The task should not be accessed anymore
+  ## Returns false if the task can be scheduled right away.
+  preCondition: not pledge.p.isNil
+  preCondition: pledge.p.kind == Iteration
+
+  let bucket = pledge.getBucket(index)
+
+  # Optimization to avoid paying the cost of atomics
+  if pledge.p.impls[bucket].fulfilled.load(moRelaxed):
+    fence(moAcquire)
+    return false
+
+  # Mutual exclusion / prevent races
+  discard pledge.p.impls[bucket].deferredIn.fetchAdd(1, moRelaxed)
+
+  if pledge.p.impls[bucket].fulfilled.load(moRelaxed):
+    fence(moAcquire)
+    discard pledge.p.impls[bucket].deferredOut.fetchAdd(1, moRelaxed)
+    return false
+
+  # Send the task to the pledge fulfiller
+  let taskNode = pool.borrow(deref(TaskNode))
+  taskNode.task = task
+  taskNode.next.store(nil, moRelaxed)
+  taskNode.pledge = default(Pledge) # Don't need to store the pledge reference if there is only the current one
+  taskNode.bucketID = bucket
+  discard pledge.p.impls[bucket].chan[].trySend(taskNode)
+  discard pledge.p.impls[bucket].deferredOut.fetchAdd(1, moRelaxed)
+  return true
+
+template fulfillIter*(pledge: Pledge, index: int32, enqueueStmt: untyped) =
+  ## A producer thread fulfills a pledge.
+  ## A pledge can only be fulfilled once.
+  ## A producer will immediately scheduled all tasks dependent on that pledge
+  ## unless they also depend on another unfulfilled pledge.
+  ## Dependent tasks scheduled at a later time will be scheduled immediately
+  ##
+  ## `enqueueStmt` is a statement to enqueue a single task in the worker queue.
+  ## a `task` symbol will be injected and usable at the caller site
+  ## This should be wrapped in a proc to avoid code-bloat as the template is big
+  preCondition: not pledge.p.isNil
+  preCondition: pledge.p.kind == Iteration
+
+  let bucket = getBucket(pledge, index)
+  preCondition: not pledge.p.impls[bucket].fulfilled.load(moRelaxed)
+
+  # Lock the pledge, new tasks should be scheduled right away
+  fence(moRelease)
+  pledge.p.impls[bucket].fulfilled.store(true, moRelaxed)
+
+  # TODO: some state machine here?
+  while true:
+    var task {.inject.}: Task
+    var taskNode: TaskNode
+    while pledge.p.impls[bucket].chan[].tryRecv(taskNode):
+      ascertain: taskNode.bucketID != NoIter
+      task = taskNode.task
+      var wasDelayed = false
+      while not taskNode.nextDep.isNil:
+        if delayedUntil(taskNode, task):
+          wasDelayed = true
+          break
+        let depNode = taskNode.nextDep
+        recycle(taskNode)
+        taskNode = depNode
+      if not wasDelayed:
+        enqueueStmt
+        recycle(taskNode)
+
+    if pledge.p.impls[bucket].deferredOut.load(moAcquire) != pledge.p.impls[bucket].deferredIn.load(moAcquire):
       cpuRelax()
     else:
       break
