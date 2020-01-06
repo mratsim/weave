@@ -48,10 +48,10 @@ proc spawnImpl(pledge: NimNode, pledgeIndex: NimNode, funcCall: NimNode): NimNod
   if withArgs:
     result.add quote do:
       static:
-        assert supportsCopyMem(`argsTy`), "\n\n" & `fnName` &
-          " has arguments managed by GC (ref/seq/strings),\n" &
-          "  they cannot be distributed across threads.\n" &
-          "  Argument types: " & $`argsTy` & "\n\n"
+        # assert supportsCopyMem(`argsTy`), "\n\n" & `fnName` &
+        #   " has arguments managed by GC (ref/seq/strings),\n" &
+        #   "  they cannot be distributed across threads.\n" &
+        #   "  Argument types: " & $`argsTy` & "\n\n"
 
         assert sizeof(`argsTy`) <= TaskDataSize, "\n\n" & `fnName` &
           " has arguments that do not fit in the async data buffer.\n" &
@@ -70,20 +70,13 @@ proc spawnImpl(pledge: NimNode, pledgeIndex: NimNode, funcCall: NimNode): NimNod
   if pledge.isNil:
     scheduleBlock = newCall(bindSym"schedule", task)
   elif pledgeIndex.kind == nnkIntLit and pledgeIndex.intVal == NoIter:
-    scheduleBlock = newCall(
-        bindSym"delayedUntil",
-        task,
-        pledge,
-        newCall(bindSym"myMemPool")
-      )
+    scheduleBlock = quote do:
+      if not delayedUntil(`task`, `pledge`, myMemPool()):
+        schedule(`task`)
   else:
-    scheduleBlock = newCall(
-        bindSym"delayedUntil",
-        task,
-        pledge,
-        newCall(ident"int32", pledgeIndex),
-        newCall(bindSym"myMemPool")
-    )
+    scheduleBlock = quote do:
+      if not delayedUntil(`task`, `pledge`, int32(`pledgeIndex`), myMemPool()):
+        schedule(`task`)
 
   if not needFuture: # TODO: allow awaiting on a Flowvar[void]
     if funcCall.len == 2:
@@ -175,14 +168,41 @@ proc spawnImpl(pledge: NimNode, pledgeIndex: NimNode, funcCall: NimNode): NimNod
   result = nnkBlockStmt.newTree(newEmptyNode(), result)
   # echo result.toStrLit
 
-macro spawn(fnCall: typed): untyped =
+macro spawn*(fnCall: typed): untyped =
+  ## Spawns the input function call asynchronously, potentially on another thread of execution.
+  ## If the function calls returns a result, spawn will wrap it in a Flowvar.
+  ## You can use sync to block the current thread and extract the asynchronous result from the flowvar.
+  ## Spawn returns immediately.
   result = spawnImpl(nil, newLit(-1), fnCall)
+
+macro spawnDelayed*(pledge: Pledge, fnCall: typed): untyped =
+  ## Spawns the input function call asynchronously, potentially on another thread of execution.
+  ## The function call will only be scheduled when the pledge is fulfilled.
+  ##
+  ## If the function calls returns a result, spawn will wrap it in a Flowvar.
+  ## You can use sync to block the current thread and extract the asynchronous result from the flowvar.
+  ## spawnDelayed returns immediately.
+  ##
+  ## Ensure that before syncing on the flowvar of a delayed spawn, its pledge can be fulfilled or you will deadlock.
+  result = spawnImpl(pledge, newLit(-1), fnCall)
+
+macro spawnDelayed*(pledge: Pledge, iterationIndex: SomeInteger, fnCall: typed): untyped =
+  ## Spawns the input function call asynchronously, potentially on another thread of execution.
+  ## The function call will only be scheduled when the pledge is fulfilled.
+  ## The pledge represents a single iteration index from a parallel loop.
+  ##
+  ## If the function calls returns a result, spawn will wrap it in a Flowvar.
+  ## You can use sync to block the current thread and extract the asynchronous result from the flowvar.
+  ## spawnDelayed returns immediately.
+  ##
+  ## Ensure that before syncing on the flowvar of a delayed spawn, its pledge can be fulfilled or you will deadlock.
+  result = spawnImpl(pledge, iterationIndex, fnCall)
 
 # Sanity checks
 # --------------------------------------------------------
 
 when isMainModule:
-  import ./runtime, ./runtime_fsm
+  import ./runtime, ./runtime_fsm, os
 
   block: # Async without result
 
@@ -222,3 +242,34 @@ when isMainModule:
       echo f
 
     main2()
+
+  block: # Delayed computation
+
+    proc echoA(pA: Pledge) =
+      echo "Display A, sleep 1s, create parallel streams 1 and 2"
+      sleep(1000)
+      pA.fulfill()
+
+    proc echoB1(pB1: Pledge) =
+      echo "Display B1, sleep 1s"
+      sleep(1000)
+      pB1.fulfill()
+
+    proc echoB2() =
+      echo "Display B2, exit stream"
+
+    proc echoC1() =
+      echo "Display C1, exit stream"
+
+    proc main() =
+      echo "Sanity check 3: Dataflow parallelism"
+      init(Weave)
+      let pA = newPledge()
+      let pB1 = newPledge()
+      spawnDelayed pB1, echoC1()
+      spawnDelayed pA, echoB2()
+      spawnDelayed pA, echoB1(pB1)
+      spawn echoA(pA)
+      exit(Weave)
+
+    main()

@@ -132,6 +132,22 @@ proc flushAndDispose*(dq: var PrellDeque) =
 # Pledges
 # ----------------------------------------------------------------------------------
 
+proc newPledge*(): Pledge =
+  ## Creates a pledge
+  ## Tasks associated with a pledge are only scheduled when the pledge is fulfilled.
+  ## A pledge can only be fulfilled once.
+  ## Pledges enable modeling precise producer-consumer data dependencies.
+  result.initialize(myMemPool())
+
+proc newPledge*(start, stop, stride: SomeInteger): Pledge =
+  ## Creates a loop iteration pledge.
+  ## With a loop iteration pledge, tasks can be associated with a precise loop index.
+  ##
+  ## Tasks associated with a pledge are only scheduled when the pledge is fulfilled.
+  ## A pledge can only be fulfilled once.
+  ## Pledges enable modeling precise producer-consumer data dependencies.
+  result.initialize(myMemPool(), start.int32, stop.int32, stride.int32)
+
 proc fulfill*(pledge: Pledge) =
   ## Fulfills a pledge
   ## All ready tasks that depended on that pledge will be scheduled immediately.
