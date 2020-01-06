@@ -141,8 +141,24 @@ type
     # Next task dependency if it has multiple
     nextDep: TaskNode
     pledge: Pledge
+    iterID: int32
+
+  PledgeKind = enum
+    Single
+    Iteration
 
   PledgePtr = ptr object
+    refCount: Atomic[int32]
+    deferredIn: Atomic[int32]
+    deferredOut: Atomic[int32]
+    case kind: PledgeKind
+    of Single:
+      impl: PledgeImpl
+    of Iteration:
+      numIter: int32
+      impls: ptr UncheckedArray[PledgeImpl]
+
+  PledgeImpl = object
     # Issue: https://github.com/mratsim/weave/issues/93
     # TODO, the current MPSC channel always use a "count" field.
     #   Contrary to StealRequest and the remote freed memory in the memory pool,
@@ -155,17 +171,16 @@ type
     #   As a compromise instead of padding by 2x cachelines
     #   we could have Consumer | count | Producer with only cache-line padding.
     chan{.align: WV_CacheLinePadding.}: ptr ChannelMpscUnboundedBatch[TaskNode]
-    refCount: Atomic[int32]
-    deferredIn: Atomic[int32]
-    deferredOut: Atomic[int32]
     fulfilled: Atomic[bool]
+
+const NoIter = -1
 
 # Internal
 # ----------------------------------------------------
 # Refcounting is started from 0 and we avoid fetchSub with release semantics
 # in the common case of only one reference being live.
 
-proc `=destroy`*(pledge: var Pledge) {.inline.} =
+proc `=destroy`*(pledge: var Pledge) =
   if pledge.p.isNil:
     return
 
@@ -173,7 +188,12 @@ proc `=destroy`*(pledge: var Pledge) {.inline.} =
     fence(moAcquire)
     # We have the last reference
     if not pledge.p.isNil:
-      wv_free(pledge.p.chan) # TODO: mem-pool compat
+      if pledge.p.kind == Single:
+        wv_free(pledge.p.impl.chan) # TODO: mem-pool compat
+      else:
+        for i in 0 ..< pledge.p.numIter:
+          wv_free(pledge.p.impls[i].chan)
+        wv_free(pledge.p.impls)
       # Return memory to the memory pool
       recycle(pledge.p)
   else:
@@ -203,8 +223,9 @@ proc initialize*(pledge: var Pledge, pool: var TLPoolAllocator) =
   pledge.p = pool.borrow(deref(PledgePtr))
   zeroMem(pledge.p, sizeof(deref(PledgePtr))) # We start the refCount at 0
   # TODO: mempooled MPSC channel https://github.com/mratsim/weave/issues/93
-  pledge.p.chan = wv_alloc(ChannelMpscUnboundedBatch[TaskNode])
-  pledge.p.chan[].initialize()
+  pledge.p.kind = Single
+  pledge.p.impl.chan = wv_alloc(ChannelMpscUnboundedBatch[TaskNode])
+  pledge.p.impl.chan[].initialize()
 
 proc delayedUntil*(task: Task, pledge: Pledge, pool: var TLPoolAllocator): bool =
   ## Defers a task until a pledge is fulfilled
@@ -212,16 +233,17 @@ proc delayedUntil*(task: Task, pledge: Pledge, pool: var TLPoolAllocator): bool 
   ## The task should not be accessed anymore
   ## Returns false if the task can be scheduled right away.
   preCondition: not pledge.p.isNil
+  preCondition: pledge.p.kind == Single
 
   # Optimization to avoid paying the cost of atomics
-  if pledge.p.fulfilled.load(moRelaxed):
+  if pledge.p.impl.fulfilled.load(moRelaxed):
     fence(moAcquire)
     return false
 
   # Mutual exclusion / prevent races
   discard pledge.p.deferredIn.fetchAdd(1, moRelaxed)
 
-  if pledge.p.fulfilled.load(moRelaxed):
+  if pledge.p.impl.fulfilled.load(moRelaxed):
     fence(moAcquire)
     discard pledge.p.deferredOut.fetchAdd(1, moRelaxed)
     return false
@@ -231,7 +253,8 @@ proc delayedUntil*(task: Task, pledge: Pledge, pool: var TLPoolAllocator): bool 
   taskNode.task = task
   taskNode.next.store(nil, moRelaxed)
   taskNode.pledge = default(Pledge) # Don't need to store the pledge reference if there is only the current one
-  discard pledge.p.chan[].trySend(taskNode)
+  taskNode.iterID = NoIter
+  discard pledge.p.impl.chan[].trySend(taskNode)
   discard pledge.p.deferredOut.fetchAdd(1, moRelaxed)
   return true
 
@@ -239,15 +262,17 @@ proc delayedUntil(taskNode: TaskNode, curTask: Task): bool =
   ## Redelay a task that depends on multiple pledges
   ## with 1 or more pledge fulfilled but still some unfulfilled.
   preCondition: not taskNode.pledge.p.isNil
+  preCondition: taskNode.pledge.p.kind == Single
+  preCondition: taskNode.iterID == NoIter
 
-  if taskNode.pledge.p.fulfilled.load(moRelaxed):
+  if taskNode.pledge.p.impl.fulfilled.load(moRelaxed):
     fence(moAcquire)
     return false
 
   # Mutual exclusion / prevent races
   discard taskNode.pledge.p.deferredIn.fetchAdd(1, moRelaxed)
 
-  if taskNode.pledge.p.fulfilled.load(moRelaxed):
+  if taskNode.pledge.p.impl.fulfilled.load(moRelaxed):
     fence(moAcquire)
     discard taskNode.pledge.p.deferredOut.fetchAdd(1, moRelaxed)
     return false
@@ -256,7 +281,7 @@ proc delayedUntil(taskNode: TaskNode, curTask: Task): bool =
   taskNode.task = curTask
   let pledge = taskNode.pledge
   taskNode.pledge = default(Pledge)
-  discard pledge.p.chan[].trySend(taskNode)
+  discard pledge.p.impl.chan[].trySend(taskNode)
   discard pledge.p.deferredOut.fetchAdd(1, moRelaxed)
   return true
 
@@ -270,17 +295,19 @@ template fulfill*(pledge: Pledge, enqueueStmt: untyped) =
   ## `enqueueStmt` is a statement to enqueue a single task in the worker queue.
   ## a `task` symbol will be injected and usable at the caller site
   ## This should be wrapped in a proc to avoid code-bloat as the template is big
-  preCondition: not pledge.p.fulfilled.load(moRelaxed)
+  preCondition: not pledge.p.isNil
+  preCondition: pledge.p.kind == Single
+  preCondition: not pledge.p.impl.fulfilled.load(moRelaxed)
 
   # Lock the pledge, new tasks should be scheduled right away
   fence(moRelease)
-  pledge.p.fulfilled.store(true, moRelaxed)
+  pledge.p.impl.fulfilled.store(true, moRelaxed)
 
   # TODO: some state machine here?
   while true:
     var task {.inject.}: Task
     var taskNode: TaskNode
-    while pledge.p.chan[].tryRecv(taskNode):
+    while pledge.p.impl.chan[].tryRecv(taskNode):
       task = taskNode.task
       var wasDelayed = false
       while not taskNode.nextDep.isNil:
