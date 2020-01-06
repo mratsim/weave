@@ -140,7 +140,7 @@ type
     next: Atomic[pointer]
     # Next task dependency if it has multiple
     nextDep: TaskNode
-    nodePledge: Pledge
+    pledge: Pledge
 
   PledgePtr = ptr object
     # Issue: https://github.com/mratsim/weave/issues/93
@@ -154,10 +154,10 @@ type
     #   Allocation overhead may be prohibitive.
     #   As a compromise instead of padding by 2x cachelines
     #   we could have Consumer | count | Producer with only cache-line padding.
-    chan{.align: WV_CacheLinePadding.}: ChannelMpscUnboundedBatch[TaskNode]
+    chan{.align: WV_CacheLinePadding.}: ptr ChannelMpscUnboundedBatch[TaskNode]
     refCount: Atomic[int32]
-    dependentsIn: Atomic[int32]
-    dependentsOut: Atomic[int32]
+    deferredIn: Atomic[int32]
+    deferredOut: Atomic[int32]
     fulfilled: Atomic[bool]
 
 # Internal
@@ -194,21 +194,24 @@ proc `=`*(dst: var Pledge, src: Pledge) {.inline.} =
 # Public
 # ----------------------------------------------------
 
-proc initialize*(pledge: var Pledge, pool: var TLPoolAllocator): Pledge {.inline.} =
+proc initialize*(pledge: var Pledge, pool: var TLPoolAllocator) =
   ## Initialize a pledge.
   ## Tasks can depend on a pledge and in that case their scheduling
   ## will be delayed until that pledge is fulfilled.
   ## This allows modelling precise data dependencies.
-  result.p = pool.borrow(deref(PledgePtr))
-  zeroMem(result.p, sizeof(deref(PledgePtr))) # We start the refCount at 0
+  preCondition: pledge.p.isNil
+  pledge.p = pool.borrow(deref(PledgePtr))
+  zeroMem(pledge.p, sizeof(deref(PledgePtr))) # We start the refCount at 0
   # TODO: mempooled MPSC channel https://github.com/mratsim/weave/issues/93
-  result.p.chan = wv_alloc(ChannelMpscUnboundedBatch[TaskNode])
+  pledge.p.chan = wv_alloc(ChannelMpscUnboundedBatch[TaskNode])
+  pledge.p.chan[].initialize()
 
 proc delayedUntil*(task: Task, pledge: Pledge, pool: var TLPoolAllocator): bool =
   ## Defers a task until a pledge is fulfilled
   ## Returns true if the task has been delayed.
   ## The task should not be accessed anymore
   ## Returns false if the task can be scheduled right away.
+  preCondition: not pledge.p.isNil
 
   # Optimization to avoid paying the cost of atomics
   if pledge.p.fulfilled.load(moRelaxed):
@@ -216,43 +219,48 @@ proc delayedUntil*(task: Task, pledge: Pledge, pool: var TLPoolAllocator): bool 
     return false
 
   # Mutual exclusion / prevent races
-  discard pledge.p.dependentsIn.fetchAdd(moRelaxed)
+  discard pledge.p.deferredIn.fetchAdd(1, moRelaxed)
 
   if pledge.p.fulfilled.load(moRelaxed):
     fence(moAcquire)
-    discard pledge.p.dependentsOut.fetchAdd(moRelaxed)
+    discard pledge.p.deferredOut.fetchAdd(1, moRelaxed)
     return false
 
   # Send the task to the pledge fulfiller
   let taskNode = pool.borrow(deref(TaskNode))
   taskNode.task = task
   taskNode.next.store(nil, moRelaxed)
-  taskNode.nextPledge = nil
-  discard pledge.p.chan.trySend(taskNode)
-  discard pledge.p.dependentsOut.fetchAdd(moRelaxed)
+  taskNode.pledge = default(Pledge) # Don't need to store the pledge reference if there is only the current one
+  discard pledge.p.chan[].trySend(taskNode)
+  discard pledge.p.deferredOut.fetchAdd(1, moRelaxed)
   return true
 
 proc delayedUntil(taskNode: TaskNode, curTask: Task): bool =
+  ## Redelay a task that depends on multiple pledges
+  ## with 1 or more pledge fulfilled but still some unfulfilled.
+  preCondition: not taskNode.pledge.p.isNil
+
   if taskNode.pledge.p.fulfilled.load(moRelaxed):
     fence(moAcquire)
     return false
 
   # Mutual exclusion / prevent races
-  discard taskNode.pledge.p.dependentsIn.fetchAdd(moRelaxed)
+  discard taskNode.pledge.p.deferredIn.fetchAdd(1, moRelaxed)
 
   if taskNode.pledge.p.fulfilled.load(moRelaxed):
     fence(moAcquire)
-    discard taskNode.pledge.p.dependentsOut.fetchAdd(moRelaxed)
+    discard taskNode.pledge.p.deferredOut.fetchAdd(1, moRelaxed)
     return false
 
   # Send the task to the pledge fulfiller
-  let taskNode = pool.borrow(deref(TaskNode))
   taskNode.task = curTask
-  discard pledge.p.chan.trySend(taskNode)
-  discard pledge.p.dependentsOut.fetchAdd(moRelaxed)
+  let pledge = taskNode.pledge
+  taskNode.pledge = default(Pledge)
+  discard pledge.p.chan[].trySend(taskNode)
+  discard pledge.p.deferredOut.fetchAdd(1, moRelaxed)
   return true
 
-template fulfill*(pledge: Pledge, enqueueStmt: typed) =
+template fulfill*(pledge: Pledge, enqueueStmt: untyped) =
   ## A producer thread fulfills a pledge.
   ## A pledge can only be fulfilled once.
   ## A producer will immediately scheduled all tasks dependent on that pledge
@@ -266,13 +274,13 @@ template fulfill*(pledge: Pledge, enqueueStmt: typed) =
 
   # Lock the pledge, new tasks should be scheduled right away
   fence(moRelease)
-  pledge.p.fulfilled.store(moRelaxed)
+  pledge.p.fulfilled.store(true, moRelaxed)
 
   # TODO: some state machine here?
   while true:
     var task {.inject.}: Task
     var taskNode: TaskNode
-    while pledge.p.tryRecv(taskNode):
+    while pledge.p.chan[].tryRecv(taskNode):
       task = taskNode.task
       var wasDelayed = false
       while not taskNode.nextDep.isNil:
@@ -286,7 +294,7 @@ template fulfill*(pledge: Pledge, enqueueStmt: typed) =
         enqueueStmt
         recycle(taskNode)
 
-    if pledge.p.dependsOut.load(moAcquire) != pledge.p.dependsIn.load(moAcquire):
+    if pledge.p.deferredOut.load(moAcquire) != pledge.p.deferredIn.load(moAcquire):
       cpuRelax()
     else:
       break
@@ -309,7 +317,9 @@ when isMainModule:
     stack.top = stack.top.next
     stack.count -= 1
 
-    doAssert: if result.isNil: stack.count == 0 else: true
+    doAssert:
+      if result.isNil: stack.count == 0
+      else: true
 
   var pool: TLPoolAllocator
   pool.initialize()
@@ -317,10 +327,9 @@ when isMainModule:
   var stack: TaskStack
 
   var pledge1: Pledge
+  pledge1.initialize(pool)
   block: # Pledge 1
     let task = wv_allocPtr(Task, zero = true)
-    pledge1.initialize(pool)
-
     let delayed = task.delayedUntil(pledge1, pool)
     doAssert delayed
 
@@ -333,7 +342,25 @@ when isMainModule:
 
   block: # Pledge 1 - late
     let task = wv_allocPtr(Task, zero = true)
-    pledge1.initialize(pool)
 
     let delayed = task.delayedUntil(pledge1, pool)
     doAssert not delayed
+
+  doAssert stack.count == 1 # enqueuing is left as an exercise to the late thread.
+
+  var pledge2: Pledge
+  pledge2.initialize(pool)
+  block:
+    block:
+      let task = wv_allocPtr(Task, zero = true)
+      let delayed = task.delayedUntil(pledge2, pool)
+      doAssert delayed
+    block:
+      let task = wv_allocPtr(Task, zero = true)
+      let delayed = task.delayedUntil(pledge2, pool)
+      doAssert delayed
+
+  doAssert stack.count == 1
+  pledge2.fulfill():
+    stack.add task
+  doAssert stack.count == 3
