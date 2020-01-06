@@ -368,7 +368,7 @@ template fulfill*(pledge: Pledge, enqueueStmt: untyped) =
 # Public - iteration task pledge
 # ----------------------------------------------------
 
-proc initialize*(pledge: var Pledge, start, stop, stride: int32, pool: var TLPoolAllocator) =
+proc initialize*(pledge: var Pledge, pool: var TLPoolAllocator, start, stop, stride: int32) =
   ## Initialize a pledge for iteration tasks
 
   preCondition: stop > start
@@ -376,17 +376,21 @@ proc initialize*(pledge: var Pledge, start, stop, stride: int32, pool: var TLPoo
   preCondition: pledge.p.isNil
 
   pledge.p = pool.borrow(deref(PledgePtr))
-  zeroMem(pledge.p, sizeof(deref(PledgePtr))) # We start refcount at 0
-
-  pledge.p.kind = Iteration
-  pledge.p.numBuckets = (stop - start + stride-1) div stride
+  # We start refcount at 0 - and the need to workaround case object value change is a huge pain
+  pledge.p[] = deref(PledgePtr)(
+    kind: Iteration,
+    numBuckets: (stop - start + stride-1) div stride,
+    start: start,
+    stop: stop,
+    stride: stride
+  )
 
   pledge.p.impls = wv_alloc(PledgeImpl, pledge.p.numBuckets)
   zeroMem(pledge.p.impls, pledge.p.numBuckets * sizeof(PledgeImpl))
 
   for i in 0 ..< pledge.p.numBuckets:
     pledge.p.impls[i].chan = wv_alloc(ChannelMpscUnboundedBatch[TaskNode])
-    pledge.p.impl.chan[].initialize()
+    pledge.p.impls[i].chan[].initialize()
 
 proc getBucket(pledge: Pledge, index: int32): int32 {.inline.} =
   ## Convert a possibly offset and/or strided for-loop iteration index
@@ -496,43 +500,90 @@ when isMainModule:
   var pool: TLPoolAllocator
   pool.initialize()
 
-  var stack: TaskStack
+  proc mainSingle() =
+    var stack: TaskStack
 
-  var pledge1: Pledge
-  pledge1.initialize(pool)
-  block: # Pledge 1
-    let task = wv_allocPtr(Task, zero = true)
-    let delayed = task.delayedUntil(pledge1, pool)
-    doAssert delayed
-
-  doAssert stack.count == 0
-
-  pledge1.fulfill():
-    stack.add task
-
-  doAssert stack.count == 1
-
-  block: # Pledge 1 - late
-    let task = wv_allocPtr(Task, zero = true)
-
-    let delayed = task.delayedUntil(pledge1, pool)
-    doAssert not delayed
-
-  doAssert stack.count == 1 # enqueuing is left as an exercise to the late thread.
-
-  var pledge2: Pledge
-  pledge2.initialize(pool)
-  block:
-    block:
+    var pledge1: Pledge
+    pledge1.initialize(pool)
+    block: # Pledge 1
       let task = wv_allocPtr(Task, zero = true)
-      let delayed = task.delayedUntil(pledge2, pool)
-      doAssert delayed
-    block:
-      let task = wv_allocPtr(Task, zero = true)
-      let delayed = task.delayedUntil(pledge2, pool)
+      let delayed = task.delayedUntil(pledge1, pool)
       doAssert delayed
 
-  doAssert stack.count == 1
-  pledge2.fulfill():
-    stack.add task
-  doAssert stack.count == 3
+    doAssert stack.count == 0
+
+    pledge1.fulfill():
+      stack.add task
+
+    doAssert stack.count == 1
+
+    block: # Pledge 1 - late
+      let task = wv_allocPtr(Task, zero = true)
+
+      let delayed = task.delayedUntil(pledge1, pool)
+      doAssert not delayed
+
+    doAssert stack.count == 1 # enqueuing is left as an exercise to the late thread.
+
+    var pledge2: Pledge
+    pledge2.initialize(pool)
+    block:
+      block:
+        let task = wv_allocPtr(Task, zero = true)
+        let delayed = task.delayedUntil(pledge2, pool)
+        doAssert delayed
+      block:
+        let task = wv_allocPtr(Task, zero = true)
+        let delayed = task.delayedUntil(pledge2, pool)
+        doAssert delayed
+
+    doAssert stack.count == 1
+    pledge2.fulfill():
+      stack.add task
+    doAssert stack.count == 3
+
+  mainSingle()
+
+  proc mainLoop() =
+    var stack: TaskStack
+
+    var pledge1: Pledge
+    pledge1.initialize(pool, 0, 10, 1)
+    block: # Pledge 1
+      let task = wv_allocPtr(Task, zero = true)
+      let delayed = task.delayedUntil(pledge1, 3, pool)
+      doAssert delayed
+
+    doAssert stack.count == 0
+
+    pledge1.fulfillIter(3):
+      stack.add task
+
+    doAssert stack.count == 1
+
+    block: # Pledge 1 - late
+      let task = wv_allocPtr(Task, zero = true)
+
+      let delayed = task.delayedUntil(pledge1, 3, pool)
+      doAssert not delayed
+
+    doAssert stack.count == 1 # enqueuing is left as an exercise to the late thread.
+
+    var pledge2: Pledge
+    pledge2.initialize(pool, 0, 10, 1)
+    block:
+      block:
+        let task = wv_allocPtr(Task, zero = true)
+        let delayed = task.delayedUntil(pledge2, 4, pool)
+        doAssert delayed
+      block:
+        let task = wv_allocPtr(Task, zero = true)
+        let delayed = task.delayedUntil(pledge2, 4, pool)
+        doAssert delayed
+
+    doAssert stack.count == 1
+    pledge2.fulfillIter(4):
+      stack.add task
+    doAssert stack.count == 3
+
+  mainLoop()
