@@ -96,5 +96,5 @@ proc pack_B_kc_nc*[T; ukernel: static MicroKernel](
   # Note: the tail is processed in the calling thread
   #       so waiting there guarantees proper data dependencies
   #       provided the "k" loop is not nested (i.e. does real work instead of enqueueing tasks)
-  sync(kcLoop)
+  discard sync(kcLoop)
   kcTileReady.fulfill()

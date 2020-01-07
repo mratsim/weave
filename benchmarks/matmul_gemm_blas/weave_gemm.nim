@@ -15,7 +15,7 @@ when not defined(vcc):
 else:
   {.pragma: restrict, codegenDecl: "$# __restrict $#".}
 
-proc benchWeaveGEMM(a, b: seq[float32], ashape, bshape: MatrixShape, nb_samples: int): seq[float32] =
+proc benchWeaveGEMM*(a, b: seq[float32], ashape, bshape: MatrixShape, nb_samples: int): seq[float32] =
   let req_ops = gemm_required_ops(ashape, bshape)
   let out_shape = gemm_out_shape(ashape, bshape)
   let out_size = out_shape.M * out_shape.N

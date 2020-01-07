@@ -154,11 +154,11 @@ proc gemm_impl[T; ukernel: static MicroKernel](
   for pc in countup(0, K-1, tiles.kc):
     prefetch(tiles.b, Write, LowTemporalLocality)
     let kc = min(K - pc, tiles.kc) # Deal with edges  # A[0:M, pc:pc+kc]
-    var kcTileReady = newPledge()
 
+    let kcncTileReady = newPledge()
     let kcncB = vB.stride(pc, 0)                      # B[pc:pc+kc, jc:jc+nc]
-    pack_B_kc_nc[T, ukernel](                         # PackB panel [kc, nc] (nc is large or unknown)
-      tiles.b, kc, nc, kcncB, kcTileReady)
+    spawn pack_B_kc_nc[T, ukernel](                   # PackB panel [kc, nc] (nc is large or unknown)
+      tiles.b, kc, nc, kcncB, kcncTileReady)
 
     # First time writing to C, we scale it, otherwise accumulate
     let beta = if pc == 0: beta else: 1.T
@@ -166,8 +166,7 @@ proc gemm_impl[T; ukernel: static MicroKernel](
     # ####################################
     # 3. for ic = 0,...,m−1 in steps of mc
     parallelFor icb in 0 ..< tiles.ic_num_tasks:
-      awaitable: icLoop
-      captures: {kcTileReady, pc, tiles, nc, kc, alpha, beta, vA, vC, M}
+      captures: {kcncTileReady, pc, tiles, nc, kc, alpha, beta, vA, vC, M}
 
       let packA = tiles.a + icb * tiles.upanelA_size
       prefetch(packA, Write, LowTemporalLocality)
@@ -178,7 +177,7 @@ proc gemm_impl[T; ukernel: static MicroKernel](
       pack_A_mc_kc[T, ukernel](packA, mc, kc, mckcA)  # PackA block [mc, kc]
 
       spawnDelayed(
-        kcTileReady,
+        kcncTileReady,
         gebp_mkernel[T, ukernel](                     # GEBP macrokernel:
           mc, nc, kc,                                 #   C[ic:ic+mc, jc:jc+nc] =
           alpha, packA, tiles.b,                      #    αA[ic:ic+mc, pc:pc+kc] * B[pc:pc+kc, jc:jc+nc] +
@@ -186,7 +185,7 @@ proc gemm_impl[T; ukernel: static MicroKernel](
         )
       )
     # Only trigger the next phase when the last one is finished
-    sync(icLoop)
+    syncRoot(Weave) # TODO: this is the last non-nestable barrier
 
 # ############################################################
 #
