@@ -333,13 +333,11 @@ template fulfillImpl*(pledge: Pledge, queue, enqueue: typed) =
   ## This should be wrapped in a proc to avoid code-bloat as the template is big
   preCondition: not pledge.p.isNil
   preCondition: pledge.p.kind == Single
-  when compileOption("assertions"):
-    let isFulfilled = pledge.p.impl.fulfilled.load(moRelaxed)
-  preCondition: not isFulfilled
+  preCondition: not load(pledge.p.impl.fulfilled, moRelaxed)
 
   # Lock the pledge, new tasks should be scheduled right away
   fence(moRelease)
-  pledge.p.impl.fulfilled.store(true, moRelaxed)
+  store(pledge.p.impl.fulfilled, true, moRelaxed)
 
   # TODO: some state machine here?
   while true:
@@ -360,7 +358,7 @@ template fulfillImpl*(pledge: Pledge, queue, enqueue: typed) =
         enqueue(queue, task)
         recycle(taskNode)
 
-    if pledge.p.impl.deferredOut.load(moAcquire) != pledge.p.impl.deferredIn.load(moAcquire):
+    if load(pledge.p.impl.deferredOut, moAcquire) != load(pledge.p.impl.deferredIn, moAcquire):
       cpuRelax()
     else:
       break
@@ -445,13 +443,11 @@ template fulfillIterImpl*(pledge: Pledge, index: int32, queue, enqueue: typed) =
   preCondition: pledge.p.kind == Iteration
 
   let bucket = getBucket(pledge, index)
-  when compileOption("assertions"):
-    let isFulfilled = pledge.p.impls[bucket].fulfilled.load(moRelaxed)
-  preCondition: not isFulfilled
+  preCondition: not load(pledge.p.impls[bucket].fulfilled, moRelaxed)
 
   # Lock the pledge, new tasks should be scheduled right away
   fence(moRelease)
-  pledge.p.impls[bucket].fulfilled.store(true, moRelaxed)
+  store(pledge.p.impls[bucket].fulfilled, true, moRelaxed)
 
   # TODO: some state machine here?
   while true:
@@ -472,7 +468,7 @@ template fulfillIterImpl*(pledge: Pledge, index: int32, queue, enqueue: typed) =
         enqueue(queue, task)
         recycle(taskNode)
 
-    if pledge.p.impls[bucket].deferredOut.load(moAcquire) != pledge.p.impls[bucket].deferredIn.load(moAcquire):
+    if load(pledge.p.impls[bucket].deferredOut, moAcquire) != load(pledge.p.impls[bucket].deferredIn, moAcquire):
       cpuRelax()
     else:
       break
