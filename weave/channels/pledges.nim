@@ -335,7 +335,9 @@ template fulfillImpl*(pledge: Pledge, queue, enqueue: typed) =
   ## This should be wrapped in a proc to avoid code-bloat as the template is big
   preCondition: not pledge.p.isNil
   preCondition: pledge.p.kind == Single
-  preCondition: not pledge.p.impl.fulfilled.load(moRelaxed)
+  when compileOption("assertions"):
+    let isFulfilled = pledge.p.impl.fulfilled.load(moRelaxed)
+  preCondition: not isFulfilled
 
   # Lock the pledge, new tasks should be scheduled right away
   fence(moRelease)
@@ -445,7 +447,9 @@ template fulfillIterImpl*(pledge: Pledge, index: int32, queue, enqueue: typed) =
   preCondition: pledge.p.kind == Iteration
 
   let bucket = getBucket(pledge, index)
-  preCondition: not pledge.p.impls[bucket].fulfilled.load(moRelaxed)
+  when compileOption("assertions"):
+    let isFulfilled = pledge.p.impls[bucket].fulfilled.load(moRelaxed)
+  preCondition: not isFulfilled
 
   # Lock the pledge, new tasks should be scheduled right away
   fence(moRelease)
