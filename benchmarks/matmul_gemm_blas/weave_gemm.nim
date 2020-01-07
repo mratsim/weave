@@ -42,7 +42,7 @@ proc benchWeaveGEMM*(a, b: seq[float32], ashape, bshape: MatrixShape, nb_samples
 when isMainModule:
   import std/[random, sequtils]
 
-  randomize(42) # FOr reproducibility
+  randomize(42) # For reproducibility
   # warmup()
   reportConfig("Weave (Pure Nim)", float32, (M, K), (K, N))
 
@@ -51,5 +51,5 @@ when isMainModule:
     let b = newSeqWith(K*N, float32 rand(-0.1..0.1))
 
     init(Weave)
-    let mkl = benchWeaveGEMM(a, b, (M,K), (K,N), NbSamples)
+    let weave = benchWeaveGEMM(a, b, (M,K), (K,N), NbSamples)
     exit(Weave)

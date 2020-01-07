@@ -53,4 +53,4 @@ when isMainModule:
     let a = newSeqWith(M*K, float32 rand(-0.1..0.1))
     let b = newSeqWith(K*N, float32 rand(-0.1..0.1))
 
-    let mkl = benchOpenBLAS(a, b, (M,K), (K,N), NbSamples)
+    let openblas = benchOpenBLAS(a, b, (M,K), (K,N), NbSamples)

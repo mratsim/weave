@@ -48,4 +48,4 @@ when isMainModule:
     let a = newSeqWith(M*K, float32 rand(-0.1..0.1))
     let b = newSeqWith(K*N, float32 rand(-0.1..0.1))
 
-    let mkl = benchLaserGEMM(a, b, (M,K), (K,N), NbSamples)
+    let laser = benchLaserGEMM(a, b, (M,K), (K,N), NbSamples)
