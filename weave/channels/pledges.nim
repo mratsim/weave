@@ -513,7 +513,7 @@ macro delayedUntilMulti*(task: Task, pool: var TLPoolAllocator, pledges: varargs
     taskNodesInitStmt.add taskNodeInit
 
   result.add taskNodesInitStmt
-  result.add newCall(ident"delayedUntil", firstNode, task)
+  result.add newCall(bindSym"delayedUntil", firstNode, task)
 
 # Sanity checks
 # ------------------------------------------------------------------------------
