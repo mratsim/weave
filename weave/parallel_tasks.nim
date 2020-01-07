@@ -83,7 +83,12 @@ proc spawnImpl(pledges: NimNode, funcCall: NimNode): NimNode =
         if not delayedUntil(`task`, `pledge`, int32(`pledgeIndex`), myMemPool()):
           schedule(`task`)
   else:
-    error "No supported"
+    let delayedMulti = getAst(delayedUntilMulti(
+      task, newCall(bindSym"myMemPool"), pledges)
+    )
+    scheduleBlock = quote do:
+      if not `delayedMulti`:
+        schedule(`task`)
 
   if not needFuture: # TODO: allow awaiting on a Flowvar[void]
     if funcCall.len == 2:
@@ -263,6 +268,39 @@ when isMainModule:
       let pB1 = newPledge()
       spawnDelayed pB1, echoC1()
       spawnDelayed pA, echoB2()
+      spawnDelayed pA, echoB1(pB1)
+      spawn echoA(pA)
+      exit(Weave)
+
+    main()
+
+  block: # Delayed computation with multiple dependencies
+
+    proc echoA(pA: Pledge) =
+      echo "Display A, sleep 1s, create parallel streams 1 and 2"
+      sleep(1000)
+      pA.fulfill()
+
+    proc echoB1(pB1: Pledge) =
+      echo "Display B1, sleep 1s"
+      sleep(1000)
+      pB1.fulfill()
+
+    proc echoB2(pB2: Pledge) =
+      echo "Display B2, no sleep"
+      pB2.fulfill()
+
+    proc echoC12() =
+      echo "Display C12, exit stream"
+
+    proc main() =
+      echo "Sanity check 4: Dataflow parallelism with multiple dependencies"
+      init(Weave)
+      let pA = newPledge()
+      let pB1 = newPledge()
+      let pB2 = newPledge()
+      spawnDelayed pB1, pB2, echoC12()
+      spawnDelayed pA, echoB2(pB2)
       spawnDelayed pA, echoB1(pB1)
       spawn echoA(pA)
       exit(Weave)

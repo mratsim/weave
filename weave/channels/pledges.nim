@@ -135,13 +135,13 @@ type
 
   TaskNode = ptr object
     ## Task Metadata.
-    task: Task
+    task*: Task
     # Next task in the current pledge channel
     next: Atomic[pointer]
     # Next task dependency if it has multiple
-    nextDep: TaskNode
-    pledge: Pledge
-    bucketID: int32
+    nextDep*: TaskNode
+    pledge*: Pledge
+    bucketID*: int32
 
   PledgeKind = enum
     Single
@@ -267,7 +267,7 @@ proc delayedUntilIter(taskNode: TaskNode, curTask: Task): bool =
   discard pledge.p.impls[taskNode.bucketID].deferredOut.fetchAdd(1, moRelaxed)
   return true
 
-proc delayedUntil(taskNode: TaskNode, curTask: Task): bool =
+proc delayedUntil*(taskNode: TaskNode, curTask: Task): bool =
   ## Redelay a task that depends on multiple pledges
   ## with 1 or more pledge fulfilled but still some unfulfilled.
   preCondition: not taskNode.pledge.p.isNil
@@ -478,7 +478,7 @@ template fulfillIterImpl*(pledge: Pledge, index: int32, queue, enqueue: typed) =
 # Multiple dependencies
 # ------------------------------------------------------------------------------
 
-macro multiDeps*(task: Task, pool: var TLPoolAllocator, pledges: varargs[untyped]): untyped =
+macro delayedUntilMulti*(task: Task, pool: var TLPoolAllocator, pledges: varargs[untyped]): untyped =
   ## Associate a task with multiple dependencies
   result = newStmtList()
 
@@ -489,19 +489,19 @@ macro multiDeps*(task: Task, pool: var TLPoolAllocator, pledges: varargs[untyped
     var taskNodeInit = newStmtList()
     if pledges[i].kind == nnkPar:
       let pledge = pledges[i][0]
-      taskNode = genSym(nskLet, "taskNode_" & $pledge & "_" & $pledges[i][1] & "_")
+      taskNode = genSym(nskLet, "taskNode_" & $pledge[i] & "_" & $pledges[i][1] & "_")
       let bucket = newCall(bindSym"getBucket", pledge, pledges[i][1])
       taskNodeInit.add quote do:
-        let `taskNode` = `pool`.borrow(deref(TaskNode))
-        `taskNode`.task = task
+        let `taskNode` = borrow(`pool`, deref(TaskNode))
+        `taskNode`.task = `task`
         `taskNode`.pledge = `pledge`
         `taskNode`.bucketID = `bucket`
     else:
-      taskNode = genSym(nskLet, "taskNode_" & $pledges & "_")
+      taskNode = genSym(nskLet, "taskNode_" & $pledges[i] & "_")
       let pledge = pledges[i]
       taskNodeInit.add quote do:
-        let `taskNode` = `pool`.borrow(deref(TaskNode))
-        `taskNode`.task = task
+        let `taskNode` = borrow(`pool`, deref(TaskNode))
+        `taskNode`.task = `task`
         `taskNode`.pledge = `pledge`
         `taskNode`.bucketID = NoIter
     if i != 0:
