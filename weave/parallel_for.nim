@@ -96,12 +96,13 @@ template parallelForAwaitableWrapper(
       this.futures = cast[pointer](fvNode.next)
 
       LazyFV:
-        let dummyFV = cast[Flowvar[Dummy]](fvNode.lfv)
+        let dummyFV = cast[Flowvar[bool]](fvNode.lfv)
       EagerFV:
-        let dummyFV = cast[Flowvar[Dummy]](fvNode.chan)
+        let dummyFV = cast[Flowvar[bool]](fvNode.chan)
 
       debugSplit: log("Worker %2d: loop task 0x%.08x (iterations [%ld, %ld)) waiting for the remainder\n", myID(), this.fn, this.start, this.stop)
-      sync(dummyFV)
+      let isLastIter = sync(dummyFV)
+      ascertain: not isLastIter
       debugSplit: log("Worker %2d: loop task 0x%.08x (iterations [%ld, %ld)) complete\n", myID(), this.fn, this.start, this.stop)
 
       # The "sync" in the merge statement should have recycled the flowvar channel already
@@ -226,22 +227,22 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
           let `env` = cast[ptr `CapturedTy`](param)
         `fnCall`
   else:
-    let dummyFut = ident"dummyFut"
     futTy = nnkBracketExpr.newTree(
-      bindSym"Flowvar", bindSym"Dummy"
+      bindSym"Flowvar", bindSym"bool"
     )
     result.add quote do:
       proc `parForTask`(param: pointer) {.nimcall, gcsafe.} =
         let this = myTask()
         assert not isRootTask(this)
 
-        let `dummyFut` = cast[ptr `futTy`](param)
+        let lastLoopIter = cast[ptr FlowVar[bool]](param)
         when bool(`withArgs`):
           # This requires lazy futures to have a fixed max buffer size
-          let offset = cast[pointer](cast[ByteAddress](param) +% sizeof(`futTy`))
+          let offset = cast[pointer](cast[ByteAddress](param) +% sizeof(Flowvar[bool]))
           let `env` = cast[ptr `CapturedTy`](offset)
         `fnCall`
-        readyWith(`dummyFut`[], Dummy())
+        # The first loop iteration is the last to return in awaitable loops
+        readyWith(lastLoopiter[], this.isInitialIter)
 
   # Create the task
   # --------------------------------------------------------
@@ -277,10 +278,14 @@ macro parallelFor*(loopParams: untyped, body: untyped): untyped =
   ##    awaitable: myLoopHandle
   ##    echo a + b + i
   ##
-  ##  sync(myLoopHandle)
+  ##  let lastIter = sync(myLoopHandle)
   ##
   ## In templates and generic procedures, you need to use "mixin myLoopHandle"
   ## or declare the awaitable handle before the loop to workaround Nim early symbol resolution
+  ##
+  ## Awaiting a for-loop returns true if it was the last loop iteration to await.
+  ## This is useful to have conditional execution (for example fulfilling a data dependency)
+  ## on nested loops.
 
   # TODO - support pledge in reduction
   if (body[0].kind == nnkCall and body[0][0].eqIdent"reduce") or
@@ -384,7 +389,7 @@ when isMainModule:
           awaitable: innerJ
           M[i][j] = 1000 * i + 1000 * j
 
-        sync(innerJ)
+        discard sync(innerJ)
         # Check that the sync worked
         for j in 0 ..< 200:
           let Mij = M[i][j]

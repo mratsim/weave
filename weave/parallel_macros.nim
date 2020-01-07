@@ -301,13 +301,16 @@ proc addLoopTask*(
           let `task` = newTaskFromCache()
           `task`.parent = myTask()
           `task`.fn = `asyncFn`
-          `task`.isLoop = true
+
           `task`.start = `start`
           `task`.cur = `start`
           `task`.stop = `stop`
           `task`.stride = `stride`
-          `task`.hasFuture = true
+          
           `task`.futureSize = uint8(sizeof(`resultFutureType`.T))
+          `task`.hasFuture = true
+          `task`.isLoop = true
+          `task`.isInitialIter = true
           when bool(`withArgs`):
             cast[ptr (`resultFutureType`, `CapturedTySym`)](`task`.data.addr)[] = (`futureIdent`, `capturedVars`)
           else:
