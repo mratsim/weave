@@ -196,7 +196,11 @@ macro spawnDelayed*(pledge: Pledge, iterationIndex: SomeInteger, fnCall: typed):
   ## spawnDelayed returns immediately.
   ##
   ## Ensure that before syncing on the flowvar of a delayed spawn, its pledge can be fulfilled or you will deadlock.
-  result = spawnImpl(pledge, iterationIndex, fnCall)
+  result = spawnImpl(
+    pledge,
+    iterationIndex,
+    fnCall
+  )
 
 # Sanity checks
 # --------------------------------------------------------

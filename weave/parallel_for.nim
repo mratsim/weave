@@ -16,7 +16,9 @@ import
   ./parallel_macros, ./parallel_reduce,
   ./contexts, ./runtime, ./config,
   ./instrumentation/contracts,
-  ./datatypes/flowvars, ./await_fsm
+  ./datatypes/flowvars, ./await_fsm,
+  ./channels/pledges,
+  ./parallel_tasks
 
 when not compileOption("threads"):
   {.error: "This requires --threads:on compilation flag".}
@@ -107,6 +109,38 @@ template parallelForAwaitableWrapper(
       # 2 deallocs for eager FV and 3 for Lazy FV
       recycleFVN(fvNode)
 
+proc parallelForSplitted(index, start, stop, stride, captured, capturedTy, dependsOn, body: NimNode): NimNode =
+  ## In case a parallelFor depends on iteration pledge indexed by the loop variable
+  ## we can't use regular parallel loop with lazy splitting
+  ## we need to split the loop eagerly so that each iterations can be started independently
+  ## as soo as the corresponding iteration pledge is fulfilled.
+  ## In that case, the loop cannot have futures.
+
+  result = newStmtList()
+  let parForSplitted = ident("weaveTask_DelayedParForSplit_")
+  var fnCall = newCall(bindSym"spawnDelayed")
+
+  let pledge = dependsOn[0]
+
+  if captured.len > 0:
+    let captured = if captured.len > 1: captured
+                   else: captured[0]
+
+    result.add quote do:
+      proc `parForSplitted`(`index`: SomeInteger, captures: `capturedTy`) {.nimcall, gcsafe.} =
+        let `captured` = captures
+        `body`
+
+      for `index` in countup(`start`, `stop`-1, `stride`):
+        spawnDelayed(`pledge`, `index`, `parForSplitted`(`index`, `captured`))
+  else:
+    result.add quote do:
+      proc `parForSplitted`(`index`: SomeInteger) {.nimcall, gcsafe.} =
+        `body`
+
+      for `index` in countup(`start`, `stop`-1, `stride`):
+        spawnDelayed(`pledge`, `index`, `parForSplitted`(`index`))
+
 macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped =
   ## Parallel for loop
   ## Syntax:
@@ -141,6 +175,18 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
       type `CapturedTy` = `capturedTy`
 
   result.addSanityChecks(capturedTy, CapturedTy)
+
+  # Pledges
+  # --------------------------------------------------------
+  # TODO: support multiple pledges
+  let dependsOn = extractPledges(body)
+  # If the input dependencies depends on the loop index
+  # we need to eagerly split our lazily scheduled loop
+  # as iterations cannot be scheduled at the same type
+  # It also cannot be awaited with regular sync.
+
+  if dependsOn.kind == nnkPar and dependsOn[1].eqIdent(idx):
+    return parallelForSplitted(idx, start, stop, stride, captured, capturedTy, dependsOn, body)
 
   # Package the body in a proc
   # --------------------------------------------------------
@@ -235,6 +281,7 @@ macro parallelFor*(loopParams: untyped, body: untyped): untyped =
   ## In templates and generic procedures, you need to use "mixin myLoopHandle"
   ## or declare the awaitable handle before the loop to workaround Nim early symbol resolution
 
+  # TODO - support pledge in reduction
   if (body[0].kind == nnkCall and body[0][0].eqIdent"reduce") or
      (body.len >= 2 and
      body[1].kind == nnkCall and body[1][0].eqIdent"reduce"):
@@ -254,7 +301,7 @@ macro parallelForStrided*(loopParams: untyped, stride: Positive, body: untyped):
 # --------------------------------------------------------
 
 when isMainModule:
-  import ./instrumentation/loggers, ./runtime, ./runtime_fsm
+  import ./instrumentation/loggers, ./runtime, ./runtime_fsm, os
 
   block:
     proc main() =
@@ -349,4 +396,36 @@ when isMainModule:
     echo "\n\nNested awaitable for-loop"
     echo "-------------------------"
     main5()
+    echo "-------------------------"
+
+  block:
+    proc main6() =
+      init(Weave)
+
+      let pA = newPledge(0, 10, 1)
+      let pB = newPledge(0, 10, 1)
+
+      parallelFor i in 0 ..< 10:
+        captures: {pA}
+        sleep(i * 10)
+        pA.fulfill(i)
+        echo "Step A - stream ", i, " at ", i * 10, " ms"
+
+      parallelFor i in 0 ..< 10:
+        dependsOn: (pA, i)
+        captures: {pB}
+        sleep(i * 10)
+        pB.fulfill(i)
+        echo "Step B - stream ", i, " at ", 2 * i * 10, " ms"
+
+      parallelFor i in 0 ..< 10:
+        dependsOn: (pB, i)
+        sleep(i * 10)
+        echo "Step C - stream ", i, " at ", 3 * i * 10, " ms"
+
+      exit(Weave)
+
+    echo "Dataflow loop parallelism"
+    echo "-------------------------"
+    main6()
     echo "-------------------------"

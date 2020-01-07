@@ -29,6 +29,7 @@ task test, "Run Weave tests":
   test "", "weave/channels/channels_spsc_single.nim"
   test "", "weave/channels/channels_spsc_single_ptr.nim"
   test "", "weave/channels/channels_mpsc_unbounded_batch.nim"
+  test "", "weave/channels/pledges.nim"
 
   test "", "weave/datatypes/binary_worker_trees.nim"
   test "", "weave/datatypes/bounded_queues.nim"

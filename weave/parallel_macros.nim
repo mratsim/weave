@@ -128,13 +128,13 @@ proc extractCaptures*(body: NimNode, c: int): tuple[captured, capturedTy: NimNod
   body[c] = nnkDiscardStmt.newTree(body[c].toStrLit)
 
 proc extractFutureAndCaptures*(body: NimNode): tuple[future, captured, capturedTy: NimNode] =
-  ## Extract the result future/flowvar and the vaptured variables if any
+  ## Extract the result future/flowvar and the captured variables if any
   ## out of a parallelFor / parallelForStrided / parallelForStaged / parallelForStagedStrided
   ## Returns a future, the captured variable and the captured type
   template findCapturesAwaitable(idx: int) =
     if body[idx][0].eqIdent"captures":
       assert result.captured.isNil and result.capturedTy.isNil, "The captured section can only be set once for a loop."
-      (result.captured, result.capturedTy) = extractCaptures(body, 0)
+      (result.captured, result.capturedTy) = extractCaptures(body, idx)
     elif body[idx][0].eqIdent"awaitable":
       body[idx][1].expectKind(nnkStmtList)
       body[idx][1][0].expectKind(nnkIdent)
@@ -143,19 +143,31 @@ proc extractFutureAndCaptures*(body: NimNode): tuple[future, captured, capturedT
       # Remove the awaitable section
       body[idx] = nnkDiscardStmt.newTree(body[idx].toStrLit)
 
-  if body[0].kind == nnkCall:
-    findCapturesAwaitable(0)
-    if body.len > 1 and body[1].kind == nnkCall:
-      findCapturesAwaitable(1)
+  for i in 0 ..< body.len-1:
+    if body[i].kind == nnkCall:
+      findCapturesAwaitable(i)
+
+proc extractPledges*(body: NimNode): NimNode =
+  ## Extract the dependencies in/out (pledges) if any
+  template findPledges(idx: int) =
+    if body[idx][0].eqIdent"dependsOn":
+      assert result.isNil, "The dependsOn section can only be set once for a loop."
+      result = body[idx][1][0]
+      # Remove the dependsOn section
+      body[idx] = nnkDiscardStmt.newTree(body[idx].toStrLit)
+
+  for i in 0 ..< body.len-1:
+    if body[i].kind == nnkCall:
+      findPledges(i)
 
 proc addSanityChecks*(statement, capturedTypes, capturedTypesSym: NimNode) =
   if capturedTypes.len > 0:
     statement.add quote do:
       static:
-        doAssert supportsCopyMem(`capturedTypesSym`), "\n\n parallelFor" &
-          " has arguments managed by GC (ref/seq/strings),\n" &
-          "  they cannot be distributed across threads.\n" &
-          "  Argument types: " & $`capturedTypes` & "\n\n"
+        # doAssert supportsCopyMem(`capturedTypesSym`), "\n\n parallelFor" &
+        #   " has arguments managed by GC (ref/seq/strings),\n" &
+        #   "  they cannot be distributed across threads.\n" &
+        #   "  Argument types: " & $`capturedTypes` & "\n\n"
 
         doAssert sizeof(`capturedTypesSym`) <= TaskDataSize, "\n\n parallelFor" &
           " has arguments that do not fit in the parallel tasks data buffer.\n" &

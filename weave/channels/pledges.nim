@@ -207,7 +207,7 @@ proc `=sink`*(dst: var Pledge, src: Pledge) {.inline.} =
   system.`=sink`(dst.p, src.p)
 
 proc `=`*(dst: var Pledge, src: Pledge) {.inline.} =
-  preCondition: src.p.isNil
+  preCondition: dst.p.isNil
 
   discard fetchAdd(src.p.refCount, 1, moRelaxed)
   dst.p = src.p
@@ -438,8 +438,8 @@ template fulfillIterImpl*(pledge: Pledge, index: int32, queue, enqueue: typed) =
   ## unless they also depend on another unfulfilled pledge.
   ## Dependent tasks scheduled at a later time will be scheduled immediately
   ##
-  ## `enqueueStmt` is a statement to enqueue a single task in the worker queue.
-  ## a `task` symbol will be injected and usable at the caller site
+  ## `queue` is the data structure for ready tasks
+  ## `enqueue` is the correspondig enqueing proc
   ## This should be wrapped in a proc to avoid code-bloat as the template is big
   preCondition: not pledge.p.isNil
   preCondition: pledge.p.kind == Iteration
