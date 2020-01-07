@@ -15,7 +15,7 @@ import
   # Internal
   ./parallel_macros, ./parallel_reduce,
   ./contexts, ./runtime, ./config,
-  ./instrumentation/contracts,
+  ./instrumentation/[loggers, contracts],
   ./datatypes/flowvars, ./await_fsm,
   ./channels/pledges,
   ./parallel_tasks
@@ -247,6 +247,7 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
   # --------------------------------------------------------
   result.addLoopTask(
     parForTask, start, stop, stride, captured, CapturedTy,
+    dependsOn,
     futureIdent = future, resultFutureType = futTy
   )
 

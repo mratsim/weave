@@ -11,7 +11,8 @@ import
   # Internal
   ./datatypes/[sync_types, flowvars], ./contexts,
   ./instrumentation/profilers,
-  ./scheduler
+  ./scheduler,
+  ./channels/pledges
 
 # Parallel for utilities
 # ----------------------------------------------------------
@@ -241,6 +242,7 @@ proc addLoopTask*(
     statement, asyncFn,
     start, stop, stride,
     capturedVars, CapturedTySym: NimNode,
+    dependsOn: NimNode,
     futureIdent, resultFutureType: NimNode
   ) =
   ## Add a loop task
@@ -260,6 +262,30 @@ proc addLoopTask*(
   let futureIdent = if hasFuture: futureIdent
                     else: ident("dummy")
 
+  # Dependencies
+  # ---------------------------------------------------
+  var scheduleBlock: NimNode
+  let task = ident"task"
+  if dependsOn.isNil:
+    scheduleBlock = newCall(bindSym"schedule", task)
+  elif dependsOn.kind == nnkIdent:
+    scheduleBlock = quote do:
+      if not delayedUntil(`task`, `dependsOn`, myMemPool()):
+        schedule(`task`)
+  else:
+    let (pledge, pledgeIndex) = (dependsOn[0], dependsOn[1])
+    if pledgeIndex.kind == nnkIntLit and pledgeIndex.intVal == NoIter:
+      scheduleBlock = quote do:
+        if not delayedUntil(`task`, `pledge`, myMemPool()):
+          schedule(`task`)
+    else:
+      # This is a dependency on a loop index from ANOTHER loop
+      # not the loop that is currently scheduled.
+      scheduleBlock = quote do:
+        if not delayedUntil(`task`, `pledge`, int32(`pledgeIndex`), myMemPool()):
+          schedule(`task`)
+
+  # ---------------------------------------------------
   if hasFuture:
     statement.add quote do:
       when not declared(`futureIdent`):
@@ -272,21 +298,21 @@ proc addLoopTask*(
           # TODO profiling templates visibility issue
           timer_start(timer_enq_deq_task)
         block enq_deq_task:
-          let task = newTaskFromCache()
-          task.parent = myTask()
-          task.fn = `asyncFn`
-          task.isLoop = true
-          task.start = `start`
-          task.cur = `start`
-          task.stop = `stop`
-          task.stride = `stride`
-          task.hasFuture = true
-          task.futureSize = uint8(sizeof(`resultFutureType`.T))
+          let `task` = newTaskFromCache()
+          `task`.parent = myTask()
+          `task`.fn = `asyncFn`
+          `task`.isLoop = true
+          `task`.start = `start`
+          `task`.cur = `start`
+          `task`.stop = `stop`
+          `task`.stride = `stride`
+          `task`.hasFuture = true
+          `task`.futureSize = uint8(sizeof(`resultFutureType`.T))
           when bool(`withArgs`):
-            cast[ptr (`resultFutureType`, `CapturedTySym`)](task.data.addr)[] = (`futureIdent`, `capturedVars`)
+            cast[ptr (`resultFutureType`, `CapturedTySym`)](`task`.data.addr)[] = (`futureIdent`, `capturedVars`)
           else:
-            cast[ptr `resultFutureType`](task.data.addr)[] = `futureIdent`
-          schedule(task)
+            cast[ptr `resultFutureType`](`task`.data.addr)[] = `futureIdent`
+          `scheduleBlock`
           when defined(WV_profile):
             timer_stop(timer_enq_deq_task)
       else:
@@ -298,17 +324,17 @@ proc addLoopTask*(
           # TODO profiling templates visibility issue
           timer_start(timer_enq_deq_task)
         block enq_deq_task:
-          let task = newTaskFromCache()
-          task.parent = myTask()
-          task.fn = `asyncFn`
-          task.isLoop = true
-          task.start = `start`
-          task.cur = `start`
-          task.stop = `stop`
-          task.stride = `stride`
+          let `task` = newTaskFromCache()
+          `task`.parent = myTask()
+          `task`.fn = `asyncFn`
+          `task`.isLoop = true
+          `task`.start = `start`
+          `task`.cur = `start`
+          `task`.stop = `stop`
+          `task`.stride = `stride`
           when bool(`withArgs`):
-            cast[ptr `CapturedTySym`](task.data.addr)[] = `capturedVars`
-          schedule(task)
+            cast[ptr `CapturedTySym`](`task`.data.addr)[] = `capturedVars`
+          `scheduleBlock`
           when defined(WV_profile):
             timer_stop(timer_enq_deq_task)
 

@@ -202,6 +202,7 @@ macro parallelForStagedImpl*(loopParams: untyped, stride: int, body: untyped): u
   # --------------------------------------------------------
   result.addLoopTask(
     parStagedTask, start, stop, stride, captured, CapturedTy,
+    dependsOn = nil, # TODO
     futureIdent = future, resultFutureType = futTy
   )
 
