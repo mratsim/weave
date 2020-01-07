@@ -16,7 +16,7 @@ import
 # ----------------------------------------------------------------------------------
 
 const
-  TaskDataSize* = 128 # Up to 256 for the whole thing
+  TaskDataSize* = 144 # Up to 256 for the whole thing
 
 type
   # Task
@@ -39,12 +39,13 @@ type
     stop*: int
     stride*: int
     # 64 bytes
+    futures*: pointer    # LinkedList of futures required by the current task
+    futureSize*: uint8   # Size of the future result type if relevant
+    hasFuture*: bool     # If a task is associated with a future, the future is stored at data[0]
+    isLoop*: bool
+    isInitialIter*: bool # Awaitable for-loops return true for the initial iter
     when FirstVictim == LastVictim:
       victim*: WorkerID
-    isLoop*: bool
-    hasFuture*: bool   # If a task is associated with a future, the future is stored at data[0]
-    futureSize*: uint8 # Size of the future result type if relevant
-    futures*: pointer  # LinkedList of futures required by the current task
     # 79 bytes
     # User data - including the FlowVar channel to send back result.
     # It is very likely that User data contains a pointer (the Flowvar channel)

@@ -62,7 +62,7 @@ proc pack_A_mc_kc*[T; ukernel: static MicroKernel](
 proc pack_B_kc_nc*[T; ukernel: static MicroKernel](
       packedB: ptr UncheckedArray[T],
       kc, nc: int,
-      B: MatrixView[T]) =
+      B: MatrixView[T], kcTileReady: Pledge) =
   ## Packs panel [kc, nc] for ~B (half-L1 cache)
   ## Pads if needed
   ##
@@ -76,10 +76,10 @@ proc pack_B_kc_nc*[T; ukernel: static MicroKernel](
   let unroll_stop = nc.round_step_down(NR)
 
   # 1. Pack n matrices of size kc*nr, n = nc/nr
-  parallelForStrided j in 0 ..< unroll_stop, stride = NR:
-    captures: {kc, buffer, B}
-    parallelFor k in 0 ..< kc:
-      captures: {j, kc, buffer, B}
+  parallelFor k in 0 ..< kc:
+    awaitable: kcLoop
+    captures: {kc, buffer, B, unroll_stop}
+    for j in countup(0, unroll_stop-1, NR):
       for jj in 0 ..< NR:
         buffer[j*kc + k*NR + jj] = B[k, j+jj]
 
@@ -93,4 +93,8 @@ proc pack_B_kc_nc*[T; ukernel: static MicroKernel](
       for j in remainder ..< NR: # Pad with 0 if packing over the edge
         offBuf[k*NR + j] = 0.T
 
-  syncRoot(Weave)
+  # Note: the tail is processed in the calling thread
+  #       so waiting there guarantees proper data dependencies
+  #       provided the "k" loop is not nested (i.e. does real work instead of enqueueing tasks)
+  discard sync(kcLoop)
+  kcTileReady.fulfill()

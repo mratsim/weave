@@ -249,6 +249,7 @@ proc splitAndSend*(task: Task, req: sink StealRequest, workSharing: bool) =
     upperSplit.start = split
     upperSplit.cur = split
     upperSplit.stop = task.stop
+    upperSplit.isInitialIter = false
 
     # Current task continues with lower half
     task.stop = split

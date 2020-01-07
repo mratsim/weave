@@ -11,7 +11,8 @@ import
   # Internal
   ./datatypes/[sync_types, flowvars], ./contexts,
   ./instrumentation/profilers,
-  ./scheduler
+  ./scheduler,
+  ./channels/pledges
 
 # Parallel for utilities
 # ----------------------------------------------------------
@@ -128,13 +129,13 @@ proc extractCaptures*(body: NimNode, c: int): tuple[captured, capturedTy: NimNod
   body[c] = nnkDiscardStmt.newTree(body[c].toStrLit)
 
 proc extractFutureAndCaptures*(body: NimNode): tuple[future, captured, capturedTy: NimNode] =
-  ## Extract the result future/flowvar and the vaptured variables if any
+  ## Extract the result future/flowvar and the captured variables if any
   ## out of a parallelFor / parallelForStrided / parallelForStaged / parallelForStagedStrided
   ## Returns a future, the captured variable and the captured type
   template findCapturesAwaitable(idx: int) =
     if body[idx][0].eqIdent"captures":
       assert result.captured.isNil and result.capturedTy.isNil, "The captured section can only be set once for a loop."
-      (result.captured, result.capturedTy) = extractCaptures(body, 0)
+      (result.captured, result.capturedTy) = extractCaptures(body, idx)
     elif body[idx][0].eqIdent"awaitable":
       body[idx][1].expectKind(nnkStmtList)
       body[idx][1][0].expectKind(nnkIdent)
@@ -143,19 +144,31 @@ proc extractFutureAndCaptures*(body: NimNode): tuple[future, captured, capturedT
       # Remove the awaitable section
       body[idx] = nnkDiscardStmt.newTree(body[idx].toStrLit)
 
-  if body[0].kind == nnkCall:
-    findCapturesAwaitable(0)
-    if body.len > 1 and body[1].kind == nnkCall:
-      findCapturesAwaitable(1)
+  for i in 0 ..< body.len-1:
+    if body[i].kind == nnkCall:
+      findCapturesAwaitable(i)
+
+proc extractPledges*(body: NimNode): NimNode =
+  ## Extract the dependencies in/out (pledges) if any
+  template findPledges(idx: int) =
+    if body[idx][0].eqIdent"dependsOn":
+      assert result.isNil, "The dependsOn section can only be set once for a loop."
+      result = body[idx][1][0]
+      # Remove the dependsOn section
+      body[idx] = nnkDiscardStmt.newTree(body[idx].toStrLit)
+
+  for i in 0 ..< body.len-1:
+    if body[i].kind == nnkCall:
+      findPledges(i)
 
 proc addSanityChecks*(statement, capturedTypes, capturedTypesSym: NimNode) =
   if capturedTypes.len > 0:
     statement.add quote do:
       static:
-        doAssert supportsCopyMem(`capturedTypesSym`), "\n\n parallelFor" &
-          " has arguments managed by GC (ref/seq/strings),\n" &
-          "  they cannot be distributed across threads.\n" &
-          "  Argument types: " & $`capturedTypes` & "\n\n"
+        # doAssert supportsCopyMem(`capturedTypesSym`), "\n\n parallelFor" &
+        #   " has arguments managed by GC (ref/seq/strings),\n" &
+        #   "  they cannot be distributed across threads.\n" &
+        #   "  Argument types: " & $`capturedTypes` & "\n\n"
 
         doAssert sizeof(`capturedTypesSym`) <= TaskDataSize, "\n\n parallelFor" &
           " has arguments that do not fit in the parallel tasks data buffer.\n" &
@@ -229,6 +242,7 @@ proc addLoopTask*(
     statement, asyncFn,
     start, stop, stride,
     capturedVars, CapturedTySym: NimNode,
+    dependsOn: NimNode,
     futureIdent, resultFutureType: NimNode
   ) =
   ## Add a loop task
@@ -248,6 +262,30 @@ proc addLoopTask*(
   let futureIdent = if hasFuture: futureIdent
                     else: ident("dummy")
 
+  # Dependencies
+  # ---------------------------------------------------
+  var scheduleBlock: NimNode
+  let task = ident"task"
+  if dependsOn.isNil:
+    scheduleBlock = newCall(bindSym"schedule", task)
+  elif dependsOn.kind == nnkIdent:
+    scheduleBlock = quote do:
+      if not delayedUntil(`task`, `dependsOn`, myMemPool()):
+        schedule(`task`)
+  else:
+    let (pledge, pledgeIndex) = (dependsOn[0], dependsOn[1])
+    if pledgeIndex.kind == nnkIntLit and pledgeIndex.intVal == NoIter:
+      scheduleBlock = quote do:
+        if not delayedUntil(`task`, `pledge`, myMemPool()):
+          schedule(`task`)
+    else:
+      # This is a dependency on a loop index from ANOTHER loop
+      # not the loop that is currently scheduled.
+      scheduleBlock = quote do:
+        if not delayedUntil(`task`, `pledge`, int32(`pledgeIndex`), myMemPool()):
+          schedule(`task`)
+
+  # ---------------------------------------------------
   if hasFuture:
     statement.add quote do:
       when not declared(`futureIdent`):
@@ -260,21 +298,24 @@ proc addLoopTask*(
           # TODO profiling templates visibility issue
           timer_start(timer_enq_deq_task)
         block enq_deq_task:
-          let task = newTaskFromCache()
-          task.parent = myTask()
-          task.fn = `asyncFn`
-          task.isLoop = true
-          task.start = `start`
-          task.cur = `start`
-          task.stop = `stop`
-          task.stride = `stride`
-          task.hasFuture = true
-          task.futureSize = uint8(sizeof(`resultFutureType`.T))
+          let `task` = newTaskFromCache()
+          `task`.parent = myTask()
+          `task`.fn = `asyncFn`
+
+          `task`.start = `start`
+          `task`.cur = `start`
+          `task`.stop = `stop`
+          `task`.stride = `stride`
+          
+          `task`.futureSize = uint8(sizeof(`resultFutureType`.T))
+          `task`.hasFuture = true
+          `task`.isLoop = true
+          `task`.isInitialIter = true
           when bool(`withArgs`):
-            cast[ptr (`resultFutureType`, `CapturedTySym`)](task.data.addr)[] = (`futureIdent`, `capturedVars`)
+            cast[ptr (`resultFutureType`, `CapturedTySym`)](`task`.data.addr)[] = (`futureIdent`, `capturedVars`)
           else:
-            cast[ptr `resultFutureType`](task.data.addr)[] = `futureIdent`
-          schedule(task)
+            cast[ptr `resultFutureType`](`task`.data.addr)[] = `futureIdent`
+          `scheduleBlock`
           when defined(WV_profile):
             timer_stop(timer_enq_deq_task)
       else:
@@ -286,17 +327,17 @@ proc addLoopTask*(
           # TODO profiling templates visibility issue
           timer_start(timer_enq_deq_task)
         block enq_deq_task:
-          let task = newTaskFromCache()
-          task.parent = myTask()
-          task.fn = `asyncFn`
-          task.isLoop = true
-          task.start = `start`
-          task.cur = `start`
-          task.stop = `stop`
-          task.stride = `stride`
+          let `task` = newTaskFromCache()
+          `task`.parent = myTask()
+          `task`.fn = `asyncFn`
+          `task`.isLoop = true
+          `task`.start = `start`
+          `task`.cur = `start`
+          `task`.stop = `stop`
+          `task`.stride = `stride`
           when bool(`withArgs`):
-            cast[ptr `CapturedTySym`](task.data.addr)[] = `capturedVars`
-          schedule(task)
+            cast[ptr `CapturedTySym`](`task`.data.addr)[] = `capturedVars`
+          `scheduleBlock`
           when defined(WV_profile):
             timer_stop(timer_enq_deq_task)
 

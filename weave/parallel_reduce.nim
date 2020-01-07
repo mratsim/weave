@@ -223,6 +223,7 @@ macro parallelReduceImpl*(loopParams: untyped, stride: int, body: untyped): unty
   # --------------------------------------------------------
   result.addLoopTask(
     parReduceTask, start, stop, stride, captured, CapturedTy,
+    dependsOn = nil, # TODO
     finalAccum, FutTy
   )
 

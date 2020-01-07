@@ -87,12 +87,13 @@ template parallelStagedAwaitableWrapper(
       this.futures = cast[pointer](fvNode.next)
 
       LazyFV:
-        let dummyFV = cast[Flowvar[Dummy]](fvNode.lfv)
+        let dummyFV = cast[Flowvar[bool]](fvNode.lfv)
       EagerFV:
-        let dummyFV = cast[Flowvar[Dummy]](fvNode.chan)
+        let dummyFV = cast[Flowvar[bool]](fvNode.chan)
 
       debugSplit: log("Worker %2d: loop task 0x%.08x (iterations [%ld, %ld)) waiting for the remainder\n", myID(), this.fn, this.start, this.stop)
-      sync(dummyFV)
+      let isLastIter = sync(dummyFV)
+      ascertain: not isLastIter
       debugSplit: log("Worker %2d: loop task 0x%.08x (iterations [%ld, %ld)) complete\n", myID(), this.fn, this.start, this.stop)
 
       # The "sync" in the merge statement should have recycled the flowvar channel already
@@ -181,27 +182,27 @@ macro parallelForStagedImpl*(loopParams: untyped, stride: int, body: untyped): u
           let `env` = cast[ptr `CapturedTy`](param)
         `fnCall`
   else:
-    let dummyFut = ident"dummyFut"
     futTy = nnkBracketExpr.newTree(
-      bindSym"Flowvar", bindSym"Dummy"
+      bindSym"Flowvar", bindSym"bool"
     )
     result.add quote do:
       proc `parStagedTask`(param: pointer) {.nimcall, gcsafe.} =
         let this = myTask()
         assert not isRootTask(this)
 
-        let `dummyFut` = cast[ptr `futTy`](param)
+        let lastLoopIter = cast[ptr FlowVar[bool]](param)
         when bool(`withArgs`):
           # This requires lazy futures to have a fixed max buffer size
-          let offset = cast[pointer](cast[ByteAddress](param) +% sizeof(`futTy`))
+          let offset = cast[pointer](cast[ByteAddress](param) +% sizeof(Flowvar[bool]))
           let `env` = cast[ptr `CapturedTy`](offset)
         `fnCall`
-        `dummyFut`[].readyWith(Dummy())
+        readyWith(lastLoopiter[], this.isInitialIter)
 
   # Create the task
   # --------------------------------------------------------
   result.addLoopTask(
     parStagedTask, start, stop, stride, captured, CapturedTy,
+    dependsOn = nil, # TODO
     futureIdent = future, resultFutureType = futTy
   )
 
@@ -260,7 +261,7 @@ when isMainModule:
           echo "Thread ", getThreadID(Weave), ": localsum = ", localSum
           res[].atomicInc(localSum)
 
-      sync(paraSum)
+      discard sync(paraSum)
 
     init(Weave)
     let sum1M = sumReduce(1000000)

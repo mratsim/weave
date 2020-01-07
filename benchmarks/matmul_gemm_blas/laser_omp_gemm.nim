@@ -14,7 +14,7 @@ when not defined(vcc):
 else:
   {.pragma: restrict, codegenDecl: "$# __restrict $#".}
 
-proc benchLaserGEMM(a, b: seq[float32], ashape, bshape: MatrixShape, nb_samples: int): seq[float32] =
+proc benchLaserGEMM*(a, b: seq[float32], ashape, bshape: MatrixShape, nb_samples: int): seq[float32] =
   let req_ops = gemm_required_ops(ashape, bshape)
   let out_shape = gemm_out_shape(ashape, bshape)
   let out_size = out_shape.M * out_shape.N
@@ -48,4 +48,4 @@ when isMainModule:
     let a = newSeqWith(M*K, float32 rand(-0.1..0.1))
     let b = newSeqWith(K*N, float32 rand(-0.1..0.1))
 
-    let mkl = benchLaserGEMM(a, b, (M,K), (K,N), NbSamples)
+    let laser = benchLaserGEMM(a, b, (M,K), (K,N), NbSamples)

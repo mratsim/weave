@@ -14,13 +14,14 @@ import
   # Internal
   ./scheduler, ./contexts, ./await_fsm,
   ./datatypes/[flowvars, sync_types],
-  ./instrumentation/[contracts, profilers]
+  ./instrumentation/[contracts, profilers],
+  ./channels/pledges
 
 # workaround visibility issues
 export forceFuture
 export profilers, contexts
 
-macro spawn*(funcCall: typed): untyped =
+proc spawnImpl(pledges: NimNode, funcCall: NimNode): NimNode =
   # We take typed argument so that overloading resolution
   # is already done and arguments are semchecked
   funcCall.expectKind(nnkCall)
@@ -47,10 +48,10 @@ macro spawn*(funcCall: typed): untyped =
   if withArgs:
     result.add quote do:
       static:
-        assert supportsCopyMem(`argsTy`), "\n\n" & `fnName` &
-          " has arguments managed by GC (ref/seq/strings),\n" &
-          "  they cannot be distributed across threads.\n" &
-          "  Argument types: " & $`argsTy` & "\n\n"
+        # assert supportsCopyMem(`argsTy`), "\n\n" & `fnName` &
+        #   " has arguments managed by GC (ref/seq/strings),\n" &
+        #   "  they cannot be distributed across threads.\n" &
+        #   "  Argument types: " & $`argsTy` & "\n\n"
 
         assert sizeof(`argsTy`) <= TaskDataSize, "\n\n" & `fnName` &
           " has arguments that do not fit in the async data buffer.\n" &
@@ -62,6 +63,32 @@ macro spawn*(funcCall: typed): untyped =
   let async_fn = ident("async_" & fnName)
   var fnCall = newCall(fn)
   let data = ident("data")   # typed pointer to data
+
+  # Schedule immediately or delay on dependencies
+  var scheduleBlock: NimNode
+  let task = ident"task"
+  if pledges.isNil:
+    scheduleBlock = newCall(bindSym"schedule", task)
+  elif pledges.len == 1:
+    let pledgeDesc = pledges[0]
+    if pledgeDesc.kind in {nnkIdent, nnkSym}:
+      scheduleBlock = quote do:
+        if not delayedUntil(`task`, `pledgeDesc`, myMemPool()):
+          schedule(`task`)
+    else:
+      pledgeDesc.expectKind({nnkPar, nnkTupleConstr})
+      let pledge = pledgeDesc[0]
+      let pledgeIndex = pledgeDesc[1]
+      scheduleBlock = quote do:
+        if not delayedUntil(`task`, `pledge`, int32(`pledgeIndex`), myMemPool()):
+          schedule(`task`)
+  else:
+    let delayedMulti = getAst(delayedUntilMulti(
+      task, newCall(bindSym"myMemPool"), pledges)
+    )
+    scheduleBlock = quote do:
+      if not `delayedMulti`:
+        schedule(`task`)
 
   if not needFuture: # TODO: allow awaiting on a Flowvar[void]
     if funcCall.len == 2:
@@ -89,12 +116,12 @@ macro spawn*(funcCall: typed): untyped =
         # TODO profiling templates visibility issue
         timer_start(timer_enq_deq_task)
       block enq_deq_task:
-        let task = newTaskFromCache()
-        task.parent = myTask()
-        task.fn = `async_fn`
+        let `task` = newTaskFromCache()
+        `task`.parent = myTask()
+        `task`.fn = `async_fn`
         when bool(`withArgs`):
-          cast[ptr `argsTy`](task.data.addr)[] = `args`
-        schedule(task)
+          cast[ptr `argsTy`](`task`.data.addr)[] = `args`
+        `scheduleBlock`
       when defined(WV_profile):
         timer_stop(timer_enq_deq_task)
 
@@ -136,14 +163,14 @@ macro spawn*(funcCall: typed): untyped =
         # TODO profiling templates visibility issue
         timer_start(timer_enq_deq_task)
       block enq_deq_task:
-        let task = newTaskFromCache()
-        task.parent = myTask()
-        task.fn = `async_fn`
-        task.has_future = true
-        task.futureSize = uint8(sizeof(`retType`))
+        let `task` = newTaskFromCache()
+        `task`.parent = myTask()
+        `task`.fn = `async_fn`
+        `task`.has_future = true
+        `task`.futureSize = uint8(sizeof(`retType`))
         let `fut` = newFlowvar(myMemPool(), `freshIdent`)
-        cast[ptr `futArgsTy`](task.data.addr)[] = `futArgs`
-        schedule(task)
+        cast[ptr `futArgsTy`](`task`.data.addr)[] = `futArgs`
+        `scheduleBlock`
         when defined(WV_profile):
           timer_stop(timer_enq_deq_task)
         # Return the future
@@ -153,11 +180,29 @@ macro spawn*(funcCall: typed): untyped =
   result = nnkBlockStmt.newTree(newEmptyNode(), result)
   # echo result.toStrLit
 
+macro spawn*(fnCall: typed): untyped =
+  ## Spawns the input function call asynchronously, potentially on another thread of execution.
+  ## If the function calls returns a result, spawn will wrap it in a Flowvar.
+  ## You can use sync to block the current thread and extract the asynchronous result from the flowvar.
+  ## Spawn returns immediately.
+  result = spawnImpl(nil, fnCall)
+
+macro spawnDelayed*(pledges: varargs[typed], fnCall: typed): untyped =
+  ## Spawns the input function call asynchronously, potentially on another thread of execution.
+  ## The function call will only be scheduled when the pledge is fulfilled.
+  ##
+  ## If the function calls returns a result, spawn will wrap it in a Flowvar.
+  ## You can use sync to block the current thread and extract the asynchronous result from the flowvar.
+  ## spawnDelayed returns immediately.
+  ##
+  ## Ensure that before syncing on the flowvar of a delayed spawn, its pledge can be fulfilled or you will deadlock.
+  result = spawnImpl(pledges, fnCall)
+
 # Sanity checks
 # --------------------------------------------------------
 
 when isMainModule:
-  import ./runtime, ./runtime_fsm
+  import ./runtime, ./runtime_fsm, os
 
   block: # Async without result
 
@@ -197,3 +242,67 @@ when isMainModule:
       echo f
 
     main2()
+
+  block: # Delayed computation
+
+    proc echoA(pA: Pledge) =
+      echo "Display A, sleep 1s, create parallel streams 1 and 2"
+      sleep(1000)
+      pA.fulfill()
+
+    proc echoB1(pB1: Pledge) =
+      echo "Display B1, sleep 1s"
+      sleep(1000)
+      pB1.fulfill()
+
+    proc echoB2() =
+      echo "Display B2, exit stream"
+
+    proc echoC1() =
+      echo "Display C1, exit stream"
+
+    proc main() =
+      echo "Sanity check 3: Dataflow parallelism"
+      init(Weave)
+      let pA = newPledge()
+      let pB1 = newPledge()
+      spawnDelayed pB1, echoC1()
+      spawnDelayed pA, echoB2()
+      spawnDelayed pA, echoB1(pB1)
+      spawn echoA(pA)
+      exit(Weave)
+
+    main()
+
+  block: # Delayed computation with multiple dependencies
+
+    proc echoA(pA: Pledge) =
+      echo "Display A, sleep 1s, create parallel streams 1 and 2"
+      sleep(1000)
+      pA.fulfill()
+
+    proc echoB1(pB1: Pledge) =
+      echo "Display B1, sleep 1s"
+      sleep(1000)
+      pB1.fulfill()
+
+    proc echoB2(pB2: Pledge) =
+      echo "Display B2, no sleep"
+      pB2.fulfill()
+
+    proc echoC12() =
+      echo "Display C12, exit stream"
+
+    proc main() =
+      echo "Sanity check 4: Dataflow parallelism with multiple dependencies"
+      init(Weave)
+      let pA = newPledge()
+      let pB1 = newPledge()
+      let pB2 = newPledge()
+      spawnDelayed pB1, pB2, echoC12()
+      spawnDelayed pA, echoB2(pB2)
+      spawnDelayed pA, echoB1(pB1)
+      spawn echoA(pA)
+      exit(Weave)
+
+    main()

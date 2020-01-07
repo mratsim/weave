@@ -4,6 +4,33 @@ import
   ../primitives/compiler_optimization_hints, # for prefetch
   ../instrumentation/[contracts, loggers]
 
+# type dereference macro
+# ------------------------------------------------
+# This macro dereference pointer types
+# This workarounds:
+# - https://github.com/nim-lang/Nim/issues/12714
+# - https://github.com/nim-lang/Nim/issues/13048
+
+macro derefMPSC*(T: typedesc): typedesc =
+  # This somehows isn't bound properly when used in a typesection
+  let instantiated = T.getTypeInst
+  instantiated.expectkind(nnkBracketExpr)
+  doAssert instantiated[0].eqIdent"typeDesc"
+
+  let ptrT = instantiated[1]
+  if ptrT.kind == nnkPtrTy:
+    return ptrT[0]
+
+  let ptrTImpl = instantiated[1].getImpl
+  ptrTimpl.expectKind(nnkTypeDef)
+  ptrTImpl[2].expectKind(nnkPtrTy)
+  ptrTImpl[2][0].expectKind({nnkObjectTy, nnkSym})
+
+  return ptrTImpl[2][0]
+
+# MPSC channel
+# ------------------------------------------------
+
 type
   Enqueueable = concept x, type T
     x is ptr
@@ -33,7 +60,7 @@ type
     # Producers and consumer slow-path
     back{.align: WV_CacheLinePadding.}: Atomic[pointer] # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
     # Consumer only - front is a dummy node
-    front{.align: WV_CacheLinePadding.}: typeof(default(T)[])
+    front{.align: WV_CacheLinePadding.}: derefMPSC(T)
 
 # Debugging
 # --------------------------------------------------------------
