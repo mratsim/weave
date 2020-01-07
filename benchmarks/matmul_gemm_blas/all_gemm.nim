@@ -7,7 +7,7 @@
 
 import
   ./laser_omp_gemm,
-  ./mkl_gemm, # OpenBLAS nd MKL cannot be linked at the same time
+  ./mkl_gemm_intel_omp, # OpenBLAS and MKL cannot be linked at the same time
   ./weave_gemm,
   ./gemm_bench_common,
   ./gemm_bench_config,
