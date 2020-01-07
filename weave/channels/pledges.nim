@@ -207,8 +207,6 @@ proc `=sink`*(dst: var Pledge, src: Pledge) {.inline.} =
   system.`=sink`(dst.p, src.p)
 
 proc `=`*(dst: var Pledge, src: Pledge) {.inline.} =
-  preCondition: dst.p.isNil
-
   discard fetchAdd(src.p.refCount, 1, moRelaxed)
   dst.p = src.p
 
