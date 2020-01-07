@@ -154,9 +154,11 @@ proc gemm_impl[T; ukernel: static MicroKernel](
   for pc in countup(0, K-1, tiles.kc):
     prefetch(tiles.b, Write, LowTemporalLocality)
     let kc = min(K - pc, tiles.kc) # Deal with edges  # A[0:M, pc:pc+kc]
+    var kcTileReady = newPledge()
 
     let kcncB = vB.stride(pc, 0)                      # B[pc:pc+kc, jc:jc+nc]
-    pack_B_kc_nc[T, ukernel](tiles.b, kc, nc, kcncB)  # PackB panel [kc, nc] (nc is large or unknown)
+    pack_B_kc_nc[T, ukernel](                         # PackB panel [kc, nc] (nc is large or unknown)
+      tiles.b, kc, nc, kcncB, kcTileReady)
 
     # First time writing to C, we scale it, otherwise accumulate
     let beta = if pc == 0: beta else: 1.T
@@ -164,7 +166,8 @@ proc gemm_impl[T; ukernel: static MicroKernel](
     # ####################################
     # 3. for ic = 0,...,m−1 in steps of mc
     parallelFor icb in 0 ..< tiles.ic_num_tasks:
-      captures: {pc, tiles, nc, kc, alpha, beta, vA, vC, M}
+      awaitable: icLoop
+      captures: {kcTileReady, pc, tiles, nc, kc, alpha, beta, vA, vC, M}
 
       let packA = tiles.a + icb * tiles.upanelA_size
       prefetch(packA, Write, LowTemporalLocality)
@@ -174,12 +177,16 @@ proc gemm_impl[T; ukernel: static MicroKernel](
       let mckcA = vA.stride(ic, pc)                   # A[ic:ic+mc, pc:pc+kc]
       pack_A_mc_kc[T, ukernel](packA, mc, kc, mckcA)  # PackA block [mc, kc]
 
-      gebp_mkernel[T, ukernel](                       # GEBP macrokernel:
+      spawnDelayed(
+        kcTileReady,
+        gebp_mkernel[T, ukernel](                     # GEBP macrokernel:
           mc, nc, kc,                                 #   C[ic:ic+mc, jc:jc+nc] =
           alpha, packA, tiles.b,                      #    αA[ic:ic+mc, pc:pc+kc] * B[pc:pc+kc, jc:jc+nc] +
           beta, vC.stride(ic, 0)                      #    βC[ic:ic+mc, jc:jc+nc]
         )
-    syncRoot(Weave)
+      )
+    # Only trigger the next phase when the last one is finished
+    sync(icLoop)
 
 # ############################################################
 #
@@ -282,10 +289,9 @@ when isMainModule:
             b[0][0].unsafeAddr, 2, 1,
       0.0,  res_ab[0][0].addr,  2, 1
       )
-
+    syncRoot(Weave)
     # echo "expected: ", ab
     # echo "result: ", res_ab
-
     doAssert res_ab == ab, $res_ab
     echo "SUCCESS\n"
 
@@ -309,10 +315,9 @@ when isMainModule:
             b[0][0].unsafeAddr, 2, 1,
       0.0,  res_ab[0][0].addr,  2, 1
       )
-
+    syncRoot(Weave)
     # echo "expected: ", ab
     # echo "result: ", res_ab
-
     doAssert res_ab == ab, $res_ab
     echo "SUCCESS\n"
 
@@ -334,10 +339,9 @@ when isMainModule:
             b[0][0].unsafeAddr, 2, 1,
       0.0,  res_ab[0][0].addr,  2, 1
       )
-
+    syncRoot(Weave)
     # echo "expected: ", ab
     # echo "result: ", res_ab
-
     doAssert res_ab == ab, $res_ab
     echo "SUCCESS\n"
 
@@ -360,10 +364,9 @@ when isMainModule:
           b[0][0].unsafeAddr, 4, 1,
       0,  res_ab[0][0].addr,  4, 1
       )
-
+    syncRoot(Weave)
     # echo "expected: ", ab
     # echo "result: ", res_ab
-
     doAssert res_ab == ab, $res_ab
     echo "SUCCESS\n"
 
@@ -393,10 +396,9 @@ when isMainModule:
           b[0][0].unsafeAddr, 4, 1,
       0,  res_ab[0][0].addr,  4, 1
       )
-
+    syncRoot(Weave)
     # echo "expected: ", ab
     # echo "result: ", res_ab
-
     doAssert res_ab == ab, $res_ab
     echo "SUCCESS\n"
 
@@ -424,10 +426,9 @@ when isMainModule:
           b[0][0].unsafeAddr, 2, 1,
       0,  res_ab[0][0].addr,  2, 1
       )
-
+    syncRoot(Weave)
     # echo "expected: ", ab
     # echo "result: ", res_ab
-
     doAssert res_ab == ab, $res_ab
     echo "SUCCESS\n"
 
@@ -461,10 +462,9 @@ when isMainModule:
           b[0][0].unsafeAddr, 8, 1,
       0,  res_ab[0][0].addr,  8, 1
       )
-
+    syncRoot(Weave)
     # echo "expected: ", ab
     # echo "result: ",   res_ab
-
     doAssert res_ab == ab, $res_ab
     echo "SUCCESS\n"
 
@@ -507,10 +507,9 @@ when isMainModule:
           b[0][0].unsafeAddr, 8, 1,
       0,  res_ab[0][0].addr,  8, 1
       )
-
+    syncRoot(Weave)
     # echo "expected: ", ab
     # echo "result: ",   res_ab
-
     doAssert res_ab == ab, $res_ab
     echo "SUCCESS\n"
 

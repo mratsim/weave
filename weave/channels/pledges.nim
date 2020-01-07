@@ -185,8 +185,9 @@ proc `=destroy`*(pledge: var Pledge) =
   if pledge.p.isNil:
     return
 
-  if pledge.p.refCount.load(moRelaxed) == 0:
-    fence(moAcquire)
+  let count = pledge.p.refCount.load(moRelaxed)
+  fence(moAcquire)
+  if count == 0:
     # We have the last reference
     if not pledge.p.isNil:
       if pledge.p.kind == Single:
@@ -203,7 +204,8 @@ proc `=destroy`*(pledge: var Pledge) =
 
 proc `=sink`*(dst: var Pledge, src: Pledge) {.inline.} =
   # Don't pay for atomic refcounting when compiler can prove there is no ref change
-  `=destroy`(dst)
+  # `=destroy`(dst) # it seems like we can have non properly init types?
+                    # with the pointer not being nil, but invalid as well
   system.`=sink`(dst.p, src.p)
 
 proc `=`*(dst: var Pledge, src: Pledge) {.inline.} =

@@ -7,11 +7,12 @@
 
 import
   weave/[parallel_tasks, parallel_for, parallel_for_staged, runtime, runtime_fsm, await_fsm],
-  weave/datatypes/flowvars
+  weave/datatypes/flowvars,
+  weave/channels/pledges
 
 export
-  Flowvar, Weave,
-  spawn, sync, syncRoot,
+  Flowvar, Weave, Pledge,
+  spawn, sync, syncRoot, spawnDelayed,
   parallelFor, parallelForStrided, parallelForStaged, parallelForStagedStrided,
   init, exit,
   loadBalance,
@@ -22,4 +23,5 @@ export
 import weave/contexts
 export
   readyWith, forceFuture,
-  isRootTask
+  isRootTask,
+  fulfill, newPledge

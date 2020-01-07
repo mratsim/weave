@@ -7,7 +7,8 @@ when not compileOption("threads"):
 
 import
   ./gemm_bench_common, ./gemm_bench_config,
-  ./gemm_pure_nim/gemm_weave
+  ./gemm_pure_nim/gemm_weave,
+  ../../weave
 
 when not defined(vcc):
   {.pragma: restrict, codegenDecl: "$# __restrict__ $#".}
@@ -35,11 +36,11 @@ proc benchWeaveGEMM(a, b: seq[float32], ashape, bshape: MatrixShape, nb_samples:
               b_ptr, N, 1,
       0'f32,  c_ptr, N, 1
     )
+    syncRoot(Weave) # Weave gemm is async and returns immediately
 
 # Bench
 when isMainModule:
   import std/[random, sequtils]
-  import ../../weave
 
   randomize(42) # FOr reproducibility
   # warmup()
