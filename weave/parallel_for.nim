@@ -132,14 +132,14 @@ proc parallelForSplitted(index, start, stop, stride, captured, capturedTy, depen
         `body`
 
       for `index` in countup(`start`, `stop`-1, `stride`):
-        spawnDelayed(`pledge`, `index`, `parForSplitted`(`index`, `captured`))
+        spawnDelayed((`pledge`, `index`), `parForSplitted`(`index`, `captured`))
   else:
     result.add quote do:
       proc `parForSplitted`(`index`: SomeInteger) {.nimcall, gcsafe.} =
         `body`
 
       for `index` in countup(`start`, `stop`-1, `stride`):
-        spawnDelayed(`pledge`, `index`, `parForSplitted`(`index`))
+        spawnDelayed((`pledge`, `index`), `parForSplitted`(`index`))
 
 macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped =
   ## Parallel for loop

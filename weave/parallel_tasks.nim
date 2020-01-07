@@ -21,7 +21,7 @@ import
 export forceFuture
 export profilers, contexts
 
-proc spawnImpl(pledge: NimNode, pledgeIndex: NimNode, funcCall: NimNode): NimNode =
+proc spawnImpl(pledges: NimNode, funcCall: NimNode): NimNode =
   # We take typed argument so that overloading resolution
   # is already done and arguments are semchecked
   funcCall.expectKind(nnkCall)
@@ -67,16 +67,23 @@ proc spawnImpl(pledge: NimNode, pledgeIndex: NimNode, funcCall: NimNode): NimNod
   # Schedule immediately or delay on dependencies
   var scheduleBlock: NimNode
   let task = ident"task"
-  if pledge.isNil:
+  if pledges.isNil:
     scheduleBlock = newCall(bindSym"schedule", task)
-  elif pledgeIndex.kind == nnkIntLit and pledgeIndex.intVal == NoIter:
-    scheduleBlock = quote do:
-      if not delayedUntil(`task`, `pledge`, myMemPool()):
-        schedule(`task`)
+  elif pledges.len == 1:
+    let pledgeDesc = pledges[0]
+    if pledgeDesc.kind in {nnkIdent, nnkSym}:
+      scheduleBlock = quote do:
+        if not delayedUntil(`task`, `pledgeDesc`, myMemPool()):
+          schedule(`task`)
+    else:
+      pledgeDesc.expectKind({nnkPar, nnkTupleConstr})
+      let pledge = pledgeDesc[0]
+      let pledgeIndex = pledgeDesc[1]
+      scheduleBlock = quote do:
+        if not delayedUntil(`task`, `pledge`, int32(`pledgeIndex`), myMemPool()):
+          schedule(`task`)
   else:
-    scheduleBlock = quote do:
-      if not delayedUntil(`task`, `pledge`, int32(`pledgeIndex`), myMemPool()):
-        schedule(`task`)
+    error "No supported"
 
   if not needFuture: # TODO: allow awaiting on a Flowvar[void]
     if funcCall.len == 2:
@@ -173,9 +180,9 @@ macro spawn*(fnCall: typed): untyped =
   ## If the function calls returns a result, spawn will wrap it in a Flowvar.
   ## You can use sync to block the current thread and extract the asynchronous result from the flowvar.
   ## Spawn returns immediately.
-  result = spawnImpl(nil, newLit(-1), fnCall)
+  result = spawnImpl(nil, fnCall)
 
-macro spawnDelayed*(pledge: Pledge, fnCall: typed): untyped =
+macro spawnDelayed*(pledges: varargs[typed], fnCall: typed): untyped =
   ## Spawns the input function call asynchronously, potentially on another thread of execution.
   ## The function call will only be scheduled when the pledge is fulfilled.
   ##
@@ -184,23 +191,7 @@ macro spawnDelayed*(pledge: Pledge, fnCall: typed): untyped =
   ## spawnDelayed returns immediately.
   ##
   ## Ensure that before syncing on the flowvar of a delayed spawn, its pledge can be fulfilled or you will deadlock.
-  result = spawnImpl(pledge, newLit(-1), fnCall)
-
-macro spawnDelayed*(pledge: Pledge, iterationIndex: SomeInteger, fnCall: typed): untyped =
-  ## Spawns the input function call asynchronously, potentially on another thread of execution.
-  ## The function call will only be scheduled when the pledge is fulfilled.
-  ## The pledge represents a single iteration index from a parallel loop.
-  ##
-  ## If the function calls returns a result, spawn will wrap it in a Flowvar.
-  ## You can use sync to block the current thread and extract the asynchronous result from the flowvar.
-  ## spawnDelayed returns immediately.
-  ##
-  ## Ensure that before syncing on the flowvar of a delayed spawn, its pledge can be fulfilled or you will deadlock.
-  result = spawnImpl(
-    pledge,
-    iterationIndex,
-    fnCall
-  )
+  result = spawnImpl(pledges, fnCall)
 
 # Sanity checks
 # --------------------------------------------------------

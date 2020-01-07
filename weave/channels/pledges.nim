@@ -7,7 +7,7 @@
 
 import
   # stdlib
-  atomics,
+  std/[atomics, macros],
   # Internals
   ./channels_mpsc_unbounded_batch,
   ../datatypes/sync_types,
@@ -474,6 +474,46 @@ template fulfillIterImpl*(pledge: Pledge, index: int32, queue, enqueue: typed) =
       cpuRelax()
     else:
       break
+
+# Multiple dependencies
+# ------------------------------------------------------------------------------
+
+macro multiDeps*(task: Task, pool: var TLPoolAllocator, pledges: varargs[untyped]): untyped =
+  ## Associate a task with multiple dependencies
+  result = newStmtList()
+
+  var taskNodesInitStmt = newStmtList()
+  var firstNode, prevNode: NimNode
+  for i in 0 ..< pledges.len:
+    var taskNode: NimNode
+    var taskNodeInit = newStmtList()
+    if pledges[i].kind == nnkPar:
+      let pledge = pledges[i][0]
+      taskNode = genSym(nskLet, "taskNode_" & $pledge & "_" & $pledges[i][1] & "_")
+      let bucket = newCall(bindSym"getBucket", pledge, pledges[i][1])
+      taskNodeInit.add quote do:
+        let `taskNode` = `pool`.borrow(deref(TaskNode))
+        `taskNode`.task = task
+        `taskNode`.pledge = `pledge`
+        `taskNode`.bucketID = `bucket`
+    else:
+      taskNode = genSym(nskLet, "taskNode_" & $pledges & "_")
+      let pledge = pledges[i]
+      taskNodeInit.add quote do:
+        let `taskNode` = `pool`.borrow(deref(TaskNode))
+        `taskNode`.task = task
+        `taskNode`.pledge = `pledge`
+        `taskNode`.bucketID = NoIter
+    if i != 0:
+      taskNodeInit.add quote do:
+        `taskNode`.nextDep = `prevNode`
+    else:
+      firstNode = taskNode
+    prevnode = taskNode
+    taskNodesInitStmt.add taskNodeInit
+
+  result.add taskNodesInitStmt
+  result.add newCall(ident"delayedUntil", firstNode, task)
 
 # Sanity checks
 # ------------------------------------------------------------------------------
