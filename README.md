@@ -1,5 +1,5 @@
 # Weave, a state-of-the-art multithreading runtime
-[![Build Status: Travis](https://img.shields.io/travis/com/mratsim/weave/master?label=Travis%20%28Linux%20x86_64%2FARM64%20)](https://travis-ci.com/mratsim/weave)
+[![Build Status: Travis](https://img.shields.io/travis/com/mratsim/weave/master?label=Travis%20%28Linux%20x86_64%2FARM64%29)](https://travis-ci.com/mratsim/weave)
 [![Build Status: Azure](https://img.shields.io/azure-devops/build/numforge/69bc2700-4fa7-4292-a0b3-331ddb721640/2/master?label=Azure%20%28C%2FC%2B%2B%2C%20Linux%2032-bit%2F64-bit%2C%20Windows%2032-bit%2F64-bit%2C%20MacOS%2064-bit%29)](https://dev.azure.com/numforge/Weave/_build?definitionId=2&branchName=master)
 
 [![License: Apache](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
@@ -204,7 +204,7 @@ Calling `sync` on the awaitable loop Flowvar will return `true` for the last thr
 - It's the thread that spawned the loop task that will always be the last thread to exit.
   The `false` value is only internal to `Weave`
 
-> ⚠️ This is not a barrier: if that loop spawns tasks (including via a nested loop) and exits, the thread will exist, it will not wait for the grandchildren tasks to be finished.
+> ⚠️ This is not a barrier: if that loop spawns tasks (including via a nested loop) and exits, the thread will continue, it will not wait for the grandchildren tasks to be finished.
 
 ```Nim
 import weave
