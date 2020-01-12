@@ -163,13 +163,11 @@ type
     #   Contrary to StealRequest and the remote freed memory in the memory pool,
     #   this is not needed, and atomics are expensive.
     #   It can be made optional with a useCount static bool.
-    # TODO, the current MPSC channel cannot use the memory pool due to extensive padding.
-    #   Contrary to StealRequest and the remote freed memory in the memory pool,
-    #   pledge channels are allocated on-demand and not once at init.
-    #   Allocation overhead may be prohibitive.
-    #   As a compromise instead of padding by 2x cachelines
-    #   we could have Consumer | count | Producer with only cache-line padding.
-    chan{.align: WV_CacheLinePadding.}: ptr ChannelMpscUnboundedBatch[TaskNode]
+
+    # The MPSC Channel is intrusive to the PledgeImpl.
+    # The end fields in the channel should be the consumer
+    # to avoid cache-line conflicts with producer threads.
+    chan{.align: WV_CacheLinePadding div 2.}: ChannelMpscUnboundedBatch[TaskNode]
     deferredIn: Atomic[int32]
     deferredOut: Atomic[int32]
     fulfilled: Atomic[bool]
@@ -190,11 +188,7 @@ proc `=destroy`*(pledge: var Pledge) =
   if count == 0:
     # We have the last reference
     if not pledge.p.isNil:
-      if pledge.p.kind == Single:
-        wv_free(pledge.p.impl.chan) # TODO: mem-pool compat
-      else:
-        for i in 0 ..< pledge.p.numBuckets:
-          wv_free(pledge.p.impls[i].chan)
+      if pledge.p.kind == Iteration:
         wv_free(pledge.p.impls)
       # Return memory to the memory pool
       recycle(pledge.p)
@@ -237,7 +231,7 @@ proc delayedUntilSingle(taskNode: TaskNode, curTask: Task): bool =
   taskNode.task = curTask
   let pledge = taskNode.pledge
   taskNode.pledge = default(Pledge)
-  discard pledge.p.impl.chan[].trySend(taskNode)
+  discard pledge.p.impl.chan.trySend(taskNode)
   discard pledge.p.impl.deferredOut.fetchAdd(1, moRelaxed)
   return true
 
@@ -263,7 +257,7 @@ proc delayedUntilIter(taskNode: TaskNode, curTask: Task): bool =
   taskNode.task = curTask
   let pledge = taskNode.pledge
   taskNode.pledge = default(Pledge)
-  discard pledge.p.impls[taskNode.bucketID].chan[].trySend(taskNode)
+  discard pledge.p.impls[taskNode.bucketID].chan.trySend(taskNode)
   discard pledge.p.impls[taskNode.bucketID].deferredOut.fetchAdd(1, moRelaxed)
   return true
 
@@ -289,8 +283,7 @@ proc initialize*(pledge: var Pledge, pool: var TLPoolAllocator) =
   zeroMem(pledge.p, sizeof(deref(PledgePtr))) # We start the refCount at 0
   # TODO: mempooled MPSC channel https://github.com/mratsim/weave/issues/93
   pledge.p.kind = Single
-  pledge.p.impl.chan = wv_alloc(ChannelMpscUnboundedBatch[TaskNode])
-  pledge.p.impl.chan[].initialize()
+  pledge.p.impl.chan.initialize()
 
 proc delayedUntil*(task: Task, pledge: Pledge, pool: var TLPoolAllocator): bool =
   ## Defers a task until a pledge is fulfilled
@@ -319,7 +312,7 @@ proc delayedUntil*(task: Task, pledge: Pledge, pool: var TLPoolAllocator): bool 
   taskNode.next.store(nil, moRelaxed)
   taskNode.pledge = default(Pledge) # Don't need to store the pledge reference if there is only the current one
   taskNode.bucketID = NoIter
-  discard pledge.p.impl.chan[].trySend(taskNode)
+  discard pledge.p.impl.chan.trySend(taskNode)
   discard pledge.p.impl.deferredOut.fetchAdd(1, moRelaxed)
   return true
 
@@ -345,7 +338,7 @@ template fulfillImpl*(pledge: Pledge, queue, enqueue: typed) =
   while true:
     var task: Task
     var taskNode: TaskNode
-    while pledge.p.impl.chan[].tryRecv(taskNode):
+    while pledge.p.impl.chan.tryRecv(taskNode):
       ascertain: taskNode.bucketID == NoIter
       task = taskNode.task
       var wasDelayed = false
@@ -385,12 +378,12 @@ proc initialize*(pledge: var Pledge, pool: var TLPoolAllocator, start, stop, str
     stride: stride
   )
 
+  # The mempool doesn't support arrays
   pledge.p.impls = wv_alloc(PledgeImpl, pledge.p.numBuckets)
   zeroMem(pledge.p.impls, pledge.p.numBuckets * sizeof(PledgeImpl))
 
   for i in 0 ..< pledge.p.numBuckets:
-    pledge.p.impls[i].chan = wv_alloc(ChannelMpscUnboundedBatch[TaskNode])
-    pledge.p.impls[i].chan[].initialize()
+    pledge.p.impls[i].chan.initialize()
 
 proc getBucket(pledge: Pledge, index: int32): int32 {.inline.} =
   ## Convert a possibly offset and/or strided for-loop iteration index
@@ -427,7 +420,7 @@ proc delayedUntil*(task: Task, pledge: Pledge, index: int32, pool: var TLPoolAll
   taskNode.next.store(nil, moRelaxed)
   taskNode.pledge = default(Pledge) # Don't need to store the pledge reference if there is only the current one
   taskNode.bucketID = bucket
-  discard pledge.p.impls[bucket].chan[].trySend(taskNode)
+  discard pledge.p.impls[bucket].chan.trySend(taskNode)
   discard pledge.p.impls[bucket].deferredOut.fetchAdd(1, moRelaxed)
   return true
 
@@ -455,7 +448,7 @@ template fulfillIterImpl*(pledge: Pledge, index: int32, queue, enqueue: typed) =
   while true:
     var task {.inject.}: Task
     var taskNode: TaskNode
-    while pledge.p.impls[bucket].chan[].tryRecv(taskNode):
+    while pledge.p.impls[bucket].chan.tryRecv(taskNode):
       ascertain: taskNode.bucketID != NoIter
       task = taskNode.task
       var wasDelayed = false
@@ -517,6 +510,17 @@ macro delayedUntilMulti*(task: Task, pool: var TLPoolAllocator, pledges: varargs
 
 # Sanity checks
 # ------------------------------------------------------------------------------
+# TODO: Once upstream fixes https://github.com/nim-lang/Nim/issues/13122
+#       the size here will be wrong
+
+assert sizeof(ChannelMpscUnboundedBatch[TaskNode]) == 56, # Upstream {.align.} bug
+  "MPSC channel size was " & $sizeof(ChannelMpscUnboundedBatch[TaskNode])
+
+assert sizeof(PledgeImpl) == 128,
+  "PledgeImpl size was " & $sizeof(PledgeImpl)
+
+assert sizeof(default(PledgePtr)[]) <= WV_MemBlockSize,
+  "PledgePtr object size was " & $sizeof(default(PledgePtr)[])
 
 when isMainModule:
   type TaskStack = object

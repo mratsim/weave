@@ -619,7 +619,10 @@ proc takeover*(pool: var TLPoolAllocator, target: sink TLPoolAllocator) =
 
 # Sanity checks and bench
 # ----------------------------------------------------------------------------------
-echo sizeof(ChannelMpscUnboundedBatch[ptr MemBlock])
+# TODO those checks hardcode the WV_MemBlockSize and in turn the padding
+# TODO: Once upstream fixes https://github.com/nim-lang/Nim/issues/13122
+#       the size here will likely be wrong
+
 assert sizeof(ChannelMpscUnboundedBatch[ptr MemBlock]) == 272,
   "MPSC channel size was " & $sizeof(ChannelMpscUnboundedBatch[ptr MemBlock])
 
