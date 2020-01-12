@@ -50,11 +50,11 @@ const WV_MemBlockSize* {.intdefine.} = 256
 # - LLVM Address Sanitizer and memory poisoning (https://clang.llvm.org/docs/AddressSanitizer.html)
 # - Valgrind with custom memory pool (http://valgrind.org/docs/manual/mc-manual.html#mc-manual.mempools)
 
-static: assert WV_MemArenaSize.isPowerOfTwo(), "WV_ArenaSize must be a power of 2"
-static: assert WV_MemArenaSize > 4096, "WV_ArenaSize must be greater than a OS page (4096 bytes)"
+static: doAssert WV_MemArenaSize.isPowerOfTwo(), "WV_ArenaSize must be a power of 2"
+static: doAssert WV_MemArenaSize > 4096, "WV_ArenaSize must be greater than a OS page (4096 bytes)"
 
-static: assert WV_MemBlockSize.isPowerOfTwo(), "WV_MemBlockSize must be a power of 2"
-static: assert WV_MemBlockSize >= 256, "WV_MemBlockSize must be greater or equal to 256 bytes to hold tasks and channels."
+static: doAssert WV_MemBlockSize.isPowerOfTwo(), "WV_MemBlockSize must be a power of 2"
+static: doAssert WV_MemBlockSize >= 256, "WV_MemBlockSize must be greater or equal to 256 bytes to hold tasks and channels."
 
 template debugMem*(body: untyped) =
   when defined(WV_debugMem):
@@ -619,6 +619,9 @@ proc takeover*(pool: var TLPoolAllocator, target: sink TLPoolAllocator) =
 
 # Sanity checks and bench
 # ----------------------------------------------------------------------------------
+# TODO those checks hardcode the WV_MemBlockSize and in turn the padding
+# TODO: Once upstream fixes https://github.com/nim-lang/Nim/issues/13122
+#       the size here will likely be wrong
 
 assert sizeof(ChannelMpscUnboundedBatch[ptr MemBlock]) == 272,
   "MPSC channel size was " & $sizeof(ChannelMpscUnboundedBatch[ptr MemBlock])

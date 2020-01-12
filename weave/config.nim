@@ -36,6 +36,9 @@ const WV_CacheLinePadding* {.intDefine.} = 128
   ## However, it has been shown that due to some Intel CPU prefetching
   ## 2 cache lines at once, 128 bytes was often necessary.
   ## Samsung Exynos CPU, Itanium, modern PowerPC and some MIPS uses 128 bytes.
+  ##
+  ## Note: The MPSC channel is padded by 128/2 = 64 to make memory
+  ##       fit in the memory pool blocks. Adjust The memory pool blocksize accordingly.
   # Nim threadpool uses 32 bytes :/
   # https://github.com/nim-lang/Nim/blob/v1.0.2/lib/pure/concurrency/threadpool.nim
 

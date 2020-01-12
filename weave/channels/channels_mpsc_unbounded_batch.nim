@@ -31,6 +31,13 @@ macro derefMPSC*(T: typedesc): typedesc =
 # MPSC channel
 # ------------------------------------------------
 
+const MpscPadding = WV_CacheLinePadding div 2
+  ## The padding is chosen so that:
+  ## - The data structure fits in WV_MemBlockSize (4x cache-line by default)
+  ## - The front and back fields which are respectively owned by consumer and the producers
+  ##   accessed only by the consumer for the first and mostly by producers for the second
+  ##   are kept 2 cache-line apart.
+
 type
   Enqueueable = concept x, type T
     x is ptr
@@ -55,12 +62,16 @@ type
     #       to make sure there are no bugs
     #       on arch with relaxed memory models
 
-    # Accessed by all
-    count{.align: WV_CacheLinePadding.}: Atomic[int]
     # Producers and consumer slow-path
-    back{.align: WV_CacheLinePadding.}: Atomic[pointer] # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
+    back{.align: MpscPadding.}: Atomic[pointer] # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
+    # Accessed by all
+    count{.align: MpscPadding.}: Atomic[int]
     # Consumer only - front is a dummy node
-    front{.align: WV_CacheLinePadding.}: derefMPSC(T)
+    front{.align: MpscPadding.}: derefMPSC(T)
+    # back and front order is chosen so that the data structure can be
+    # made intrusive to consumer data-structures
+    # like the memory-pool and the pledges so that
+    # producer accesses don't invalidate cache-lines
 
 # Debugging
 # --------------------------------------------------------------
