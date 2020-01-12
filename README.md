@@ -204,7 +204,7 @@ Calling `sync` on the awaitable loop Flowvar will return `true` for the last thr
 - It's the thread that spawned the loop task that will always be the last thread to exit.
   The `false` value is only internal to `Weave`
 
-⚠️ This is not a barrier: if that loops spawn tasks (including via a nested loop) and exists, the thread will exist, it will not wait for the grandchildren tasks to be finished.
+> ⚠️ This is not a barrier: if that loop spawns tasks (including via a nested loop) and exits, the thread will exist, it will not wait for the grandchildren tasks to be finished.
 
 ```Nim
 import weave
@@ -230,7 +230,7 @@ Weave provides a `parallelForStaged` construct with supports for thread-local pr
 A parallel sum would look like this:
 ```Nim
 proc sumReduce(n: int): int =
-  let res = result.addr
+  let res = result.addr # For mutation we need to capture the address.
   parallelForStaged i in 0 .. n:
     captures: {res}
     prologue:
