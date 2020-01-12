@@ -114,11 +114,13 @@ proc main() =
 main()
 ```
 
-### Strided loops
+#### Strided loops
 
 You might want to use loops with a non unit-stride, this can be done with the following syntax.
 
 ```Nim
+import weave
+
 init(Weave)
 
 # expandMacros:
@@ -134,6 +136,7 @@ exit(Weave)
 
 - `init(Weave)`, `exit(Weave)` to start and stop the runtime. Forgetting this will give you nil pointer exceptions on spawn.
 - `spawn fnCall(args)` which spawns a function that may run on another thread and gives you an awaitable Flowvar handle.
+- `newPledge`, `fulfill` and `spawnDelayed` (experimental) to delay a task until some dependencies are met. This allows expressing precise data dependencies and producer-consumer relationships.
 - `sync(Flowvar)` will await a Flowvar and block until you receive a result.
 - `syncRoot(Weave)` is a global barrier for the main thread on the main task.
 - `parallelFor`, `parallelForStrided`, `parallelForStaged`, `parallelForStagedStrided` are described above and in the experimental section.
@@ -151,13 +154,20 @@ Weave uses Nim's `countProcessors()` in `std/cpuinfo`
   - [API](#api)
     - [Task parallelism](#task-parallelism)
     - [Data parallelism](#data-parallelism)
-    - [Strided loops](#strided-loops)
+      - [Strided loops](#strided-loops)
     - [Complete list](#complete-list)
   - [Table of Contents](#table-of-contents)
+  - [Backoff mechanism](#backoff-mechanism)
   - [Experimental features](#experimental-features)
-    - [Parallel For Staged](#parallel-for-staged)
+    - [Data parallelism (experimental features)](#data-parallelism-experimental-features)
+      - [Awaitable loop](#awaitable-loop)
+      - [Parallel For Staged](#parallel-for-staged)
+      - [Parallel Reduction](#parallel-reduction)
+    - [Dataflow parallelism](#dataflow-parallelism)
+      - [Delayed computation with single dependencies](#delayed-computation-with-single-dependencies)
+      - [Delayed computation with multiple dependencies](#delayed-computation-with-multiple-dependencies)
+      - [Delayed loop computation](#delayed-loop-computation)
     - [Lazy Allocation of Flowvars](#lazy-allocation-of-flowvars)
-    - [Backoff mechanism](#backoff-mechanism)
   - [Limitations](#limitations)
   - [Statistics](#statistics)
   - [Tuning](#tuning)
@@ -165,9 +175,55 @@ Weave uses Nim's `countProcessors()` in `std/cpuinfo`
   - [Research](#research)
   - [License](#license)
 
+## Backoff mechanism
+
+A Backoff mechanism is enabled by default. It allows workers with no tasks to sleep instead of spining aimlessly and burning CPU.
+
+It can be disabled with `-d:WV_Backoff=off`.
+
 ## Experimental features
 
-### Parallel For Staged
+Experimental features might see API and/or implementation changes.
+
+For example both parallelForStaged and parallelReduce allow for reduction but
+parallelForStaged is more flexible, it however requires explicit use of locks and/or atomics.
+
+LazyFlowvars may be enabled by default for certain sizes or if escape analysis become possible
+or if we prevent Flowvar from escaping their scope.
+
+### Data parallelism (experimental features)
+
+#### Awaitable loop
+
+Loops can be awaited. Awaitable loops return a normal Flowvar.
+
+This blocks the thread that spawned the parallel loop from continuing until the loop is resolved. The thread does not stay idle and will steal and run other tasks while being blocked.
+
+Calling `sync` on the awaitable loop Flowvar will return `true` for the last thread to exit the loop and `false` for the others.
+- Due to dynamic load-balancing, an unknown amount of threads will execute the loop.
+- It's the thread that spawned the loop task that will always be the last thread to exit.
+  The `false` value is only internal to `Weave`
+
+⚠️ This is not a barrier: if that loops spawn tasks (including via a nested loop) and exists, the thread will exist, it will not wait for the grandchildren tasks to be finished.
+
+```Nim
+import weave
+
+init(Weave)
+
+# expandMacros:
+parallelFor i in 0 ..< 10:
+  awaitable: iLoop
+  echo "iteration: ", i
+
+let wasLastThread = sync(iLoop)
+echo wasLastThread
+
+exit(Weave)
+```
+
+
+#### Parallel For Staged
 
 Weave provides a `parallelForStaged` construct with supports for thread-local prologue and epilogue.
 
@@ -194,22 +250,198 @@ doAssert sum1M == 500_000_500_000
 exit(Weave)
 ```
 
+`parallelForStagedStrided` is also provided.
+
+#### Parallel Reduction
+
+Weave provides a parallel reduction construct that avoids having to use explicit synchronization like atomics or locks
+but instead uses Weave `sync(Flowvar)` under-the-hood.
+
+Syntax is the following:
+
+```Nim
+proc sumReduce(n: int): int =
+  var waitableSum: Flowvar[int]
+
+  # expandMacros:
+  parallelReduceImpl i in 0 .. n, stride = 1:
+    reduce(waitableSum):
+      prologue:
+        var localSum = 0
+      fold:
+        localSum += i
+      merge(remoteSum):
+        localSum += sync(remoteSum)
+      return localSum
+
+  result = sync(waitableSum)
+
+init(Weave)
+let sum1M = sumReduce(1000000)
+echo "Sum reduce(0..1000000): ", sum1M
+doAssert sum1M == 500_000_500_000
+exit(Weave)
+```
+
+In the future the `waitableSum` will probably be not required to be declared beforehand.
+Or parallel reduce might be removed to only keep parallelForStaged.
+
+### Dataflow parallelism
+
+Dataflow parallelism allows expressing fine-grained data dependencies between tasks.
+Concretly a task is delayed until all its dependencies are met and once met,
+it is triggered immediately.
+
+This allows precising specification of data producer-consumer relationships.
+
+In contrast, classic task parallelism can only express control-flow dependencies (i.e. parent-child function calls relationships) and classic tasks are eagerly scheduled.
+
+In the litterature, it is also called:
+- Stream parallelism
+- Pipeline parallelism
+- Graph parallelism
+- Data-driven task parallelism
+
+Tagged experimental as the API and its implementation are unique
+compared to other libraries/language-extensions. Feedback welcome.
+
+No specific ordering is required between calling the pledge producer and its consumer(s).
+
+Dependencies are expressed by a handle called `Pledge`.
+A pledge can express either a single dependency, initialized with `newPledge()`
+or a dependencies on parallel for loop iterations, initialized with `newPledge(start, exclusiveStop, stride)`
+
+To await on a single pledge `singlePledge` pass it to `spawnDelayed` or the `parallelFor` invocation.
+To await on an iteration `iterPledge`, pass a tuple:
+- `(iterPledge, 0)` to await precisely and only for iteration 0. This works with both `spawnDelayed` or `parallelFor`
+- `(iterPledge, myIndex)` to await on a whole iteration range. This only works with `parallelFor`. The `Pledge` iteration domain and the `parallelFor` domain must be the same. As soon as a subset of the pledge is ready, the corresponding `parallelFor` tasks will be scheduled.
+
+#### Delayed computation with single dependencies
+
+```Nim
+import weave
+
+proc echoA(pA: Pledge) =
+  echo "Display A, sleep 1s, create parallel streams 1 and 2"
+  sleep(1000)
+  pA.fulfill()
+
+proc echoB1(pB1: Pledge) =
+  echo "Display B1, sleep 1s"
+  sleep(1000)
+  pB1.fulfill()
+
+proc echoB2() =
+  echo "Display B2, exit stream"
+
+proc echoC1() =
+  echo "Display C1, exit stream"
+
+proc main() =
+  echo "Dataflow parallelism with single dependency"
+  init(Weave)
+  let pA = newPledge()
+  let pB1 = newPledge()
+  spawnDelayed pB1, echoC1()
+  spawnDelayed pA, echoB2()
+  spawnDelayed pA, echoB1(pB1)
+  spawn echoA(pA)
+  exit(Weave)
+
+main()
+```
+
+#### Delayed computation with multiple dependencies
+
+```Nim
+import weave
+
+proc echoA(pA: Pledge) =
+  echo "Display A, sleep 1s, create parallel streams 1 and 2"
+  sleep(1000)
+  pA.fulfill()
+
+proc echoB1(pB1: Pledge) =
+  echo "Display B1, sleep 1s"
+  sleep(1000)
+  pB1.fulfill()
+
+proc echoB2(pB2: Pledge) =
+  echo "Display B2, no sleep"
+  pB2.fulfill()
+
+proc echoC12() =
+  echo "Display C12, exit stream"
+
+proc main() =
+  echo "Dataflow parallelism with multiple dependencies"
+  init(Weave)
+  let pA = newPledge()
+  let pB1 = newPledge()
+  let pB2 = newPledge()
+  spawnDelayed pB1, pB2, echoC12()
+  spawnDelayed pA, echoB2(pB2)
+  spawnDelayed pA, echoB1(pB1)
+  spawn echoA(pA)
+  exit(Weave)
+
+main()
+```
+
+#### Delayed loop computation
+
+You can combine data parallelism and dataflow parallelism.
+
+Currently parallel loop only support one dependency (single, fixed iteration or range iteration).
+
+Here is an example with a range iteration dependency. _Note: when sleeping threads are unresponsive, meaning a sleeping thread cannot schedule other ready tasks._
+
+```Nim
+import weave
+
+proc main() =
+  init(Weave)
+
+  let pA = newPledge(0, 10, 1)
+  let pB = newPledge(0, 10, 1)
+
+  parallelFor i in 0 ..< 10:
+    captures: {pA}
+    sleep(i * 10)
+    pA.fulfill(i)
+    echo "Step A - stream ", i, " at ", i * 10, " ms"
+
+  parallelFor i in 0 ..< 10:
+    dependsOn: (pA, i)
+    captures: {pB}
+    sleep(i * 10)
+    pB.fulfill(i)
+    echo "Step B - stream ", i, " at ", 2 * i * 10, " ms"
+
+  parallelFor i in 0 ..< 10:
+    dependsOn: (pB, i)
+    sleep(i * 10)
+    echo "Step C - stream ", i, " at ", 3 * i * 10, " ms"
+
+  exit(Weave)
+
+main()
+```
+
+
 ### Lazy Allocation of Flowvars
 
 Flowvars can be lazily allocated, this reduces overhead by at least 2x on very fine-grained tasks like Fibonacci or Depth-First-Search that may spawn trillions on tasks in less than
 a couple hundreds of milliseconds. This can be enabled with `-d:WV_LazyFlowvar`.
 
 ⚠️ This only works for Flowvar of a size up to your machine word size (int64, float64, pointer on 64-bit machines)
-
-### Backoff mechanism
-
-A Backoff mechanism is enabled by default. It allows workers with no tasks to sleep instead of spining aimlessly and burning CPU.
-
-It can be disabled with `-d:WV_Backoff=off`.
+⚠️ Flowvars cannot be returned in that mode, you will at best trigger stack smashing protection or crash
 
 ## Limitations
 
-Weave cannot work with GC-ed types. Pass a pointer around or use Nim channels which are GC-aware.
+Weave has not been tested with GC-ed types. Pass a pointer around or use Nim channels which are GC-aware.
+If it works, a heads-up would be valuable.
+
 This might improve with Nim ARC/newruntime.
 
 ## Statistics

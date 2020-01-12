@@ -11,17 +11,21 @@ import
   weave/channels/pledges
 
 export
-  Flowvar, Weave, Pledge,
-  spawn, sync, syncRoot, spawnDelayed,
-  parallelFor, parallelForStrided, parallelForStaged, parallelForStagedStrided,
+  Flowvar, Weave,
+  spawn, sync, syncRoot,
+  parallelFor, parallelForStrided,
   init, exit,
   loadBalance,
   isSpawned,
-  getThreadId
+  getThreadId,
+  # Experimental threadlocal prologue/epilogue
+  parallelForStaged, parallelForStagedStrided,
+  # Experimental dataflow parallelism
+  spawnDelayed, Pledge,
+  fulfill, newPledge
 
 # TODO, those are workaround for not binding symbols in spawn macro
 import weave/contexts
 export
   readyWith, forceFuture,
-  isRootTask,
-  fulfill, newPledge
+  isRootTask
