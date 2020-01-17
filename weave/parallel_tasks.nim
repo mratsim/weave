@@ -105,7 +105,7 @@ proc spawnImpl(pledges: NimNode, funcCall: NimNode): NimNode =
     # Create the async call
     result.add quote do:
       proc `async_fn`(param: pointer) {.nimcall.} =
-        preCondition: not myTask().isRootTask()
+        preCondition: not isRootTask(myTask())
 
         when bool(`withArgs`):
           let `data` = cast[ptr `argsTy`](param) # TODO - restrict
@@ -150,7 +150,7 @@ proc spawnImpl(pledges: NimNode, funcCall: NimNode): NimNode =
 
     result.add quote do:
       proc `async_fn`(param: pointer) {.nimcall.} =
-        preCondition: not myTask().isRootTask()
+        preCondition: not isRootTask(myTask())
 
         let `data` = cast[ptr `futArgsTy`](param) # TODO - restrict
         let res = `fnCall`
