@@ -135,7 +135,7 @@ steps:
       else
         pushd "nim-${CHANNEL}"
         git fetch origin "${BRANCH}"
-        if [ git merge FETCH_HEAD | grep -c "Already up to date." -ne 1 ]; then
+        if [[ $(git merge FETCH_HEAD | grep -c "Already up to date.") -ne 1 ]; then
           bin/nim c koch
           ./koch boot -d:release
           ./koch tools
