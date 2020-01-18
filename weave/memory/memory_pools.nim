@@ -66,7 +66,7 @@ template debugMem*(body: untyped) =
 
 const SizeofMetadata: int = (block:
     var size: int
-    size += 384                               # ChannelMpscUnboundedBatch
+    size += 320                               # ChannelMpscUnboundedBatch
     size += sizeof(pointer)                   # localFree
     size += sizeof(pointer)                   # free
     size += sizeof(int32)                     # used
@@ -623,7 +623,7 @@ proc takeover*(pool: var TLPoolAllocator, target: sink TLPoolAllocator) =
 # TODO: Once upstream fixes https://github.com/nim-lang/Nim/issues/13122
 #       the size here will likely be wrong
 
-assert sizeof(ChannelMpscUnboundedBatch[ptr MemBlock]) == 384,
+assert sizeof(ChannelMpscUnboundedBatch[ptr MemBlock]) == 320,
   "MPSC channel size was " & $sizeof(ChannelMpscUnboundedBatch[ptr MemBlock])
 
 assert sizeof(Arena) == WV_MemArenaSize,
