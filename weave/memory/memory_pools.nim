@@ -66,7 +66,7 @@ template debugMem*(body: untyped) =
 
 const SizeofMetadata: int = (block:
     var size: int
-    size += 272                               # ChannelMpscUnboundedBatch
+    size += 384                               # ChannelMpscUnboundedBatch
     size += sizeof(pointer)                   # localFree
     size += sizeof(pointer)                   # free
     size += sizeof(int32)                     # used
@@ -112,7 +112,7 @@ type
     # ⚠️ Consumer thread field must be at the end
     #    to prevent cache-line contention
     #    and save on space (no padding on the next field)
-    remoteFree {.align: WV_CacheLinePadding.}: ChannelMpscUnboundedBatch[ptr MemBlock]
+    remoteFree: ChannelMpscUnboundedBatch[ptr MemBlock]
     # Freed blocks, kept separately to deterministically trigger slow path
     # after an amortized amount of allocation
     localFree: ptr MemBlock
@@ -125,7 +125,7 @@ type
 
   Arena = object
     # TODO: Aligned arenas will create L1 64k aliasing conflicts
-    meta {.align: WV_CacheLinePadding.}: Metadata
+    meta: Metadata
     # Intrusive queue
     prev, next: ptr Arena
     allocator: ptr TLPoolAllocator
@@ -146,7 +146,7 @@ type
     ##    on the heap instead of with {.threadvar.}
     ##    if you need to disconnect its lifetime
     ##    from its owning thread.
-    first {.align: WV_CacheLinePadding.}: ptr Arena
+    first: ptr Arena
     last: ptr Arena
     numArenas: range[int32(0) .. high(int32)]
     threadID: int
@@ -623,7 +623,7 @@ proc takeover*(pool: var TLPoolAllocator, target: sink TLPoolAllocator) =
 # TODO: Once upstream fixes https://github.com/nim-lang/Nim/issues/13122
 #       the size here will likely be wrong
 
-assert sizeof(ChannelMpscUnboundedBatch[ptr MemBlock]) == 272,
+assert sizeof(ChannelMpscUnboundedBatch[ptr MemBlock]) == 384,
   "MPSC channel size was " & $sizeof(ChannelMpscUnboundedBatch[ptr MemBlock])
 
 assert sizeof(Arena) == WV_MemArenaSize,
