@@ -319,7 +319,7 @@ proc addLoopTask*(
           when defined(WV_profile):
             timer_stop(timer_enq_deq_task)
       else:
-        `futureIdent`.readyWith(default(`resultFutureType`.T))
+        readyWith(`futureIdent`, default(`resultFutureType`.T))
   else:
     statement.add quote do:
       if likely(`stop`-`start` != 0):

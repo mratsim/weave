@@ -217,7 +217,7 @@ macro parallelReduceImpl*(loopParams: untyped, stride: int, body: untyped): unty
         let offset = cast[pointer](cast[ByteAddress](param) +% sizeof(`FutTy`))
         let `env` = cast[ptr `CapturedTy`](offset)
       let res = `fnCall`
-      `fut`[].readyWith(res)
+      readyWith(`fut`[], res)
 
   # Create the task
   # --------------------------------------------------------
