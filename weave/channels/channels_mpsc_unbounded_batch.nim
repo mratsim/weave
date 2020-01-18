@@ -36,7 +36,10 @@ const MpscPadding = WV_CacheLinePadding div 2
   ## - The data structure fits in WV_MemBlockSize (4x cache-line by default)
   ## - The front and back fields which are respectively owned by consumer and the producers
   ##   accessed only by the consumer for the first and mostly by producers for the second
-  ##   are kept 2 cache-line apart.
+  ##   are kept 1 cache-line apart.
+  ## - We keep 1 cache-line apart instead of 2 to save on size
+  ## - The count field is kept in the same cache-line as the back field
+  ##   to save on size and as they have the same contention profile.
 
 type
   Enqueueable = concept x, type T
@@ -65,13 +68,16 @@ type
     # Producers and consumer slow-path
     back{.align: MpscPadding.}: Atomic[pointer] # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
     # Accessed by all
-    count{.align: MpscPadding.}: Atomic[int]
+    count: Atomic[int]
     # Consumer only - front is a dummy node
     front{.align: MpscPadding.}: derefMPSC(T)
     # back and front order is chosen so that the data structure can be
     # made intrusive to consumer data-structures
     # like the memory-pool and the pledges so that
-    # producer accesses don't invalidate cache-lines
+    # producer accesses don't invalidate consumer cache-lines
+    #
+    # The padding is a compromise to keep back and front 1 cache line apart
+    # but still have a reasonable MPSC Channel size of 2xCacheLine (instead of 3x)
 
 # Debugging
 # --------------------------------------------------------------
