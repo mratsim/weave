@@ -154,7 +154,7 @@ proc spawnImpl(pledges: NimNode, funcCall: NimNode): NimNode =
 
         let `data` = cast[ptr `futArgsTy`](param) # TODO - restrict
         let res = `fnCall`
-        `data`[0].readyWith(res)
+        readyWith(`data`[0], res)
 
     # Create the task
     let freshIdent = ident($retType)
