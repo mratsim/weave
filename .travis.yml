@@ -41,6 +41,10 @@ matrix:
       compiler: clang
   fast_finish: true
 
+# Submodules are only for benchmarks, don't clone them
+git:
+  submodules: false
+
 before_install:
   - |
     if [ "${CHANNEL}" = stable ]; then
