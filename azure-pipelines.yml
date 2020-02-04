@@ -5,45 +5,49 @@ strategy:
     # for 32-bit targets as it seems like Azure machines are 64-bit
     # TODO: C++ is allowed to fail
     #       Nim doesn't compile pledges properly in C++ mode
-    Windows_devel_32bit:
+    Windows_stable_32bit:
       VM: 'windows-latest'
       ARCH: x86
       UCPU: i686
       PLATFORM: x86
-      CHANNEL: devel
-      WEAVE_TEST_LANG: c
-    Windows_devel_64bit:
+      CHANNEL: stable
+      TEST_LANG: c
+    Windows_stable_64bit:
       VM: 'windows-latest'
+      UCPU: amd64
       PLATFORM: x64
-      CHANNEL: devel
-      WEAVE_TEST_LANG: c
-    # Windows_cpp_devel_64bit:
+      CHANNEL: stable
+      TEST_LANG: c
+    # Windows_cpp_stable_64bit:
     #   VM: 'windows-latest'
+    #   UCPU: amd64
     #   PLATFORM: x64
-    #   CHANNEL: devel
-    #   WEAVE_TEST_LANG: cpp
-    Linux_devel_64bit:
+    #   CHANNEL: stable
+    #   TEST_LANG: cpp
+    Linux_stable_64bit:
       VM: 'ubuntu-16.04'
+      UCPU: amd64
       PLATFORM: x64
-      CHANNEL: devel
-      WEAVE_TEST_LANG: c
-    # Linux_cpp_devel_64bit:
+      CHANNEL: stable
+      TEST_LANG: c
+    # Linux_cpp_stable_64bit:
     #   VM: 'ubuntu-16.04'
+    #   UCPU: amd64
     #   PLATFORM: x64
-    #   CHANNEL: devel
+    #   CHANNEL: stable
     #   WEAVE_TEST_LANG: cpp
-    Linux_devel_32bit:
+    Linux_stable_32bit:
       VM: 'ubuntu-16.04'
       PLATFORM: x86
       UCPU: i686
-      CHANNEL: devel
-      WEAVE_TEST_LANG: c
-    MacOS_devel_64bit:
+      CHANNEL: stable
+      TEST_LANG: c
+    MacOS_stable_64bit:
       VM: 'macOS-10.14'
+      UCPU: amd64
       PLATFORM: x64
-      CHANNEL: devel
+      CHANNEL: stable
       WEAVE_TEST_LANG: c
-
 pool:
   vmImage: $(VM)
 
@@ -113,27 +117,27 @@ steps:
 
   - bash: |
       echo "PATH=${PATH}"
-      if [ "${CHANNEL}" = stable ]; then
+      if [ "$(CHANNEL)" = stable ]; then
         BRANCH="v$(curl https://nim-lang.org/channels/stable)"
       else
-        BRANCH="${CHANNEL}"
+        BRANCH="$(CHANNEL)"
       fi
       mkdir -p NimBinaries
       pushd NimBinaries
-      if [ ! -x "nim-${CHANNEL}/bin/nim" ]; then
-        git clone -b "${BRANCH}" https://github.com/nim-lang/nim "nim-${CHANNEL}/"
-        pushd "nim-${CHANNEL}"
+      if [ ! -x "nim-$(CHANNEL)/bin/nim" ]; then
+        git clone -b "${BRANCH}" https://github.com/nim-lang/nim "nim-$(CHANNEL)/"
+        pushd "nim-$(CHANNEL)"
         git clone --depth 1 https://github.com/nim-lang/csources csources/
         pushd csources
 
-        make -j $ncpu ucpu=$UCPU CC=gcc
+        make -j $ncpu ucpu=$(UCPU) CC=gcc
         popd
         rm -rf csources
         bin/nim c koch
         ./koch boot -d:release
         ./koch tools
       else
-        pushd "nim-${CHANNEL}"
+        pushd "nim-$(CHANNEL)"
         git fetch origin "${BRANCH}"
         if [[ $(git merge FETCH_HEAD | grep -c "Already up to date.") -ne 1 ]]; then
           bin/nim c koch
@@ -143,7 +147,7 @@ steps:
       fi
       popd # exit nim-CHANNEL
       popd # exit NimBinaries
-      echo "##vso[task.prependpath]$PWD/NimBinaries/nim-${CHANNEL}/bin"
+      echo "##vso[task.prependpath]$PWD/NimBinaries/nim-$(CHANNEL)/bin"
     displayName: 'Building Nim'
 
   - bash: |
