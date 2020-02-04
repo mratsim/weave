@@ -296,7 +296,7 @@ This allows precising specification of data producer-consumer relationships.
 
 In contrast, classic task parallelism can only express control-flow dependencies (i.e. parent-child function calls relationships) and classic tasks are eagerly scheduled.
 
-In the litterature, it is also called:
+In the literature, it is also called:
 - Stream parallelism
 - Pipeline parallelism
 - Graph parallelism
@@ -392,7 +392,7 @@ main()
 
 You can combine data parallelism and dataflow parallelism.
 
-Currently parallel loop only support one dependency (single, fixed iteration or range iteration).
+Currently parallel loops only support one dependency (single, fixed iteration or range iteration).
 
 Here is an example with a range iteration dependency. _Note: when sleeping threads are unresponsive, meaning a sleeping thread cannot schedule other ready tasks._
 
@@ -431,7 +431,7 @@ main()
 
 ### Lazy Allocation of Flowvars
 
-Flowvars can be lazily allocated, this reduces overhead by at least 2x on very fine-grained tasks like Fibonacci or Depth-First-Search that may spawn trillions on tasks in less than
+Flowvars can be lazily allocated, this reduces overhead by at least 2x on very fine-grained tasks like Fibonacci or Depth-First-Search that may spawn trillions of tasks in less than
 a couple hundreds of milliseconds. This can be enabled with `-d:WV_LazyFlowvar`.
 
 ⚠️ This only works for Flowvar of a size up to your machine word size (int64, float64, pointer on 64-bit machines)
