@@ -8,7 +8,7 @@ strategy:
     Windows_devel_32bit:
       VM: 'windows-latest'
       ARCH: x86
-      ucpu: i686
+      UCPU: i686
       PLATFORM: x86
       CHANNEL: devel
       WEAVE_TEST_LANG: c
@@ -35,7 +35,7 @@ strategy:
     Linux_devel_32bit:
       VM: 'ubuntu-16.04'
       PLATFORM: x86
-      ucpu: i686
+      UCPU: i686
       CHANNEL: devel
       WEAVE_TEST_LANG: c
     MacOS_devel_64bit:
@@ -126,7 +126,7 @@ steps:
         git clone --depth 1 https://github.com/nim-lang/csources csources/
         pushd csources
 
-        make -j $ncpu CC=gcc
+        make -j $ncpu ucpu=$UCPU CC=gcc
         popd
         rm -rf csources
         bin/nim c koch
