@@ -5,48 +5,48 @@ strategy:
     # for 32-bit targets as it seems like Azure machines are 64-bit
     # TODO: C++ is allowed to fail
     #       Nim doesn't compile pledges properly in C++ mode
-    Windows_stable_32bit:
+    Windows_devel_32bit:
       VM: 'windows-latest'
       ARCH: x86
       UCPU: i686
       PLATFORM: x86
-      CHANNEL: stable
+      CHANNEL: devel
       TEST_LANG: c
-    Windows_stable_64bit:
+    Windows_devel_64bit:
       VM: 'windows-latest'
       UCPU: amd64
       PLATFORM: x64
-      CHANNEL: stable
+      CHANNEL: devel
       TEST_LANG: c
-    # Windows_cpp_stable_64bit:
+    # Windows_cpp_devel_64bit:
     #   VM: 'windows-latest'
     #   UCPU: amd64
     #   PLATFORM: x64
-    #   CHANNEL: stable
+    #   CHANNEL: devel
     #   TEST_LANG: cpp
-    Linux_stable_64bit:
+    Linux_devel_64bit:
       VM: 'ubuntu-16.04'
       UCPU: amd64
       PLATFORM: x64
-      CHANNEL: stable
+      CHANNEL: devel
       TEST_LANG: c
-    # Linux_cpp_stable_64bit:
+    # Linux_cpp_devel_64bit:
     #   VM: 'ubuntu-16.04'
     #   UCPU: amd64
     #   PLATFORM: x64
-    #   CHANNEL: stable
+    #   CHANNEL: devel
     #   WEAVE_TEST_LANG: cpp
-    Linux_stable_32bit:
+    Linux_devel_32bit:
       VM: 'ubuntu-16.04'
       PLATFORM: x86
       UCPU: i686
-      CHANNEL: stable
+      CHANNEL: devel
       TEST_LANG: c
-    MacOS_stable_64bit:
+    MacOS_devel_64bit:
       VM: 'macOS-10.14'
       UCPU: amd64
       PLATFORM: x64
-      CHANNEL: stable
+      CHANNEL: devel
       WEAVE_TEST_LANG: c
 pool:
   vmImage: $(VM)
