@@ -515,7 +515,7 @@ when sizeof(pointer) == 8:
   let expectedSize = 40
 else:
   let expectedSize = 20
-assert sizeof(default(TaskNode)[]) == 20,
+assert sizeof(default(TaskNode)[]) == expectedSize,
   "TaskNode size was " & $sizeof(default(TaskNode)[])
 
 assert sizeof(ChannelMpscUnboundedBatch[TaskNode]) == 128,
