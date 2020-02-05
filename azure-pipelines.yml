@@ -55,7 +55,7 @@ steps:
   - task: CacheBeta@1
     displayName: 'cache Nim binaries'
     inputs:
-      key: NimBinaries | $(Agent.OS) | $(CHANNEL) | $(PLATFORM)
+      key: NimBinaries | $(Agent.OS) | ${CHANNEL} | $(PLATFORM)
       path: NimBinaries
 
   - task: CacheBeta@1
@@ -117,27 +117,27 @@ steps:
 
   - bash: |
       echo "PATH=${PATH}"
-      if [ "$(CHANNEL)" = stable ]; then
+      if [ "${CHANNEL}" = stable ]; then
         BRANCH="v$(curl https://nim-lang.org/channels/stable)"
       else
-        BRANCH="$(CHANNEL)"
+        BRANCH="${CHANNEL}"
       fi
       mkdir -p NimBinaries
       pushd NimBinaries
-      if [ ! -x "nim-$(CHANNEL)/bin/nim" ]; then
-        git clone -b "${BRANCH}" https://github.com/nim-lang/nim "nim-$(CHANNEL)/"
-        pushd "nim-$(CHANNEL)"
+      if [ ! -x "nim-${CHANNEL}/bin/nim" ]; then
+        git clone -b "${BRANCH}" https://github.com/nim-lang/nim "nim-${CHANNEL}/"
+        pushd "nim-${CHANNEL}"
         git clone --depth 1 https://github.com/nim-lang/csources csources/
         pushd csources
 
-        make -j $ncpu ucpu=$(UCPU) CC=gcc
+        make -j $ncpu ucpu=${UCPU} CC=gcc
         popd
         rm -rf csources
         bin/nim c koch
         ./koch boot -d:release
         ./koch tools
       else
-        pushd "nim-$(CHANNEL)"
+        pushd "nim-${CHANNEL}"
         git fetch origin "${BRANCH}"
         if [[ $(git merge FETCH_HEAD | grep -c "Already up to date.") -ne 1 ]]; then
           bin/nim c koch
@@ -147,7 +147,7 @@ steps:
       fi
       popd # exit nim-CHANNEL
       popd # exit NimBinaries
-      echo "##vso[task.prependpath]$PWD/NimBinaries/nim-$(CHANNEL)/bin"
+      echo "##vso[task.prependpath]$PWD/NimBinaries/nim-${CHANNEL}/bin"
     displayName: 'Building Nim'
 
   - bash: |
