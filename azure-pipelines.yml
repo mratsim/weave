@@ -36,13 +36,16 @@ strategy:
     #   PLATFORM: x64
     #   CHANNEL: devel
     #   WEAVE_TEST_LANG: cpp
-    Linux_devel_32bit:
-      VM: 'ubuntu-16.04'
-      ARCH: x86
-      PLATFORM: x86
-      UCPU: i686
-      CHANNEL: devel
-      TEST_LANG: c
+
+    # TODO this requires gcc -m32 as the Ubuntu image is 64-bit
+    # Linux_devel_32bit:
+    #   VM: 'ubuntu-16.04'
+    #   ARCH: x86
+    #   PLATFORM: x86
+    #   UCPU: i686
+    #   CHANNEL: devel
+    #   TEST_LANG: c
+
     MacOS_devel_64bit:
       VM: 'macOS-10.14'
       UCPU: amd64
