@@ -118,6 +118,7 @@ steps:
   - bash: |
       echo "PATH=${PATH}"
       echo "UCPU=${UCPU}"
+      export ucpu=${UCPU}
 
       if [ "${CHANNEL}" = stable ]; then
         BRANCH="v$(curl https://nim-lang.org/channels/stable)"
