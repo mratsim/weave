@@ -55,7 +55,7 @@ steps:
   - task: CacheBeta@1
     displayName: 'cache Nim binaries'
     inputs:
-      key: NimBinaries | $(Agent.OS) | ${CHANNEL} | $(PLATFORM)
+      key: NimBinaries | $(Agent.OS) | $(CHANNEL) | $(PLATFORM)
       path: NimBinaries
 
   - task: CacheBeta@1
@@ -117,6 +117,8 @@ steps:
 
   - bash: |
       echo "PATH=${PATH}"
+      echo "UCPU=${UCPU}"
+
       if [ "${CHANNEL}" = stable ]; then
         BRANCH="v$(curl https://nim-lang.org/channels/stable)"
       else
