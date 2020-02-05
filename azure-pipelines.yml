@@ -47,7 +47,7 @@ strategy:
       UCPU: amd64
       PLATFORM: x64
       CHANNEL: devel
-      WEAVE_TEST_LANG: c
+      TEST_LANG: c
 pool:
   vmImage: $(VM)
 
@@ -117,8 +117,8 @@ steps:
 
   - bash: |
       echo "PATH=${PATH}"
+      gcc -v
       echo "UCPU=${UCPU}"
-      export ucpu=${UCPU}
 
       if [ "${CHANNEL}" = stable ]; then
         BRANCH="v$(curl https://nim-lang.org/channels/stable)"
