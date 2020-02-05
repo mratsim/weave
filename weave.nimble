@@ -17,8 +17,8 @@ proc test(flags, path: string) =
 
   # Compilation language is controlled by WEAVE_TEST_LANG
   var lang = "c"
-  if existsEnv"WEAVE_TEST_LANG":
-    lang = getEnv"WEAVE_TEST_LANG"
+  if existsEnv"TEST_LANG":
+    lang = getEnv"TEST_LANG"
 
   echo "\n========================================================================================"
   echo "Running [", flags, "] ", path
