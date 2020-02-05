@@ -1,17 +1,17 @@
 strategy:
   maxParallel: 10
   matrix:
-    # Nim requires enforcing ARCH="x86" and ucpu
-    # for 32-bit targets as it seems like Azure machines are 64-bit
-    # TODO: C++ is allowed to fail
-    #       Nim doesn't compile pledges properly in C++ mode
-    Windows_devel_32bit:
-      VM: 'windows-latest'
-      ARCH: x86
-      UCPU: i686
-      PLATFORM: x86
-      CHANNEL: devel
-      TEST_LANG: c
+    # TODO: Nim doesn't compile pledges properly in C++ mode
+    # TODO: Windows 32-bit requires EnterSynchronizationBarrier support in mingw-w64
+    # TODO: Linux 32-bit requires gcc -m32 setup
+
+    # Windows_devel_32bit:
+    #   VM: 'windows-latest'
+    #   ARCH: x86
+    #   UCPU: i686
+    #   PLATFORM: x86
+    #   CHANNEL: devel
+    #   TEST_LANG: c
     Windows_devel_64bit:
       VM: 'windows-latest'
       UCPU: amd64
@@ -37,7 +37,6 @@ strategy:
     #   CHANNEL: devel
     #   WEAVE_TEST_LANG: cpp
 
-    # TODO this requires gcc -m32 as the Ubuntu image is 64-bit
     # Linux_devel_32bit:
     #   VM: 'ubuntu-16.04'
     #   ARCH: x86
