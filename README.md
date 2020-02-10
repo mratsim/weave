@@ -52,7 +52,8 @@ nimble install weave@#master
 
 Weave `master` must be compiled with a Nim version post-[@abea8037](https://github.com/nim-lang/Nim/commit/abea80376a113fb218c22b6474727c279e694cd3)
 
-Refer to [choosenim](https://github.com/dom96/choosenim) or [Nim repository](https://github.com/nim-lang/Nim) to cimpile the latest `devel`.
+Installing nim `devel` is the easiest way.
+Refer to [choosenim](https://github.com/dom96/choosenim) or [Nim repository](https://github.com/nim-lang/Nim) to compile the latest `devel`.
 
 ### C++ compilation
 
