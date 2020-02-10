@@ -7,6 +7,7 @@ license       = "MIT or Apache License 2.0"
 
 # Dependencies
 
+# requires Nim post abea80376a113fb218c22b6474727c279e694cd3
 requires "nim >= 1.1.1", "synthesis"
 
 proc test(flags, path: string) =

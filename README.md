@@ -41,6 +41,31 @@ instead of being based on traditional work-stealing with shared-memory deques.
 > Weave does limit synchronization to only simple SPSC and MPSC channels which greatly reduces
 > the potential bug surface.
 
+## Installation
+
+As of January 2020, Weave depends on features present in Nim `devel` branch.
+Some of those features were fixed after the 0.1~0.3 releases of Weave.
+It is recommended to install the `master` version of Weave instead via
+```bash
+nimble install weave@#master
+```
+
+Weave `master` must be compiled with a Nim version post-[@abea8037](https://github.com/nim-lang/Nim/commit/abea80376a113fb218c22b6474727c279e694cd3)
+
+Refer to [choosenim](https://github.com/dom96/choosenim) or [Nim repository](https://github.com/nim-lang/Nim) to cimpile the latest `devel`.
+
+### C++ compilation
+
+At the moment C++ compilation is not available on latest Nim + latest Weave.
+
+The new "dataflow parallelism" feature that
+allows delaying parallel tasks depending on arbitrary conditions
+requires a data structure (`Pledge`) that is valid in C but invalid in C++.
+
+C++ compilation works with the following combination:
+- Weave v0.3.0
+- Nim devel [@bf2e052e](https://github.com/nim-lang/Nim/commit/bf2e052e6d97c1117603480547804dd98d1ada71)
+
 ## API
 
 ### Task parallelism
@@ -151,6 +176,8 @@ Weave uses Nim's `countProcessors()` in `std/cpuinfo`
 ## Table of Contents
 
 - [Weave, a state-of-the-art multithreading runtime](#weave-a-state-of-the-art-multithreading-runtime)
+  - [Installation](#installation)
+    - [C++ compilation](#c-compilation)
   - [API](#api)
     - [Task parallelism](#task-parallelism)
     - [Data parallelism](#data-parallelism)
