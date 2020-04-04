@@ -315,6 +315,7 @@ proc delayedUntil*(task: Task, pledge: Pledge, pool: var TLPoolAllocator): bool 
   let taskNode = pool.borrow(deref(TaskNode))
   taskNode.task = task
   taskNode.next.store(nil, moRelaxed)
+  taskNode.nextDep = nil
   taskNode.pledge = default(Pledge) # Don't need to store the pledge reference if there is only the current one
   taskNode.bucketID = NoIter
   discard pledge.p.impl.chan.trySend(taskNode)
@@ -515,10 +516,7 @@ macro delayedUntilMulti*(task: Task, pool: var TLPoolAllocator, pledges: varargs
     prevnode = taskNode
     taskNodesInitStmt.add taskNodeInit
 
-  doAssert not firstNode.isNil
   result.add taskNodesInitStmt
-  result.add quote do:
-    debugEcho "Debug firstNode.isNil: ", `firstNode`.isNil
   result.add newCall(bindSym"delayedUntil", firstNode, task)
 
   echo result.toStrLit()
