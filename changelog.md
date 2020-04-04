@@ -2,6 +2,48 @@
 
 ### v0.x.x - Unreleased
 
+### v0.4.0 - April 2020 - "Bespoke"
+
+#### Compatibility
+
+Weave now targets Nim 1.2.0 instead of `devel`. This is the first Nim release
+that supports all requirements of Weave.
+
+#### Features
+
+Weave now provides an experimental "dataflow parallelism" mode.
+Dataflow parallelism is also known under the following names:
+- Graph parallelism
+- Stream parallelism
+- Pipeline parallelism
+- Data-driven parallelism
+
+Concretely this allows delaying tasks until a condition is met.
+This condition is called `Pledge`.
+Programs can now create a "computation graph"
+or a pipeline of tasks ahead of time that depends on one or more `Pledge`.
+
+For example a game engine might want to associate a pipeline of transformations
+to each frame and once the frame prerequisites are met, set the `Pledge` to `fulfilled`.
+
+The `Pledge` can be combined with parallel loops and programs can wait on specific
+iterations or even iteration ranges for example to implement parallel video processing
+as soon as a subset of the frame is ready instead of waiting for the whole frame.
+This exposes significantly more parallelism opportunities.
+
+Dataflow parallelism cannot be used with the C++ backend at the moment.
+
+Weave now provides the 3 main parallelism models:
+- Task Parallelism (spawn/sync)
+- Data Parallelism (parallel for loop)
+- Dataflow Parallelism (delayed tasks)
+
+#### Performance
+
+Weave scalability has been carefully measured and improved.
+
+On matrix multiplication, the traditional benchmark to classify the top 500 supercomputers of the world, Weave speedup on an 18-core CPU is 17.5x while the state-of-the-art Intel implementation using OpenMP allows 15.5x-16x speedup.
+
 ### v0.3.0 - January 2020
 
 `sync(Weave)` has been renamed `syncRoot(Weave)` to highlight that it is only valid on the root task in the main thread. In particular, a procedure that uses syncRoot should not be called be in a multithreaded section. This is a breaking change. In the future such changes will have a deprecation path but the library is only 2 weeks old at the moment.

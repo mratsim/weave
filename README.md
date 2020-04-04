@@ -55,6 +55,10 @@ nimble install weave@#master
 
 Weave requires at least Nim v1.2.0
 
+## Changelog
+
+The latest changes are available in the ![changelog.md](changelog.md) file.
+
 ## API
 
 ### Task parallelism
@@ -166,6 +170,7 @@ Weave uses Nim's `countProcessors()` in `std/cpuinfo`
 
 - [Weave, a state-of-the-art multithreading runtime](#weave-a-state-of-the-art-multithreading-runtime)
   - [Installation](#installation)
+  - [Changelog](#changelog)
   - [API](#api)
     - [Task parallelism](#task-parallelism)
     - [Data parallelism](#data-parallelism)
