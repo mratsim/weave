@@ -215,10 +215,9 @@ proc delayedUntilSingle(taskNode: TaskNode, curTask: Task): bool =
   ## Redelay a task that depends on multiple pledges
   ## with 1 or more pledge fulfilled but still some unfulfilled.
   ##
-  ## Returns `false` if redelaying was unneeded because pledge was fulfilled
-  ## and task can be scheduled right away.
-  ## Returns true if delay is successful and current worker doesn't own the task anymore,
-  ## it shouldn't be accessed anymore in that case
+  ## Returns `true` if the task has been delayed.
+  ## The task should not be accessed anymore by the current worker.
+  ## Returns `false` if the task can be scheduled right away by the current worker thread.
   preCondition: not taskNode.pledge.p.isNil
 
   if taskNode.pledge.p.impl.fulfilled.load(moRelaxed):
@@ -242,10 +241,9 @@ proc delayedUntilIter(taskNode: TaskNode, curTask: Task): bool =
   ## Redelay a task that depends on multiple pledges
   ## with 1 or more pledge fulfilled but still some unfulfilled.
   ##
-  ## Returns `false` if redelaying was unneeded because pledge was fulfilled
-  ## and task can be scheduled right away.
-  ## Returns true if delay is successful and current worker doesn't own the task anymore,
-  ## it shouldn't be accessed anymore in that case
+  ## Returns `true` if the task has been delayed.
+  ## The task should not be accessed anymore by the current worker.
+  ## Returns `false` if the task can be scheduled right away by the current worker thread.
   preCondition: not taskNode.pledge.p.isNil
 
   if taskNode.pledge.p.impls[taskNode.bucketID].fulfilled.load(moRelaxed):
@@ -268,6 +266,10 @@ proc delayedUntilIter(taskNode: TaskNode, curTask: Task): bool =
 proc delayedUntil*(taskNode: TaskNode, curTask: Task): bool =
   ## Redelay a task that depends on multiple pledges (in the `taskNode` linked list)
   ## with 1 or more pledge fulfilled but still some unfulfilled.
+  ##
+  ## Returns `true` if the task has been delayed.
+  ## The task should not be accessed anymore by the current worker.
+  ## Returns `false` if the task can be scheduled right away by the current worker thread.
   preCondition: not taskNode.pledge.p.isNil
   preCondition: bool(taskNode.task == curTask)
   if taskNode.pledge.p.kind == Single:
@@ -292,9 +294,10 @@ proc initialize*(pledge: var Pledge, pool: var TLPoolAllocator) =
 
 proc delayedUntil*(task: Task, pledge: Pledge, pool: var TLPoolAllocator): bool =
   ## Defers a task until a pledge is fulfilled
-  ## Returns true if the task has been delayed.
-  ## The task should not be accessed anymore
-  ## Returns false if the task can be scheduled right away.
+  ##
+  ## Returns `true` if the task has been delayed.
+  ## The task should not be accessed anymore by the current worker.
+  ## Returns `false` if the task can be scheduled right away by the current worker thread.
   preCondition: not pledge.p.isNil
   preCondition: pledge.p.kind == Single
 
@@ -400,9 +403,10 @@ proc getBucket(pledge: Pledge, index: int32): int32 {.inline.} =
 
 proc delayedUntil*(task: Task, pledge: Pledge, index: int32, pool: var TLPoolAllocator): bool =
   ## Defers a task until a pledge[index] is fulfilled
-  ## Returns true if the task has been delayed.
-  ## The task should not be accessed anymore
-  ## Returns false if the task can be scheduled right away.
+  ##
+  ## Returns `true` if the task has been delayed.
+  ## The task should not be accessed anymore by the current worker.
+  ## Returns `false` if the task can be scheduled right away by the current worker thread.
   preCondition: not pledge.p.isNil
   preCondition: pledge.p.kind == Iteration
 
@@ -518,8 +522,6 @@ macro delayedUntilMulti*(task: Task, pool: var TLPoolAllocator, pledges: varargs
 
   result.add taskNodesInitStmt
   result.add newCall(bindSym"delayedUntil", firstNode, task)
-
-  echo result.toStrLit()
 
 # Sanity checks
 # ------------------------------------------------------------------------------

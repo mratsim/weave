@@ -24,57 +24,55 @@ proc test(flags, path: string) =
   echo "\n========================================================================================"
   echo "Running [ ", lang, " ", flags, " ] ", path
   echo "========================================================================================"
-  # exec "nim " & lang & " " & flags & " --verbosity:0 --hints:off --warnings:off --threads:on -d:release --outdir:build -r " & path
-  exec "nim " & lang & " " & flags & " --verbosity:0 --hints:off --warnings:off --threads:on --outdir:build -r " & path
-
+  exec "nim " & lang & " " & flags & " --verbosity:0 --hints:off --warnings:off --threads:on -d:release --outdir:build -r " & path
 
 task test, "Run Weave tests":
-  # test "", "weave/channels/channels_spsc_single.nim"
-  # test "", "weave/channels/channels_spsc_single_ptr.nim"
-  # test "", "weave/channels/channels_mpsc_unbounded_batch.nim"
+  test "", "weave/channels/channels_spsc_single.nim"
+  test "", "weave/channels/channels_spsc_single_ptr.nim"
+  test "", "weave/channels/channels_mpsc_unbounded_batch.nim"
 
   if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
     test "", "weave/channels/pledges.nim"
 
-  # test "", "weave/datatypes/binary_worker_trees.nim"
-  # test "", "weave/datatypes/bounded_queues.nim"
-  # test "", "weave/datatypes/prell_deques.nim"
-  # test "", "weave/datatypes/sparsesets.nim"
+  test "", "weave/datatypes/binary_worker_trees.nim"
+  test "", "weave/datatypes/bounded_queues.nim"
+  test "", "weave/datatypes/prell_deques.nim"
+  test "", "weave/datatypes/sparsesets.nim"
 
-  # test "", "weave/memory/lookaside_lists.nim"
-  # test "", "weave/memory/memory_pools.nim"
-  # test "", "weave/memory/persistacks.nim"
+  test "", "weave/memory/lookaside_lists.nim"
+  test "", "weave/memory/memory_pools.nim"
+  test "", "weave/memory/persistacks.nim"
 
   test "", "weave/parallel_tasks.nim"
-  # test "", "weave/parallel_for.nim"
-  # test "", "weave/parallel_for_staged.nim"
-  # test "", "weave/parallel_reduce.nim"
+  test "", "weave/parallel_for.nim"
+  test "", "weave/parallel_for_staged.nim"
+  test "", "weave/parallel_reduce.nim"
 
   test "-d:WV_LazyFlowvar", "weave/parallel_tasks.nim"
-  # test "-d:WV_LazyFlowvar", "weave/parallel_for.nim"
-  # test "-d:WV_LazyFlowvar", "weave/parallel_for_staged.nim"
-  # test "-d:WV_LazyFlowvar", "weave/parallel_reduce.nim"
+  test "-d:WV_LazyFlowvar", "weave/parallel_for.nim"
+  test "-d:WV_LazyFlowvar", "weave/parallel_for_staged.nim"
+  test "-d:WV_LazyFlowvar", "weave/parallel_reduce.nim"
 
-  # test "", "benchmarks/dfs/weave_dfs.nim"
-  # test "", "benchmarks/fibonacci/weave_fib.nim"
-  # test "", "benchmarks/heat/weave_heat.nim"
-  # test "", "benchmarks/matrix_transposition/weave_transposes.nim"
-  # test "", "benchmarks/nqueens/weave_nqueens.nim"
-  # when not defined(windows): # Need "time" support - https://github.com/mratsim/weave/issues/60
-  #   test "", "benchmarks/single_task_producer/weave_spc.nim"
-  #   test "", "benchmarks/bouncing_producer_consumer/weave_bpc.nim"
-  # when defined(i386) or defined(amd64):
-  #   if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
-  #     test "", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
+  test "", "benchmarks/dfs/weave_dfs.nim"
+  test "", "benchmarks/fibonacci/weave_fib.nim"
+  test "", "benchmarks/heat/weave_heat.nim"
+  test "", "benchmarks/matrix_transposition/weave_transposes.nim"
+  test "", "benchmarks/nqueens/weave_nqueens.nim"
+  when not defined(windows): # Need "time" support - https://github.com/mratsim/weave/issues/60
+    test "", "benchmarks/single_task_producer/weave_spc.nim"
+    test "", "benchmarks/bouncing_producer_consumer/weave_bpc.nim"
+  when defined(i386) or defined(amd64):
+    if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
+      test "", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
 
-  # test "-d:WV_LazyFlowvar", "benchmarks/dfs/weave_dfs.nim"
-  # test "-d:WV_LazyFlowvar", "benchmarks/fibonacci/weave_fib.nim"
-  # test "-d:WV_LazyFlowvar", "benchmarks/heat/weave_heat.nim"
-  # test "-d:WV_LazyFlowvar", "benchmarks/matrix_transposition/weave_transposes.nim"
-  # test "-d:WV_LazyFlowvar", "benchmarks/nqueens/weave_nqueens.nim"
-  # when not defined(windows):
-  #   test "-d:WV_LazyFlowvar", "benchmarks/single_task_producer/weave_spc.nim"
-  #   test "-d:WV_LazyFlowvar", "benchmarks/bouncing_producer_consumer/weave_bpc.nim"
-  # when defined(i386) or defined(amd64):
-  #   if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
-  #     test "-d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
+  test "-d:WV_LazyFlowvar", "benchmarks/dfs/weave_dfs.nim"
+  test "-d:WV_LazyFlowvar", "benchmarks/fibonacci/weave_fib.nim"
+  test "-d:WV_LazyFlowvar", "benchmarks/heat/weave_heat.nim"
+  test "-d:WV_LazyFlowvar", "benchmarks/matrix_transposition/weave_transposes.nim"
+  test "-d:WV_LazyFlowvar", "benchmarks/nqueens/weave_nqueens.nim"
+  when not defined(windows):
+    test "-d:WV_LazyFlowvar", "benchmarks/single_task_producer/weave_spc.nim"
+    test "-d:WV_LazyFlowvar", "benchmarks/bouncing_producer_consumer/weave_bpc.nim"
+  when defined(i386) or defined(amd64):
+    if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
+      test "-d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
