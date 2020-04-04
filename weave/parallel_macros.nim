@@ -11,8 +11,15 @@ import
   # Internal
   ./datatypes/[sync_types, flowvars], ./contexts,
   ./instrumentation/profilers,
-  ./scheduler,
-  ./channels/pledges
+  ./scheduler
+
+when not defined(cpp):
+  import ./channels/pledges
+else:
+  template delayedUntilMulti(task, pool: untyped, pledges: varargs[untyped]): untyped =
+    discard
+
+  const NoIter = -1
 
 # Parallel for utilities
 # ----------------------------------------------------------
@@ -306,7 +313,7 @@ proc addLoopTask*(
           `task`.cur = `start`
           `task`.stop = `stop`
           `task`.stride = `stride`
-          
+
           `task`.futureSize = uint8(sizeof(`resultFutureType`.T))
           `task`.hasFuture = true
           `task`.isLoop = true

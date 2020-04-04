@@ -17,7 +17,6 @@ import
   ./contexts, ./runtime, ./config,
   ./instrumentation/[loggers, contracts],
   ./datatypes/flowvars, ./await_fsm,
-  ./channels/pledges,
   ./parallel_tasks
 
 when not compileOption("threads"):
@@ -404,34 +403,37 @@ when isMainModule:
     main5()
     echo "-------------------------"
 
-  block:
-    proc main6() =
-      init(Weave)
+  when not defined(cpp):
+    import ./channels/pledges
 
-      let pA = newPledge(0, 10, 1)
-      let pB = newPledge(0, 10, 1)
+    block:
+      proc main6() =
+        init(Weave)
 
-      parallelFor i in 0 ..< 10:
-        captures: {pA}
-        sleep(i * 10)
-        pA.fulfill(i)
-        echo "Step A - stream ", i, " at ", i * 10, " ms"
+        let pA = newPledge(0, 10, 1)
+        let pB = newPledge(0, 10, 1)
 
-      parallelFor i in 0 ..< 10:
-        dependsOn: (pA, i)
-        captures: {pB}
-        sleep(i * 10)
-        pB.fulfill(i)
-        echo "Step B - stream ", i, " at ", 2 * i * 10, " ms"
+        parallelFor i in 0 ..< 10:
+          captures: {pA}
+          sleep(i * 10)
+          pA.fulfill(i)
+          echo "Step A - stream ", i, " at ", i * 10, " ms"
 
-      parallelFor i in 0 ..< 10:
-        dependsOn: (pB, i)
-        sleep(i * 10)
-        echo "Step C - stream ", i, " at ", 3 * i * 10, " ms"
+        parallelFor i in 0 ..< 10:
+          dependsOn: (pA, i)
+          captures: {pB}
+          sleep(i * 10)
+          pB.fulfill(i)
+          echo "Step B - stream ", i, " at ", 2 * i * 10, " ms"
 
-      exit(Weave)
+        parallelFor i in 0 ..< 10:
+          dependsOn: (pB, i)
+          sleep(i * 10)
+          echo "Step C - stream ", i, " at ", 3 * i * 10, " ms"
 
-    echo "Dataflow loop parallelism"
-    echo "-------------------------"
-    main6()
-    echo "-------------------------"
+        exit(Weave)
+
+      echo "Dataflow loop parallelism"
+      echo "-------------------------"
+      main6()
+      echo "-------------------------"

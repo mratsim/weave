@@ -203,15 +203,14 @@ For example on MacOS, the `pthread` implementation does not expose barrier funct
 
 ### C++ compilation
 
-At the moment C++ compilation is not available on latest Nim + latest Weave.
+Weave provides a "dataflow parallelism" feature that
+allows:
+- building a computation graph lazily
+- by delaying parallel tasks depending on arbitrary conditions
 
-The new "dataflow parallelism" feature that
-allows delaying parallel tasks depending on arbitrary conditions
-requires a data structure (`Pledge`) that is valid in C but invalid in C++.
+It requires a data structure (`Pledge`) that is valid in C but invalid in C++ due to an incompatible mix of `Atomics<T>` in `union type` and `flexible array member`. https://github.com/mratsim/weave/issues/95.
 
-C++ compilation works with the following combination:
-- Weave v0.3.0
-- Nim devel [@bf2e052e](https://github.com/nim-lang/Nim/commit/bf2e052e6d97c1117603480547804dd98d1ada71)
+This feature is deactivated when compiling to C++.
 
 ### Windows 32-bit
 
@@ -246,7 +245,7 @@ This means that a thread sleeping or stuck in a long computation may starve othe
 
 Experimental features might see API and/or implementation changes.
 
-For example both parallelForStaged and parallelReduce allow for reduction but
+For example both parallelForStaged and parallelReduce allow reductions but
 parallelForStaged is more flexible, it however requires explicit use of locks and/or atomics.
 
 LazyFlowvars may be enabled by default for certain sizes or if escape analysis become possible
@@ -348,6 +347,8 @@ In the future the `waitableSum` will probably be not required to be declared bef
 Or parallel reduce might be removed to only keep parallelForStaged.
 
 ### Dataflow parallelism
+
+> Warning ⚠️: This feature is not available with the C++ backend.
 
 Dataflow parallelism allows expressing fine-grained data dependencies between tasks.
 Concretly a task is delayed until all its dependencies are met and once met,

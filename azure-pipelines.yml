@@ -43,7 +43,6 @@ strategy:
 
     # Linux_devel_32bit:
     #   VM: 'ubuntu-16.04'
-    #   ARCH: x86
     #   UCPU: i686
     #   CHANNEL: devel
     #   TEST_LANG: c

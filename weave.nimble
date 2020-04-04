@@ -16,13 +16,13 @@ proc test(flags, path: string) =
   # Note: we compile in release mode. This still have stacktraces
   #       but is much faster than -d:debug
 
-  # Compilation language is controlled by WEAVE_TEST_LANG
+  # Compilation language is controlled by TEST_LANG
   var lang = "c"
   if existsEnv"TEST_LANG":
     lang = getEnv"TEST_LANG"
 
   echo "\n========================================================================================"
-  echo "Running [", flags, "] ", path
+  echo "Running [ ", lang, " ", flags, " ] ", path
   echo "========================================================================================"
   exec "nim " & lang & " " & flags & " --verbosity:0 --hints:off --warnings:off --threads:on -d:release --outdir:build -r " & path
 
@@ -30,7 +30,9 @@ task test, "Run Weave tests":
   test "", "weave/channels/channels_spsc_single.nim"
   test "", "weave/channels/channels_spsc_single_ptr.nim"
   test "", "weave/channels/channels_mpsc_unbounded_batch.nim"
-  test "", "weave/channels/pledges.nim"
+
+  if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
+    test "", "weave/channels/pledges.nim"
 
   test "", "weave/datatypes/binary_worker_trees.nim"
   test "", "weave/datatypes/bounded_queues.nim"
@@ -60,9 +62,8 @@ task test, "Run Weave tests":
     test "", "benchmarks/single_task_producer/weave_spc.nim"
     test "", "benchmarks/bouncing_producer_consumer/weave_bpc.nim"
   when defined(i386) or defined(amd64):
-    test "", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
-  # This is too slow
-  # test "", "benchmarks/matmul_gemm_blas/weave_gemm.nim"
+    if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
+      test "", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
 
   test "-d:WV_LazyFlowvar", "benchmarks/dfs/weave_dfs.nim"
   test "-d:WV_LazyFlowvar", "benchmarks/fibonacci/weave_fib.nim"
@@ -73,6 +74,5 @@ task test, "Run Weave tests":
     test "-d:WV_LazyFlowvar", "benchmarks/single_task_producer/weave_spc.nim"
     test "-d:WV_LazyFlowvar", "benchmarks/bouncing_producer_consumer/weave_bpc.nim"
   when defined(i386) or defined(amd64):
-    test "-d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
-  # This is too slow on Azure windows machines
-  # test "-d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/weave_gemm.nim"
+    if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
+      test "-d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"

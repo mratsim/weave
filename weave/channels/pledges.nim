@@ -15,6 +15,8 @@ import
   ../instrumentation/contracts,
   ../config
 
+static: doAssert not defined(cpp), "Pledges are not compatible with C++ target at the moment: https://github.com/nim-lang/Nim/issues/13062, https://github.com/nim-lang/Nim/issues/13093"
+
 # Pledges
 # ----------------------------------------------------
 # Pledges are the counterpart to Flowvar.
