@@ -7,8 +7,7 @@
 
 import
   weave/[parallel_tasks, parallel_for, parallel_for_staged, runtime, runtime_fsm, await_fsm],
-  weave/datatypes/flowvars,
-  weave/channels/pledges
+  weave/datatypes/flowvars
 
 export
   Flowvar, Weave,
@@ -19,10 +18,17 @@ export
   isSpawned,
   getThreadId,
   # Experimental threadlocal prologue/epilogue
-  parallelForStaged, parallelForStagedStrided,
+  parallelForStaged, parallelForStagedStrided
+
+when not defined(cpp):
   # Experimental dataflow parallelism
-  spawnDelayed, Pledge,
-  fulfill, newPledge
+  import weave/channels/pledges
+
+  export
+    spawnDelayed, Pledge,
+    fulfill, newPledge
+else:
+  {.warning: "In C++ mode Pledges (for data flow parallelism) are not available, https://github.com/mratsim/weave/issues/95".}
 
 # TODO, those are workaround for not binding symbols in spawn macro
 import weave/contexts

@@ -1,6 +1,6 @@
 # Weave, a state-of-the-art multithreading runtime
 [![Build Status: Travis](https://img.shields.io/travis/com/mratsim/weave/master?label=Travis%20%28Linux%20x86_64%2FARM64%29)](https://travis-ci.com/mratsim/weave)
-[![Build Status: Azure](https://img.shields.io/azure-devops/build/numforge/69bc2700-4fa7-4292-a0b3-331ddb721640/2/master?label=Azure%20%28Linux%2064-bit%2C%20Windows%2064-bit%2C%20MacOS%2064-bit%29)](https://dev.azure.com/numforge/Weave/_build?definitionId=2&branchName=master)
+[![Build Status: Azure](https://img.shields.io/azure-devops/build/numforge/69bc2700-4fa7-4292-a0b3-331ddb721640/2/master?label=Azure%20%28C%2FC%2B%2B%20Linux%2064-bit%2C%20Windows%2064-bit%2C%20MacOS%2064-bit%29)](https://dev.azure.com/numforge/Weave/_build?definitionId=2&branchName=master)
 
 [![License: Apache](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -10,7 +10,7 @@ _"Good artists borrow, great artists steal."_ -- Pablo Picasso
 
 Weave (codenamed "Project Picasso") is a multithreading runtime for the [Nim programming language](https://nim-lang.org/).
 
-It is continuously tested on Linux, MacOS and Windows for the following CPU architectures: x86, x86_64 and ARM64.
+It is continuously tested on Linux, MacOS and Windows for the following CPU architectures: x86, x86_64 and ARM64 with the C and C++ backends.
 
 Weave aims to provide a composable, high-performance, ultra-low overhead and fine-grained parallel runtime that frees developers from the common worries of
 "are my tasks big enough to be parallelized?", "what should be my grain size?", "what if the time they take is completely unknown or different?" or "is parallel-for worth it if it's just a matrix addition? On what CPUs? What if it's exponentiation?".
@@ -45,12 +45,12 @@ instead of being based on traditional work-stealing with shared-memory deques.
 
 Weave can be simply installed with
 ```bash
-nimble install weave@#master
+nimble install weave
 ```
 
 or for the devel version
 ```bash
-nimble install weave
+nimble install weave@#master
 ```
 
 Weave requires at least Nim v1.2.0
@@ -203,15 +203,14 @@ For example on MacOS, the `pthread` implementation does not expose barrier funct
 
 ### C++ compilation
 
-At the moment C++ compilation is not available on latest Nim + latest Weave.
+Weave provides a "dataflow parallelism" feature that
+allows:
+- building a computation graph lazily
+- by delaying parallel tasks depending on arbitrary conditions
 
-The new "dataflow parallelism" feature that
-allows delaying parallel tasks depending on arbitrary conditions
-requires a data structure (`Pledge`) that is valid in C but invalid in C++.
+It requires a data structure (`Pledge`) that is valid in C but invalid in C++ due to an incompatible mix of `Atomics<T>` in `union type` and `flexible array member`. https://github.com/mratsim/weave/issues/95.
 
-C++ compilation works with the following combination:
-- Weave v0.3.0
-- Nim devel [@bf2e052e](https://github.com/nim-lang/Nim/commit/bf2e052e6d97c1117603480547804dd98d1ada71)
+This feature is deactivated when compiling to C++.
 
 ### Windows 32-bit
 
@@ -246,7 +245,7 @@ This means that a thread sleeping or stuck in a long computation may starve othe
 
 Experimental features might see API and/or implementation changes.
 
-For example both parallelForStaged and parallelReduce allow for reduction but
+For example both parallelForStaged and parallelReduce allow reductions but
 parallelForStaged is more flexible, it however requires explicit use of locks and/or atomics.
 
 LazyFlowvars may be enabled by default for certain sizes or if escape analysis become possible
@@ -348,6 +347,8 @@ In the future the `waitableSum` will probably be not required to be declared bef
 Or parallel reduce might be removed to only keep parallelForStaged.
 
 ### Dataflow parallelism
+
+> Warning ⚠️: This feature is not available with the C++ backend.
 
 Dataflow parallelism allows expressing fine-grained data dependencies between tasks.
 Concretly a task is delayed until all its dependencies are met and once met,
