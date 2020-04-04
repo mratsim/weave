@@ -312,5 +312,6 @@ when isMainModule:
         spawnDelayed pA, echoB1(pB1)
         spawn echoA(pA)
         exit(Weave)
+        echo "Weave runtime exited"
 
       main()
