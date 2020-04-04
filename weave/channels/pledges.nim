@@ -345,7 +345,6 @@ template fulfillImpl*(pledge: Pledge, queue, enqueue: typed) =
     var taskNode: TaskNode
     while pledge.p.impl.chan.tryRecv(taskNode):
       ascertain: not taskNode.isNil
-      debugEcho "taskNode: ", taskNode.repr
       ascertain: taskNode.bucketID == NoIter
       task = taskNode.task
       var wasDelayed = false
