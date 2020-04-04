@@ -44,7 +44,7 @@ Weave scalability has been carefully measured and improved.
 
 On matrix multiplication, the traditional benchmark to classify the top 500 supercomputers of the world, Weave speedup on an 18-core CPU is 17.5x while the state-of-the-art Intel implementation using OpenMP allows 15.5x-16x speedup.
 
-### v0.3.0 - January 2020
+### v0.3.0 - January 2020 - "Beam me up!"
 
 `sync(Weave)` has been renamed `syncRoot(Weave)` to highlight that it is only valid on the root task in the main thread. In particular, a procedure that uses syncRoot should not be called be in a multithreaded section. This is a breaking change. In the future such changes will have a deprecation path but the library is only 2 weeks old at the moment.
 
@@ -91,7 +91,7 @@ on the number of tasks executed per steal requests interval.
 - Weave memory subsystem now supports LLVM AddressSanitizer to detect memory bugs.
   Spurious (?) errors from Nim and Weave were not removed and are left as a future task.
 
-### v0.2.0 - December 2019
+### v0.2.0 - December 2019 - "Overture"
 
 Weave `EventNotifier` has been rewritten and formally verified.
 Combined with using raw Linux futex to workaround a condition variable bug
@@ -102,6 +102,6 @@ It is now enabled by default.
 
 Weave now supports Windows.
 
-### v0.1.0 - December 2019
+### v0.1.0 - December 2019 - "Arabesques"
 
 Initial release
