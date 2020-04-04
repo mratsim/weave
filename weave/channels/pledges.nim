@@ -344,6 +344,7 @@ template fulfillImpl*(pledge: Pledge, queue, enqueue: typed) =
     var task: Task
     var taskNode: TaskNode
     while pledge.p.impl.chan.tryRecv(taskNode):
+      ascertain: not taskNode.isNil
       debugEcho "taskNode: ", taskNode.repr
       ascertain: taskNode.bucketID == NoIter
       task = taskNode.task
@@ -424,6 +425,7 @@ proc delayedUntil*(task: Task, pledge: Pledge, index: int32, pool: var TLPoolAll
   let taskNode = pool.borrow(deref(TaskNode))
   taskNode.task = task
   taskNode.next.store(nil, moRelaxed)
+  taskNode.nextDep = nil
   taskNode.pledge = default(Pledge) # Don't need to store the pledge reference if there is only the current one
   taskNode.bucketID = bucket
   discard pledge.p.impls[bucket].chan.trySend(taskNode)
@@ -455,6 +457,7 @@ template fulfillIterImpl*(pledge: Pledge, index: int32, queue, enqueue: typed) =
     var task {.inject.}: Task
     var taskNode: TaskNode
     while pledge.p.impls[bucket].chan.tryRecv(taskNode):
+      ascertain: not taskNode.isNil
       ascertain: taskNode.bucketID != NoIter
       task = taskNode.task
       var wasDelayed = false
@@ -507,6 +510,8 @@ macro delayedUntilMulti*(task: Task, pool: var TLPoolAllocator, pledges: varargs
       taskNodeInit.add quote do:
         `taskNode`.nextDep = `prevNode`
     else:
+      taskNodeInit.add quote do:
+        `taskNode`.nextDep = nil
       firstNode = taskNode
     prevnode = taskNode
     taskNodesInitStmt.add taskNodeInit
