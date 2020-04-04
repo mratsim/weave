@@ -203,7 +203,7 @@ proc evalSplit(task: Task, req: StealRequest, workSharing: bool): int {.inline.}
       if workSharing:
         # The real splitting will be done by the child worker
         # We need to send it enough work for its own children and all the steal requests pending
-        # ascertain: req.thiefID in {myWorker().left, myWorker().right} # TODO: triggers https://github.com/mratsim/weave/issues/106
+        ascertain: req.thiefID == myWorker().left or req.thiefID == myWorker().right
         var left, right = 0'i32
         if myWorker().leftIsWaiting:
           left = approxNumThievesProxy(myWorker().left)
