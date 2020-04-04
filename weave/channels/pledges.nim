@@ -344,6 +344,7 @@ template fulfillImpl*(pledge: Pledge, queue, enqueue: typed) =
     var task: Task
     var taskNode: TaskNode
     while pledge.p.impl.chan.tryRecv(taskNode):
+      debugEcho "taskNode: ", taskNode.repr
       ascertain: taskNode.bucketID == NoIter
       task = taskNode.task
       var wasDelayed = false
@@ -599,6 +600,8 @@ when isMainModule:
     pledge2.fulfillImpl(stack, add)
     doAssert stack.count == 3
 
+    echo "Simple pledge: SUCCESS"
+
   mainSingle()
 
   proc mainLoop() =
@@ -640,5 +643,7 @@ when isMainModule:
     doAssert stack.count == 1
     pledge2.fulfillIterImpl(4, stack, add)
     doAssert stack.count == 3
+
+    echo "Loop pledge: SUCCESS"
 
   mainLoop()
