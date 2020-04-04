@@ -8,47 +8,47 @@ cache:
 
 matrix:
   include:
-    - os: linux
-      arch: amd64
-      env:
-        - ARCH=amd64
-        - CHANNEL=stable
-      compiler: gcc
+    # - os: linux
+    #   arch: amd64
+    #   env:
+    #     - ARCH=amd64
+    #     - CHANNEL=stable
+    #   compiler: gcc
 
-    - os: linux
-      arch: arm64
-      env:
-        - ARCH=arm64
-        - CHANNEL=stable
-      compiler: gcc
+    # - os: linux
+    #   arch: arm64
+    #   env:
+    #     - ARCH=arm64
+    #     - CHANNEL=stable
+    #   compiler: gcc
 
-    - os: linux
-      arch: amd64
-      env:
-        - ARCH=amd64
-        - CHANNEL=stable
-      compiler: clang
+    # - os: linux
+    #   arch: amd64
+    #   env:
+    #     - ARCH=amd64
+    #     - CHANNEL=stable
+    #   compiler: clang
 
-    - os: linux
-      arch: amd64
-      env:
-        - ARCH=amd64
-        - CHANNEL=devel
-      compiler: gcc
+    # - os: linux
+    #   arch: amd64
+    #   env:
+    #     - ARCH=amd64
+    #     - CHANNEL=devel
+    #   compiler: gcc
 
-    - os: linux
-      arch: arm64
-      env:
-        - ARCH=arm64
-        - CHANNEL=devel
-      compiler: gcc
+    # - os: linux
+    #   arch: arm64
+    #   env:
+    #     - ARCH=arm64
+    #     - CHANNEL=devel
+    #   compiler: gcc
 
-    - os: linux
-      arch: amd64
-      env:
-        - ARCH=amd64
-        - CHANNEL=devel
-      compiler: clang
+    # - os: linux
+    #   arch: amd64
+    #   env:
+    #     - ARCH=amd64
+    #     - CHANNEL=devel
+    #   compiler: clang
 
     # On OSX we only test against clang (gcc is mapped to clang by default)
     - os: osx

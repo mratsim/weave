@@ -209,78 +209,78 @@ macro spawnDelayed*(pledges: varargs[typed], fnCall: typed): untyped =
 when isMainModule:
   import ./runtime, ./runtime_fsm, os
 
-  block: # Async without result
+  # block: # Async without result
 
-    proc display_int(x: int) =
-      stdout.write(x)
-      stdout.write(" - SUCCESS\n")
+  #   proc display_int(x: int) =
+  #     stdout.write(x)
+  #     stdout.write(" - SUCCESS\n")
 
-    proc main() =
-      echo "Sanity check 1: Printing 123456 654321 in parallel"
+  #   proc main() =
+  #     echo "Sanity check 1: Printing 123456 654321 in parallel"
 
-      init(Weave)
-      spawn display_int(123456)
-      spawn display_int(654321)
-      exit(Weave)
+  #     init(Weave)
+  #     spawn display_int(123456)
+  #     spawn display_int(654321)
+  #     exit(Weave)
 
-    main()
+  #   main()
 
-  block: # Async/Await
+  # block: # Async/Await
 
-    proc async_fib(n: int): int =
+  #   proc async_fib(n: int): int =
 
-      if n < 2:
-        return n
+  #     if n < 2:
+  #       return n
 
-      let x = spawn async_fib(n-1)
-      let y = async_fib(n-2)
+  #     let x = spawn async_fib(n-1)
+  #     let y = async_fib(n-2)
 
-      result = sync(x) + y
+  #     result = sync(x) + y
 
-    proc main2() =
-      echo "Sanity check 2: fib(20)"
+  #   proc main2() =
+  #     echo "Sanity check 2: fib(20)"
 
-      init(Weave)
-      let f = async_fib(20)
-      exit(Weave)
+  #     init(Weave)
+  #     let f = async_fib(20)
+  #     exit(Weave)
 
-      echo f
+  #     echo f
 
-    main2()
+  #   main2()
 
   when not defined(cpp):
     import ./channels/pledges
 
-    block: # Delayed computation
+    # block: # Delayed computation
 
-      proc echoA(pA: Pledge) =
-        echo "Display A, sleep 1s, create parallel streams 1 and 2"
-        sleep(1000)
-        pA.fulfill()
+    #   proc echoA(pA: Pledge) =
+    #     echo "Display A, sleep 1s, create parallel streams 1 and 2"
+    #     sleep(1000)
+    #     pA.fulfill()
 
-      proc echoB1(pB1: Pledge) =
-        echo "Display B1, sleep 1s"
-        sleep(1000)
-        pB1.fulfill()
+    #   proc echoB1(pB1: Pledge) =
+    #     echo "Display B1, sleep 1s"
+    #     sleep(1000)
+    #     pB1.fulfill()
 
-      proc echoB2() =
-        echo "Display B2, exit stream"
+    #   proc echoB2() =
+    #     echo "Display B2, exit stream"
 
-      proc echoC1() =
-        echo "Display C1, exit stream"
+    #   proc echoC1() =
+    #     echo "Display C1, exit stream"
 
-      proc main() =
-        echo "Sanity check 3: Dataflow parallelism"
-        init(Weave)
-        let pA = newPledge()
-        let pB1 = newPledge()
-        spawnDelayed pB1, echoC1()
-        spawnDelayed pA, echoB2()
-        spawnDelayed pA, echoB1(pB1)
-        spawn echoA(pA)
-        exit(Weave)
+    #   proc main() =
+    #     echo "Sanity check 3: Dataflow parallelism"
+    #     init(Weave)
+    #     let pA = newPledge()
+    #     let pB1 = newPledge()
+    #     spawnDelayed pB1, echoC1()
+    #     spawnDelayed pA, echoB2()
+    #     spawnDelayed pA, echoB1(pB1)
+    #     spawn echoA(pA)
+    #     exit(Weave)
 
-      main()
+    #   main()
 
     block: # Delayed computation with multiple dependencies
 

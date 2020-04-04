@@ -507,7 +507,11 @@ macro delayedUntilMulti*(task: Task, pool: var TLPoolAllocator, pledges: varargs
     prevnode = taskNode
     taskNodesInitStmt.add taskNodeInit
 
+  doAssert not firstNode.isNil
   result.add taskNodesInitStmt
+  result.add quote do:
+    debugEcho "Debug firstNode.isNil: ", `firstNode`.isNil
+    debugEcho "Debug multidelay: ", `firstNode`[]
   result.add newCall(bindSym"delayedUntil", firstNode, task)
 
 # Sanity checks
