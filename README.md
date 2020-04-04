@@ -43,29 +43,17 @@ instead of being based on traditional work-stealing with shared-memory deques.
 
 ## Installation
 
-As of January 2020, Weave depends on features present in Nim `devel` branch.
-Some of those features were fixed after the 0.1~0.3 releases of Weave.
-It is recommended to install the `master` version of Weave instead via
+Weave can be simply installed with
 ```bash
 nimble install weave@#master
 ```
 
-Weave `master` must be compiled with a Nim version post-[@abea8037](https://github.com/nim-lang/Nim/commit/abea80376a113fb218c22b6474727c279e694cd3)
+or for the devel version
+```bash
+nimble install weave
+```
 
-Installing nim `devel` is the easiest way.
-Refer to [choosenim](https://github.com/dom96/choosenim) or [Nim repository](https://github.com/nim-lang/Nim) to compile the latest `devel`.
-
-### C++ compilation
-
-At the moment C++ compilation is not available on latest Nim + latest Weave.
-
-The new "dataflow parallelism" feature that
-allows delaying parallel tasks depending on arbitrary conditions
-requires a data structure (`Pledge`) that is valid in C but invalid in C++.
-
-C++ compilation works with the following combination:
-- Weave v0.3.0
-- Nim devel [@bf2e052e](https://github.com/nim-lang/Nim/commit/bf2e052e6d97c1117603480547804dd98d1ada71)
+Weave requires at least Nim v1.2.0
 
 ## API
 
@@ -178,14 +166,18 @@ Weave uses Nim's `countProcessors()` in `std/cpuinfo`
 
 - [Weave, a state-of-the-art multithreading runtime](#weave-a-state-of-the-art-multithreading-runtime)
   - [Installation](#installation)
-    - [C++ compilation](#c-compilation)
   - [API](#api)
     - [Task parallelism](#task-parallelism)
     - [Data parallelism](#data-parallelism)
       - [Strided loops](#strided-loops)
     - [Complete list](#complete-list)
   - [Table of Contents](#table-of-contents)
+  - [Platforms supported](#platforms-supported)
+    - [C++ compilation](#c-compilation)
+    - [Windows 32-bit](#windows-32-bit)
+    - [Resource-restricted devices](#resource-restricted-devices)
   - [Backoff mechanism](#backoff-mechanism)
+    - [Weave using all CPUs](#weave-using-all-cpus)
   - [Experimental features](#experimental-features)
     - [Data parallelism (experimental features)](#data-parallelism-experimental-features)
       - [Awaitable loop](#awaitable-loop)
@@ -203,11 +195,52 @@ Weave uses Nim's `countProcessors()` in `std/cpuinfo`
   - [Research](#research)
   - [License](#license)
 
+## Platforms supported
+
+Weave supports all platforms with `pthread` and Windows.
+Missing pthread functionality may be emulated or unused.
+For example on MacOS, the `pthread` implementation does not expose barrier functionality or affinity settings.
+
+### C++ compilation
+
+At the moment C++ compilation is not available on latest Nim + latest Weave.
+
+The new "dataflow parallelism" feature that
+allows delaying parallel tasks depending on arbitrary conditions
+requires a data structure (`Pledge`) that is valid in C but invalid in C++.
+
+C++ compilation works with the following combination:
+- Weave v0.3.0
+- Nim devel [@bf2e052e](https://github.com/nim-lang/Nim/commit/bf2e052e6d97c1117603480547804dd98d1ada71)
+
+### Windows 32-bit
+
+Windows 32-bit targets cannot use the MinGW compiler as it is missing support
+for `EnterSynchronizationBarrier`. MSVC should work instead.
+
+### Resource-restricted devices
+
+Weave uses a flexible and efficient memory subsystem that has been optimized for a wide range of hardware: low power Raspberry Pi, phones, laptops, desktops and 30+ cores workstations.
+It currently assumes by default that 16KB at least are available on your hardware for a memory pool and that this memory pool can grow as needed.
+This can be tuned with `-d:WV_MemArenaSize=2048` to have the base pool use 2KB for example.
+The pool size should be a multiple of 256 bytes.
+PRs to improve support of very restricted devices are welcome.
+
 ## Backoff mechanism
 
-A Backoff mechanism is enabled by default. It allows workers with no tasks to sleep instead of spining aimlessly and burning CPU.
+A Backoff mechanism is enabled by default. It allows workers with no tasks to sleep instead of spinning aimlessly and burning CPU cycles.
 
 It can be disabled with `-d:WV_Backoff=off`.
+
+### Weave using all CPUs
+
+Weave multithreading is cooperative, idle threads send steal requests instead of actively stealing in other workers queue.
+
+This means that a thread sleeping or stuck in a long computation may starve other threads and they will spin burning CPU cycles.
+
+- Don't sleep or block a thread as this blocks Weave scheduler. This is a similar to `async`/`await` libraries.
+- If you really need to sleep or block the main thread, make sure to empty all the tasks beforehand with `syncRoot(Weave)` in the main thread. The child threads will be put to sleep until new tasks are spawned.
+- The `loadBalance(Weave)` call can be used in the middle of heavy computations to force the worker to answer steal requests. This is automatically done in `parallelFor` loops.
 
 ## Experimental features
 
@@ -455,7 +488,6 @@ proc main() =
 
 main()
 ```
-
 
 ### Lazy Allocation of Flowvars
 
