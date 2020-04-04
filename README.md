@@ -1,6 +1,6 @@
 # Weave, a state-of-the-art multithreading runtime
 [![Build Status: Travis](https://img.shields.io/travis/com/mratsim/weave/master?label=Travis%20%28Linux%20x86_64%2FARM64%29)](https://travis-ci.com/mratsim/weave)
-[![Build Status: Azure](https://img.shields.io/azure-devops/build/numforge/69bc2700-4fa7-4292-a0b3-331ddb721640/2/master?label=Azure%20%28Linux%2064-bit%2C%20Windows%2064-bit%2C%20MacOS%2064-bit%29)](https://dev.azure.com/numforge/Weave/_build?definitionId=2&branchName=master)
+[![Build Status: Azure](https://img.shields.io/azure-devops/build/numforge/69bc2700-4fa7-4292-a0b3-331ddb721640/2/master?label=Azure%20%28C%2FC%2B%2B%20Linux%2064-bit%2C%20Windows%2064-bit%2C%20MacOS%2064-bit%29)](https://dev.azure.com/numforge/Weave/_build?definitionId=2&branchName=master)
 
 [![License: Apache](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -10,7 +10,7 @@ _"Good artists borrow, great artists steal."_ -- Pablo Picasso
 
 Weave (codenamed "Project Picasso") is a multithreading runtime for the [Nim programming language](https://nim-lang.org/).
 
-It is continuously tested on Linux, MacOS and Windows for the following CPU architectures: x86, x86_64 and ARM64.
+It is continuously tested on Linux, MacOS and Windows for the following CPU architectures: x86, x86_64 and ARM64 with the C and C++ backends.
 
 Weave aims to provide a composable, high-performance, ultra-low overhead and fine-grained parallel runtime that frees developers from the common worries of
 "are my tasks big enough to be parallelized?", "what should be my grain size?", "what if the time they take is completely unknown or different?" or "is parallel-for worth it if it's just a matrix addition? On what CPUs? What if it's exponentiation?".
@@ -45,12 +45,12 @@ instead of being based on traditional work-stealing with shared-memory deques.
 
 Weave can be simply installed with
 ```bash
-nimble install weave@#master
+nimble install weave
 ```
 
 or for the devel version
 ```bash
-nimble install weave
+nimble install weave@#master
 ```
 
 Weave requires at least Nim v1.2.0
