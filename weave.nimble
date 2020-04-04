@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.1.0"
+version       = "0.4.0"
 author        = "Mamy André-Ratsimbazafy"
 description   = "a state-of-the-art ùultithreading runtime"
 license       = "MIT or Apache License 2.0"
@@ -8,7 +8,7 @@ license       = "MIT or Apache License 2.0"
 # Dependencies
 
 # requires Nim post abea80376a113fb218c22b6474727c279e694cd3
-requires "nim >= 1.1.1", "synthesis"
+requires "nim >= 1.2.0", "synthesis"
 
 proc test(flags, path: string) =
   if not dirExists "build":

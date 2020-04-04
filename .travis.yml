@@ -8,9 +8,27 @@ cache:
 
 matrix:
   include:
-    # Weave only works with Nim devel
-    # Build and test using both gcc and clang
-    # Build and test on both x86-64 and ARM64
+    - os: linux
+      arch: amd64
+      env:
+        - ARCH=amd64
+        - CHANNEL=stable
+      compiler: gcc
+
+    - os: linux
+      arch: arm64
+      env:
+        - ARCH=arm64
+        - CHANNEL=stable
+      compiler: gcc
+
+    - os: linux
+      arch: amd64
+      env:
+        - ARCH=amd64
+        - CHANNEL=stable
+      compiler: clang
+
     - os: linux
       arch: amd64
       env:
@@ -33,6 +51,13 @@ matrix:
       compiler: clang
 
     # On OSX we only test against clang (gcc is mapped to clang by default)
+    - os: osx
+      arch: amd64
+      env:
+        - ARCH=amd64
+        - CHANNEL=stable
+      compiler: clang
+
     - os: osx
       arch: amd64
       env:
