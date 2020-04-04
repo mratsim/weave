@@ -214,7 +214,11 @@ proc `=`*(dst: var Pledge, src: Pledge) {.inline.} =
 proc delayedUntilSingle(taskNode: TaskNode, curTask: Task): bool =
   ## Redelay a task that depends on multiple pledges
   ## with 1 or more pledge fulfilled but still some unfulfilled.
-  ## field is a place holder for impl / impls[bucket]
+  ##
+  ## Returns `false` if redelaying was unneeded because pledge was fulfilled
+  ## and task can be scheduled right away.
+  ## Returns true if delay is successful and current worker doesn't own the task anymore,
+  ## it shouldn't be accessed anymore in that case
   preCondition: not taskNode.pledge.p.isNil
 
   if taskNode.pledge.p.impl.fulfilled.load(moRelaxed):
@@ -230,17 +234,18 @@ proc delayedUntilSingle(taskNode: TaskNode, curTask: Task): bool =
     return false
 
   # Send the task to the pledge fulfiller
-  taskNode.task = curTask
-  let pledge = taskNode.pledge
-  taskNode.pledge = default(Pledge)
-  discard pledge.p.impl.chan.trySend(taskNode)
-  discard pledge.p.impl.deferredOut.fetchAdd(1, moRelaxed)
+  discard taskNode.pledge.p.impl.chan.trySend(taskNode)
+  discard taskNode.pledge.p.impl.deferredOut.fetchAdd(1, moRelaxed)
   return true
 
 proc delayedUntilIter(taskNode: TaskNode, curTask: Task): bool =
   ## Redelay a task that depends on multiple pledges
   ## with 1 or more pledge fulfilled but still some unfulfilled.
-  ## field is a place holder for impl / impls[bucket]
+  ##
+  ## Returns `false` if redelaying was unneeded because pledge was fulfilled
+  ## and task can be scheduled right away.
+  ## Returns true if delay is successful and current worker doesn't own the task anymore,
+  ## it shouldn't be accessed anymore in that case
   preCondition: not taskNode.pledge.p.isNil
 
   if taskNode.pledge.p.impls[taskNode.bucketID].fulfilled.load(moRelaxed):
@@ -256,17 +261,15 @@ proc delayedUntilIter(taskNode: TaskNode, curTask: Task): bool =
     return false
 
   # Send the task to the pledge fulfiller
-  taskNode.task = curTask
-  let pledge = taskNode.pledge
-  taskNode.pledge = default(Pledge)
-  discard pledge.p.impls[taskNode.bucketID].chan.trySend(taskNode)
-  discard pledge.p.impls[taskNode.bucketID].deferredOut.fetchAdd(1, moRelaxed)
+  discard taskNode.pledge.p.impls[taskNode.bucketID].chan.trySend(taskNode)
+  discard taskNode.pledge.p.impls[taskNode.bucketID].deferredOut.fetchAdd(1, moRelaxed)
   return true
 
 proc delayedUntil*(taskNode: TaskNode, curTask: Task): bool =
-  ## Redelay a task that depends on multiple pledges
+  ## Redelay a task that depends on multiple pledges (in the `taskNode` linked list)
   ## with 1 or more pledge fulfilled but still some unfulfilled.
   preCondition: not taskNode.pledge.p.isNil
+  preCondition: bool(taskNode.task == curTask)
   if taskNode.pledge.p.kind == Single:
     delayedUntilSingle(taskNode, curTask)
   else:
@@ -511,8 +514,9 @@ macro delayedUntilMulti*(task: Task, pool: var TLPoolAllocator, pledges: varargs
   result.add taskNodesInitStmt
   result.add quote do:
     debugEcho "Debug firstNode.isNil: ", `firstNode`.isNil
-    debugEcho "Debug multidelay: ", `firstNode`[]
   result.add newCall(bindSym"delayedUntil", firstNode, task)
+
+  echo result.toStrLit()
 
 # Sanity checks
 # ------------------------------------------------------------------------------

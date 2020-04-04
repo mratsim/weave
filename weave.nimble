@@ -24,7 +24,9 @@ proc test(flags, path: string) =
   echo "\n========================================================================================"
   echo "Running [ ", lang, " ", flags, " ] ", path
   echo "========================================================================================"
-  exec "nim " & lang & " " & flags & " --verbosity:0 --hints:off --warnings:off --threads:on -d:release --outdir:build -r " & path
+  # exec "nim " & lang & " " & flags & " --verbosity:0 --hints:off --warnings:off --threads:on -d:release --outdir:build -r " & path
+  exec "nim " & lang & " " & flags & " --verbosity:0 --hints:off --warnings:off --threads:on --outdir:build -r " & path
+
 
 task test, "Run Weave tests":
   # test "", "weave/channels/channels_spsc_single.nim"
