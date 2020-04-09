@@ -76,3 +76,54 @@ task test, "Run Weave tests":
   when defined(i386) or defined(amd64):
     if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
       test "-d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
+
+task test_gc_arc, "Run Weave tests with --gc:arc":
+  test "--gc:arc", "weave/channels/channels_spsc_single.nim"
+  test "--gc:arc", "weave/channels/channels_spsc_single_ptr.nim"
+  test "--gc:arc", "weave/channels/channels_mpsc_unbounded_batch.nim"
+
+  if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
+    test "--gc:arc", "weave/channels/pledges.nim"
+
+  test "--gc:arc", "weave/datatypes/binary_worker_trees.nim"
+  test "--gc:arc", "weave/datatypes/bounded_queues.nim"
+  test "--gc:arc", "weave/datatypes/prell_deques.nim"
+  test "--gc:arc", "weave/datatypes/sparsesets.nim"
+
+  test "--gc:arc", "weave/memory/lookaside_lists.nim"
+  test "--gc:arc", "weave/memory/memory_pools.nim"
+  test "--gc:arc", "weave/memory/persistacks.nim"
+
+  test "--gc:arc", "weave/parallel_tasks.nim"
+  test "--gc:arc", "weave/parallel_for.nim"
+  test "--gc:arc", "weave/parallel_for_staged.nim"
+  test "--gc:arc", "weave/parallel_reduce.nim"
+
+  test "--gc:arc -d:WV_LazyFlowvar", "weave/parallel_tasks.nim"
+  test "--gc:arc -d:WV_LazyFlowvar", "weave/parallel_for.nim"
+  test "--gc:arc -d:WV_LazyFlowvar", "weave/parallel_for_staged.nim"
+  test "--gc:arc -d:WV_LazyFlowvar", "weave/parallel_reduce.nim"
+
+  test "--gc:arc", "benchmarks/dfs/weave_dfs.nim"
+  test "--gc:arc", "benchmarks/fibonacci/weave_fib.nim"
+  test "--gc:arc", "benchmarks/heat/weave_heat.nim"
+  test "--gc:arc", "benchmarks/matrix_transposition/weave_transposes.nim"
+  test "--gc:arc", "benchmarks/nqueens/weave_nqueens.nim"
+  when not defined(windows): # Need "time" support - https://github.com/mratsim/weave/issues/60
+    test "--gc:arc", "benchmarks/single_task_producer/weave_spc.nim"
+    test "--gc:arc", "benchmarks/bouncing_producer_consumer/weave_bpc.nim"
+  when defined(i386) or defined(amd64):
+    if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
+      test "--gc:arc", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
+
+  test "--gc:arc -d:WV_LazyFlowvar", "benchmarks/dfs/weave_dfs.nim"
+  test "--gc:arc -d:WV_LazyFlowvar", "benchmarks/fibonacci/weave_fib.nim"
+  test "--gc:arc -d:WV_LazyFlowvar", "benchmarks/heat/weave_heat.nim"
+  test "--gc:arc -d:WV_LazyFlowvar", "benchmarks/matrix_transposition/weave_transposes.nim"
+  test "--gc:arc -d:WV_LazyFlowvar", "benchmarks/nqueens/weave_nqueens.nim"
+  when not defined(windows):
+    test "--gc:arc -d:WV_LazyFlowvar", "benchmarks/single_task_producer/weave_spc.nim"
+    test "--gc:arc -d:WV_LazyFlowvar", "benchmarks/bouncing_producer_consumer/weave_bpc.nim"
+  when defined(i386) or defined(amd64):
+    if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
+      test "--gc:arc -d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
