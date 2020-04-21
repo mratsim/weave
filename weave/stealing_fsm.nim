@@ -194,3 +194,10 @@ behavior(declineReqFSA):
 
 synthesize(declineReqFSA):
   proc decline*(req: sink StealRequest) {.gcsafe.}
+
+# Dump the graph
+# -------------------------------------------
+
+when isMainModule:
+  const dotRepr = toGraphviz(declineReqFSA)
+  writeFile("weave/stealing_fsm.dot", dotRepr)

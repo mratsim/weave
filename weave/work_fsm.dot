@@ -1,0 +1,19 @@
+digraph recvTaskFSA{
+    splines=ortho;
+    node [shape = doublecircle]; InitialState RT_Exit;
+    node [shape = circle, fontcolor=white, fillcolor=darkslategrey, style="filled"]; RT_FoundTask RT_CheckChannel;
+    InitialState -> RT_CheckChannel [color="black:invis:black", xlabel="entry point"];
+    node [shape = octagon, fontcolor=black, fillcolor=lightsteelblue, style="rounded,filled"]; RT_FoundTask_RTE_isWaiting RT_CheckChannel_RTE_FoundTask ;
+    node [shape = diamond, fontcolor=black, fillcolor=coral, style="rounded,filled"]; RT_CheckChannel_RTE_CheckedAllChannels ;
+    RT_FoundTask_RTE_isWaiting [label="RTE_isWaiting\nlocalCtx.worker.isWaiting"];
+    RT_CheckChannel_RTE_FoundTask [label="RTE_FoundTask\nresult"];
+    RT_CheckChannel_RTE_CheckedAllChannels [label="RTE_CheckedAllChannels\ncurChanIdx == WV_MaxConcurrentStealPerWorker"];
+    RT_FoundTask -> RT_FoundTask_RTE_isWaiting[style=bold, xlabel="always"];
+    RT_FoundTask_RTE_isWaiting -> RT_Exit [style=dashed, xlabel="true"];
+    RT_FoundTask_RTE_isWaiting -> RT_Exit [xlabel="default"];
+    RT_CheckChannel -> RT_CheckChannel_RTE_CheckedAllChannels[style=bold, xlabel="always"];
+    RT_CheckChannel_RTE_CheckedAllChannels -> RT_Exit [color="coral", fontcolor="coral", xlabel="interrupted"];
+    RT_CheckChannel_RTE_CheckedAllChannels -> RT_CheckChannel_RTE_FoundTask[xlabel="normal flow"];
+    RT_CheckChannel_RTE_FoundTask -> RT_FoundTask [style=dashed, xlabel="true"];
+    RT_CheckChannel_RTE_FoundTask -> RT_CheckChannel [xlabel="default"];
+}

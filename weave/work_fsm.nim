@@ -118,3 +118,10 @@ behavior(recvTaskFSA):
 
 synthesize(recvTaskFSA):
   proc recvElseSteal*(task: var Task, isOutOfTasks: bool): bool
+
+# Dump the graph
+# -------------------------------------------
+
+when isMainModule:
+  const dotRepr = toGraphviz(recvTaskFSA)
+  writeFile("weave/work_fsm.dot", dotRepr)

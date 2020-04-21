@@ -94,3 +94,10 @@ behavior(handleThievesFSA):
 
 synthesize(handleThievesFSA):
   proc handleThieves*(poppedTask: Task) {.gcsafe.}
+
+# Dump the graph
+# -------------------------------------------
+
+when isMainModule:
+  const dotRepr = toGraphviz(handleThievesFSA)
+  writeFile("weave/scheduler_fsm.dot", dotRepr)
