@@ -1,0 +1,27 @@
+digraph syncRootFSA{
+    splines=ortho;
+    node [shape = doublecircle]; InitialState SY_Exit;
+    node [shape = circle, fontcolor=white, fillcolor=darkslategrey, style="filled"]; SY_OutOfTasks SY_CheckTask SY_SuccessfulTheft SY_Steal;
+    InitialState -> SY_CheckTask [color="black:invis:black", xlabel="entry point"];
+    node [shape = octagon, fontcolor=black, fillcolor=lightsteelblue, style="rounded,filled"]; SY_OutOfTasks_SYE_SoleWorker SY_OutOfTasks_SYE_Quiescent SY_CheckTask_SYE_HasTask SY_Steal_SYE_ReceivedTask ;
+    node [shape = diamond, fontcolor=black, fillcolor=coral, style="rounded,filled"]; SY_Steal_SYE_Quiescent ;
+    SY_OutOfTasks_SYE_SoleWorker [label="SYE_SoleWorker\n  globalCtx.numWorkers ==    1"];
+    SY_OutOfTasks_SYE_Quiescent [label="SYE_Quiescent\nlocalCtx.runtimeIsQuiescent"];
+    SY_CheckTask_SYE_HasTask [label="SYE_HasTask\nnot task.isNil"];
+    SY_Steal_SYE_ReceivedTask [label="SYE_ReceivedTask\nlootedTask"];
+    SY_Steal_SYE_Quiescent [label="SYE_Quiescent\nlocalCtx.runtimeIsQuiescent"];
+    SY_OutOfTasks -> SY_OutOfTasks_SYE_SoleWorker[style=bold, xlabel="always"];
+    SY_OutOfTasks_SYE_SoleWorker -> SY_Exit [style=dashed, xlabel="true"];
+    SY_OutOfTasks_SYE_SoleWorker -> SY_OutOfTasks_SYE_Quiescent[style=dotted, xlabel="false"];
+    SY_OutOfTasks_SYE_Quiescent -> SY_Exit [style=dashed, xlabel="true"];
+    SY_OutOfTasks_SYE_Quiescent -> SY_Steal [xlabel="default"];
+    SY_CheckTask -> SY_CheckTask_SYE_HasTask[style=bold, xlabel="always"];
+    SY_CheckTask_SYE_HasTask -> SY_CheckTask [style=dashed, xlabel="true"];
+    SY_CheckTask_SYE_HasTask -> SY_OutOfTasks [xlabel="default"];
+    SY_SuccessfulTheft -> SY_CheckTask [xlabel="default"];
+    SY_Steal -> SY_Steal_SYE_Quiescent[style=bold, xlabel="always"];
+    SY_Steal_SYE_Quiescent -> SY_Exit [color="coral", fontcolor="coral", xlabel="interrupted"];
+    SY_Steal_SYE_Quiescent -> SY_Steal_SYE_ReceivedTask[xlabel="normal flow"];
+    SY_Steal_SYE_ReceivedTask -> SY_SuccessfulTheft [style=dashed, xlabel="true"];
+    SY_Steal_SYE_ReceivedTask -> SY_Steal [xlabel="default"];
+}

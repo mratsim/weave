@@ -237,3 +237,11 @@ proc exit*(_: type Weave) =
 
   threadLocalCleanup()
   globalCleanup()
+
+
+# Dump the graph
+# -------------------------------------------
+
+when isMainModule:
+  const dotRepr = toGraphviz(syncRootFSA)
+  writeFile("weave/runtime_fsm.dot", dotRepr)

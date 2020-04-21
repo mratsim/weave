@@ -1,0 +1,19 @@
+digraph handleThievesFSA{
+    splines=ortho;
+    node [shape = doublecircle]; InitialState IT_Exit;
+    node [shape = circle, fontcolor=white, fillcolor=darkslategrey, style="filled"]; IT_CanSplit IT_CheckTheft IT_IncomingReq;
+    InitialState -> IT_CheckTheft [color="black:invis:black", xlabel="entry point"];
+    node [shape = octagon, fontcolor=black, fillcolor=lightsteelblue, style="rounded,filled"]; IT_CanSplit_ITE_ReqIsMine IT_CheckTheft_ITE_FoundReq IT_IncomingReq_ITE_NoTaskAndCanSplitCurrent ;
+    IT_CanSplit_ITE_ReqIsMine [label="ITE_ReqIsMine\nreq.thiefID == localCtx.worker.ID"];
+    IT_CheckTheft_ITE_FoundReq [label="ITE_FoundReq\nrecv(req)"];
+    IT_IncomingReq_ITE_NoTaskAndCanSplitCurrent [label="ITE_NoTaskAndCanSplitCurrent\nisEmpty(localCtx.worker.deque) and    (not isNil(poppedTask) and poppedTask.isLoop and  1 <      (poppedTask.stop - poppedTask.cur + poppedTask.stride - 1) div      poppedTask.stride)"];
+    IT_CanSplit -> IT_CanSplit_ITE_ReqIsMine[style=bold, xlabel="always"];
+    IT_CanSplit_ITE_ReqIsMine -> IT_CheckTheft [style=dashed, xlabel="true"];
+    IT_CanSplit_ITE_ReqIsMine -> IT_CheckTheft [xlabel="default"];
+    IT_CheckTheft -> IT_CheckTheft_ITE_FoundReq[style=bold, xlabel="always"];
+    IT_CheckTheft_ITE_FoundReq -> IT_IncomingReq [style=dashed, xlabel="true"];
+    IT_CheckTheft_ITE_FoundReq -> IT_Exit [xlabel="default"];
+    IT_IncomingReq -> IT_IncomingReq_ITE_NoTaskAndCanSplitCurrent[style=bold, xlabel="always"];
+    IT_IncomingReq_ITE_NoTaskAndCanSplitCurrent -> IT_CanSplit [style=dashed, xlabel="true"];
+    IT_IncomingReq_ITE_NoTaskAndCanSplitCurrent -> IT_CheckTheft [xlabel="default"];
+}

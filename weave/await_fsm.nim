@@ -202,3 +202,11 @@ proc sync*[T](fv: FlowVar[T]): T {.inline.} =
   ## and returned.
   ## The thread is not idle and will complete pending tasks.
   fv.forceComplete(result)
+
+
+# Dump the graph
+# -------------------------------------------
+
+when isMainModule:
+  const dotRepr = toGraphviz(awaitFSA)
+  writeFile("weave/await_fsm.dot", dotRepr)
