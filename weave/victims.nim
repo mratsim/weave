@@ -10,7 +10,7 @@ import
                sparsesets, prell_deques, flowvars, binary_worker_trees],
   ./contexts, ./config,
   ./instrumentation/[contracts, profilers, loggers],
-  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_spsc_single],
+  ./cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_spsc_single],
   ./thieves, ./loop_splitting,
   ./stealing_fsm
 

@@ -14,7 +14,7 @@ import
   ./scheduler
 
 when not defined(cpp):
-  import ./channels/pledges
+  import ./cross_thread_com/pledges
 else:
   template delayedUntilMulti(task, pool: untyped, pledges: varargs[untyped]): untyped =
     discard

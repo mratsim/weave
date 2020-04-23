@@ -6,15 +6,15 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../channels/channels_mpsc_unbounded_batch,
-  ../channels/channels_spsc_single_ptr,
+  ../cross_thread_com/channels_mpsc_unbounded_batch,
+  ../cross_thread_com/channels_spsc_single_ptr,
   ../memory/[persistacks, memory_pools],
   ../config,
   ../primitives/barriers,
   ./sync_types, ./binary_worker_trees
 
 when WV_Backoff:
-  import ../channels/event_notifiers
+  import ../cross_thread_com/event_notifiers
 
 # Global / inter-thread communication channels
 # ----------------------------------------------------------------------------------

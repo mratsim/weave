@@ -22,7 +22,7 @@ export
 
 when not defined(cpp):
   # Experimental dataflow parallelism
-  import weave/channels/pledges
+  import weave/cross_thread_com/pledges
 
   export
     spawnDelayed, Pledge,

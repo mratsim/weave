@@ -9,7 +9,7 @@ import
   ./datatypes/[sync_types, context_thread_local],
   ./contexts,
   ./instrumentation/[contracts, profilers, loggers],
-  ./channels/channels_spsc_single_ptr,
+  ./cross_thread_com/channels_spsc_single_ptr,
   ./memory/persistacks,
   ./config,
   ./thieves

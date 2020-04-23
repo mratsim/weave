@@ -10,7 +10,7 @@ import
   ./contexts, ./config,
   ./instrumentation/[contracts, loggers, profilers],
   ./memory/persistacks,
-  ./channels/channels_spsc_single_ptr
+  ./cross_thread_com/channels_spsc_single_ptr
 
 # Signals
 # ----------------------------------------------------------------------------------

@@ -9,7 +9,7 @@ import
   ./instrumentation/[contracts, profilers, loggers],
   ./primitives/barriers,
   ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars, sparsesets, binary_worker_trees, bounded_queues],
-  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_spsc_single],
+  ./cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_spsc_single],
   ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
   ./contexts, ./config,
   ./victims, ./loop_splitting,

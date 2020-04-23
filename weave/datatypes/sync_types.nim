@@ -8,7 +8,7 @@
 import
   ./sparsesets, ./binary_worker_trees,
   ../config,
-  ../channels/channels_spsc_single_ptr,
+  ../cross_thread_com/channels_spsc_single_ptr,
   ../instrumentation/contracts,
   std/atomics
 
