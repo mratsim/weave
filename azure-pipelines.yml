@@ -186,9 +186,13 @@ steps:
     displayName: 'Building the package dependencies'
 
   - bash: |
+      sudo apt-get update
       sudo apt-get install libopenblas-dev
     displayName: 'Install OpenBLAS test dependency for property-based testing'
-    condition: ne(variables['Agent.OS'], 'Windows_NT')
+    condition: and(
+                 ne(variables['TEST_LANG'], 'cpp'),
+                 eq(variables['Agent.OS'], 'Linux')
+               )
 
   - bash: |
       echo "PATH=${PATH}"

@@ -83,7 +83,8 @@ task test, "Run Weave tests":
   # - spawnDelayed by pledges
   # - syncScope
   when not defined(windows) and (defined(i386) or defined(amd64)):
-    test "-d:danger", "benchmarks/matmul_gemm_blas/test_gemm_output.nim"
+    if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
+      test "-d:danger", "benchmarks/matmul_gemm_blas/test_gemm_output.nim"
 
 task test_gc_arc, "Run Weave tests with --gc:arc":
   test "--gc:arc", "weave/cross_thread_com/channels_spsc_single.nim"
@@ -142,4 +143,5 @@ task test_gc_arc, "Run Weave tests with --gc:arc":
   # - spawnDelayed by pledges
   # - syncScope
   when not defined(windows) and (defined(i386) or defined(amd64)):
-    test "-d:danger", "benchmarks/matmul_gemm_blas/test_gemm_output.nim"
+    if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
+      test "-d:danger", "benchmarks/matmul_gemm_blas/test_gemm_output.nim"
