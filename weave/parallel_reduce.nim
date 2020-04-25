@@ -234,7 +234,7 @@ macro parallelReduceImpl*(loopParams: untyped, stride: int, body: untyped): unty
 
 
 when isMainModule:
-  import ./runtime, ./state_machines/runtime_fsm, ./state_machines/await_fsm
+  import ./runtime, ./state_machines/sync_root, ./state_machines/sync
 
   block:
     proc sumReduce(n: int): int =

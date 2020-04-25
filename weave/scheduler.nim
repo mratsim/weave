@@ -14,7 +14,7 @@ import
   ./contexts, ./config,
   ./victims,
   ./thieves, ./workers,
-  ./random/rng, ./state_machines/stealing_fsm, ./state_machines/work_fsm, ./state_machines/scheduler_fsm
+  ./random/rng, ./state_machines/decline_thief, ./state_machines/recv_task_else_steal, ./state_machines/handle_thieves
 
 # Local context
 # ----------------------------------------------------------------------------------

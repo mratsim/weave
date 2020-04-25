@@ -16,7 +16,7 @@ import
   ../contexts, ../config,
   ../victims,
   ../thieves, ../workers,
-  ./work_fsm, ./scheduler_fsm
+  ./recv_task_else_steal, ./handle_thieves
 
 # Scoped Barrier - Finite state machine
 # ----------------------------------------------------------------------------------
@@ -192,4 +192,4 @@ template syncScope*(body: untyped): untyped =
 
 when isMainModule:
   const dotRepr = toGraphviz(syncScopeFSA)
-  writeFile("weave/sync_scope_fsm.dot", dotRepr)
+  writeFile("weave/sync_scope.dot", dotRepr)

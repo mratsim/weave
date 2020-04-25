@@ -15,7 +15,7 @@ import
   ./parallel_macros,
   ./contexts, ./config,
   ./instrumentation/[contracts, profilers],
-  ./datatypes/flowvars, ./state_machines/await_fsm
+  ./datatypes/flowvars, ./state_machines/sync
 
 when not compileOption("threads"):
   {.error: "This requires --threads:on compilation flag".}
@@ -219,7 +219,7 @@ macro parallelForStagedStrided*(loopParams: untyped, stride: Positive, body: unt
 # --------------------------------------------------------
 
 when isMainModule:
-  import ./runtime, ./state_machines/runtime_fsm
+  import ./runtime, ./state_machines/sync_root
 
   block: # global barrier version
     # expandMacros:

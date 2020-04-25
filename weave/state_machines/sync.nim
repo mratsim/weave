@@ -14,13 +14,10 @@ import
   ../contexts, ../config,
   ../victims,
   ../thieves, ../workers,
-  ./work_fsm, ./scheduler_fsm
+  ./recv_task_else_steal, ./handle_thieves
 
 # Await/sync future - Finite Automaton rewrite
 # ----------------------------------------------------------------------------------
-# This file is temporary and is used to make
-# progressive refactoring of the codebase to
-# finite state machine code.
 
 type AwaitState = enum
   AW_CheckTask
@@ -209,4 +206,4 @@ proc sync*[T](fv: FlowVar[T]): T {.inline.} =
 
 when isMainModule:
   const dotRepr = toGraphviz(awaitFSA)
-  writeFile("weave/await_fsm.dot", dotRepr)
+  writeFile("weave/sync.dot", dotRepr)

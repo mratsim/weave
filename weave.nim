@@ -9,7 +9,7 @@ import
   weave/[
     parallel_tasks, parallel_for, parallel_for_staged,
     runtime],
-  weave/state_machines/[runtime_fsm, await_fsm, sync_scope_fsm],
+  weave/state_machines/[sync_root, sync, sync_scope],
   weave/datatypes/flowvars
 
 export

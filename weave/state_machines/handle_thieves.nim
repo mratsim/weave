@@ -96,4 +96,4 @@ synthesize(handleThievesFSA):
 
 when isMainModule:
   const dotRepr = toGraphviz(handleThievesFSA)
-  writeFile("weave/scheduler_fsm.dot", dotRepr)
+  writeFile("weave/handle_thieves.dot", dotRepr)

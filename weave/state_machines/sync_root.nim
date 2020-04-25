@@ -17,7 +17,7 @@ import
   ../cross_thread_com/channels_spsc_single_ptr,
   ../memory/[lookaside_lists, allocs],
   ../scheduler, ../signals, ../workers, ../thieves, ../victims,
-  ./scheduler_fsm, ./work_fsm,
+  ./handle_thieves, ./recv_task_else_steal,
   ../runtime,
   # Low-level primitives
   ../primitives/barriers
@@ -245,4 +245,4 @@ proc exit*(_: type Weave) =
 
 when isMainModule:
   const dotRepr = toGraphviz(syncRootFSA)
-  writeFile("weave/runtime_fsm.dot", dotRepr)
+  writeFile("weave/sync_root.dot", dotRepr)
