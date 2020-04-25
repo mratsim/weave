@@ -7,7 +7,6 @@
 
 import
   std/atomics,
-  ../config,
   ../instrumentation/contracts
 
 # Scoped barrier

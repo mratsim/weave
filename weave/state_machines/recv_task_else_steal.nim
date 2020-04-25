@@ -8,13 +8,13 @@
 import synthesis
 
 import
-  ./datatypes/[sync_types, context_thread_local],
-  ./contexts,
-  ./instrumentation/[contracts, profilers, loggers],
-  ./cross_thread_com/channels_spsc_single_ptr,
-  ./memory/persistacks,
-  ./config,
-  ./thieves, ./workers
+  ../datatypes/[sync_types, context_thread_local],
+  ../contexts,
+  ../instrumentation/[contracts, profilers, loggers],
+  ../cross_thread_com/channels_spsc_single_ptr,
+  ../memory/persistacks,
+  ../config,
+  ../thieves, ../workers
 
 # Workers - Finite Automaton rewrite
 # ----------------------------------------------------------------------------------
@@ -124,4 +124,4 @@ synthesize(recvTaskFSA):
 
 when isMainModule:
   const dotRepr = toGraphviz(recvTaskFSA)
-  writeFile("weave/work_fsm.dot", dotRepr)
+  writeFile("weave/recv_task_else_steal.dot", dotRepr)

@@ -49,7 +49,6 @@ type
 
     # Stack pointer
     top: T
-    # Mempool doesn't provide the proper free yet
     freeFn*: proc(elem: T) {.nimcall, gcsafe.}
     # Adaptative freeing
     count: int
@@ -59,9 +58,12 @@ type
     #
     registeredAt: ptr tuple[onHeartbeat: proc(env: pointer) {.nimcall.}, env: pointer]
 
-func initialize*[T](lal: var LookAsideList[T], freeFn: proc(elem: T) {.nimcall, gcsafe.}) =
-  ## We assume the lookaside lists is zero-init when the thread-local context is allocated
+func initialize*[T](lal: var LookAsideList[T], freeFn: proc(elem: T) {.nimcall, gcsafe.}) {.inline.} =
+  lal.top = nil
   lal.freeFn = freeFn
+  lal.count = 0
+  lal.recentAsk = 0
+  lal.registeredAt = nil
 
 func isEmpty(lal: LookAsideList): bool {.inline.} =
   result = lal.top.isNil

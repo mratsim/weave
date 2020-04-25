@@ -8,11 +8,9 @@
 import
   ./datatypes/[sync_types, context_thread_local],
   ./contexts,
-  ./instrumentation/[contracts, profilers, loggers],
-  ./cross_thread_com/[channels_spsc_single_ptr, scoped_barriers],
-  ./memory/persistacks,
-  ./config,
-  ./thieves
+  ./instrumentation/[contracts, loggers],
+  ./cross_thread_com/scoped_barriers,
+  ./config
 
 # Worker - Tasks handling
 # ----------------------------------------------------------------------------------
@@ -30,7 +28,7 @@ proc restartWork*() =
   myWorker().isWaiting = false
   myThefts().dropped = 0
 
-proc runTask*(task: Task) {.inline, gcsafe.} =
+proc execute*(task: Task) {.inline, gcsafe.} =
   preCondition: not task.fn.isNil
 
   let suspendedTask = myTask()

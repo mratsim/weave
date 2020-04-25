@@ -15,7 +15,7 @@ import
   ../instrumentation/contracts,
   ../config
 
-# static: doAssert not defined(cpp), "Pledges are not compatible with C++ target at the moment: https://github.com/nim-lang/Nim/issues/13062, https://github.com/nim-lang/Nim/issues/13093"
+static: doAssert not defined(cpp), "Pledges are not compatible with C++ target at the moment: https://github.com/nim-lang/Nim/issues/13062, https://github.com/nim-lang/Nim/issues/13093"
 
 # Pledges
 # ----------------------------------------------------
@@ -526,21 +526,22 @@ macro delayedUntilMulti*(task: Task, pool: var TLPoolAllocator, pledges: varargs
 # Sanity checks
 # ------------------------------------------------------------------------------
 
-when sizeof(pointer) == 8:
-  let expectedSize = 40
-else:
-  let expectedSize = 20
-assert sizeof(default(TaskNode)[]) == expectedSize,
-  "TaskNode size was " & $sizeof(default(TaskNode)[])
+debugSizeAsserts:
+  when sizeof(pointer) == 8:
+    let expectedSize = 40
+  else:
+    let expectedSize = 20
+  doAssert sizeof(default(TaskNode)[]) == expectedSize,
+    "TaskNode size was " & $sizeof(default(TaskNode)[])
 
-assert sizeof(ChannelMpscUnboundedBatch[TaskNode]) == 128,
-  "MPSC channel size was " & $sizeof(ChannelMpscUnboundedBatch[TaskNode])
+  doAssert sizeof(ChannelMpscUnboundedBatch[TaskNode]) == 128,
+    "MPSC channel size was " & $sizeof(ChannelMpscUnboundedBatch[TaskNode])
 
-assert sizeof(PledgeImpl) == 192,
-  "PledgeImpl size was " & $sizeof(PledgeImpl)
+  doAssert sizeof(PledgeImpl) == 192,
+    "PledgeImpl size was " & $sizeof(PledgeImpl)
 
-assert sizeof(default(PledgePtr)[]) <= WV_MemBlockSize,
-  "PledgePtr object size was " & $sizeof(default(PledgePtr)[])
+  doAssert sizeof(default(PledgePtr)[]) <= WV_MemBlockSize,
+    "PledgePtr object size was " & $sizeof(default(PledgePtr)[])
 
 when isMainModule:
   type TaskStack = object

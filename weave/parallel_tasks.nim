@@ -12,7 +12,7 @@ import
   # Standard library
   macros, typetraits,
   # Internal
-  ./scheduler, ./contexts, ./await_fsm,
+  ./scheduler, ./contexts, ./state_machines/sync,
   ./datatypes/[flowvars, sync_types],
   ./instrumentation/[contracts, profilers],
   ./cross_thread_com/scoped_barriers
@@ -24,7 +24,6 @@ else:
     discard
 
 # workaround visibility issues
-export forceFuture
 export profilers, contexts
 
 proc spawnImpl(pledges: NimNode, funcCall: NimNode): NimNode =
@@ -212,7 +211,7 @@ macro spawnDelayed*(pledges: varargs[typed], fnCall: typed): untyped =
 # --------------------------------------------------------
 
 when isMainModule:
-  import ./runtime, ./runtime_fsm, os
+  import ./runtime, ./state_machines/sync_root, os
 
   block: # Async without result
 

@@ -93,7 +93,7 @@ type
       phase: Atomic[uint8]                     # A binary timestamp, toggles between 0 and 1 (but there is no atomic "not")
       signaled: Atomic[bool]                   # Signaling condition
 
-func initialize*(en: var EventNotifier) =
+func initialize*(en: var EventNotifier) {.inline.} =
   when supportsFutex:
     en.futex.initialize()
   else:
@@ -103,10 +103,13 @@ func initialize*(en: var EventNotifier) =
   en.phase.store(0, moRelaxed)
   en.signaled.store(false, moRelaxed)
 
-func `=destroy`*(en: var EventNotifier) =
+func `=destroy`*(en: var EventNotifier) {.inline.} =
   when not supportsFutex:
     en.cond.deinitCond()
     en.lock.deinitLock()
+
+func `=`*(dst: var EventNotifier, src: EventNotifier) {.error: "An event notifier cannot be copied".}
+func `=sink`*(dst: var EventNotifier, src: EventNotifier) {.error: "An event notifier cannot be moved".}
 
 func prepareToPark*(en: var EventNotifier) {.inline.} =
   ## The consumer intends to sleep soon.

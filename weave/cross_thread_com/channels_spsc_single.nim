@@ -8,8 +8,10 @@
 import
   std/atomics,
   ../config,
-  ../instrumentation/[contracts, loggers],
-  ../memory/memory_pools
+  ../instrumentation/[contracts, loggers]
+
+when defined(WV_Asserts) or compileOption("assertions") or defined(WV_Debug):
+  import ../memory/memory_pools
 
 type
   ChannelSPSCSingle* = object
@@ -100,6 +102,7 @@ func trySend*[T](chan: var ChannelSPSCSingle, src: sink T): bool {.inline.} =
 # Sanity checks
 # ------------------------------------------------------------------------------
 when isMainModule:
+  import ../memory/memory_pools
 
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}

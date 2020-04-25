@@ -16,7 +16,7 @@ import
   ./parallel_macros, ./parallel_reduce,
   ./contexts, ./runtime, ./config,
   ./instrumentation/[loggers, contracts],
-  ./datatypes/flowvars, ./await_fsm,
+  ./datatypes/flowvars, ./state_machines/sync,
   ./parallel_tasks
 
 when not compileOption("threads"):
@@ -118,8 +118,6 @@ proc parallelForSplitted(index, start, stop, stride, captured, capturedTy, depen
 
   result = newStmtList()
   let parForSplitted = ident("weaveTask_DelayedParForSplit_")
-  var fnCall = newCall(bindSym"spawnDelayed")
-
   let pledge = dependsOn[0]
 
   if captured.len > 0:
@@ -306,7 +304,7 @@ macro parallelForStrided*(loopParams: untyped, stride: Positive, body: untyped):
 # --------------------------------------------------------
 
 when isMainModule:
-  import ./instrumentation/loggers, ./runtime, ./runtime_fsm, os
+  import ./instrumentation/loggers, ./runtime, ./state_machines/sync_root, os
 
   block:
     proc main() =

@@ -30,7 +30,7 @@ proc main() =
     n = paramStr(1).parseInt
   else:
     let exeName = getAppFilename().extractFilename()
-    echo &"Usage: fib <n-th fibonacci number requested:{n}>"
+    echo &"Usage: {exeName} <n-th fibonacci number requested:{n}>"
     quit 1
 
   if existsEnv"WEAVE_NUM_THREADS":

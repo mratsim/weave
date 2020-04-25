@@ -24,6 +24,8 @@ when not defined(cpp):
 # Contexts
 # ----------------------------------------------------------------------------------
 
+type Weave* = object
+
 var globalCtx*: GlobalContext
 var localCtx* {.threadvar.}: TLContext
   # TODO: tlsEmulation off by default on OSX and on by default on iOS?

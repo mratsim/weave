@@ -8,15 +8,15 @@
 import synthesis
 
 import
-  ./instrumentation/[contracts, profilers, loggers],
-  ./primitives/barriers,
-  ./datatypes/[sync_types, prell_deques, context_thread_local],
-  ./cross_thread_com/scoped_barriers,
-  ./memory/lookaside_lists,
-  ./contexts, ./config,
-  ./victims,
-  ./thieves, ./workers,
-  ./work_fsm, ./scheduler_fsm
+  ../instrumentation/[contracts, profilers, loggers],
+  ../primitives/barriers,
+  ../datatypes/[sync_types, prell_deques, context_thread_local],
+  ../cross_thread_com/scoped_barriers,
+  ../memory/lookaside_lists,
+  ../contexts, ../config,
+  ../victims,
+  ../thieves, ../workers,
+  ./recv_task_else_steal, ./handle_thieves
 
 # Scoped Barrier - Finite state machine
 # ----------------------------------------------------------------------------------
@@ -85,7 +85,7 @@ behavior(syncScopeFSA):
   event: SBE_HasChildTask
   transition:
     profile(run_task):
-      runTask(task)
+      execute(task)
     profile(enq_deq_task):
       localCtx.taskCache.add(task)
   fin: SB_CheckTask
@@ -162,7 +162,7 @@ behavior(syncScopeFSA):
 
     # Run the rest
     profile(run_task):
-      runTask(task)
+      execute(task)
     profile(enq_deq_task):
       # The memory is re-used but not zero-ed
       localCtx.taskCache.add(task)
@@ -192,4 +192,4 @@ template syncScope*(body: untyped): untyped =
 
 when isMainModule:
   const dotRepr = toGraphviz(syncScopeFSA)
-  writeFile("weave/sync_scope_fsm.dot", dotRepr)
+  writeFile("weave/sync_scope.dot", dotRepr)

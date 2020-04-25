@@ -107,6 +107,11 @@ template debug*(body: untyped): untyped =
   when defined(WV_Debug):
     block: {.noSideEffect, gcsafe.}: body
 
+template debugSizeAsserts*(body: untyped): untyped =
+  # For size checks that cannot be done at compile-time due to "incomplete" struct
+  when defined(WV_Asserts) or compileOption("assertions") or defined(WV_Debug):
+    block: {.noSideEffect, gcsafe.}: body
+
 template debugSplit*(body: untyped): untyped =
   when defined(WV_DebugSplit) or defined(WV_Debug):
     block: {.noSideEffect, gcsafe.}: body

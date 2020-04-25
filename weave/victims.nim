@@ -7,12 +7,12 @@
 
 import
   ./datatypes/[sync_types, context_thread_local, bounded_queues,
-               sparsesets, prell_deques, flowvars, binary_worker_trees],
+               prell_deques, flowvars, binary_worker_trees],
   ./contexts, ./config,
   ./instrumentation/[contracts, profilers, loggers],
   ./cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_spsc_single, scoped_barriers],
   ./thieves, ./loop_splitting,
-  ./stealing_fsm
+  ./state_machines/decline_thief
 
 # Victims - Proxy handling on behalf of idle child workers
 # ----------------------------------------------------------------------------------
@@ -156,7 +156,7 @@ proc takeTasks(req: StealRequest): tuple[task: Task, loot: int32] =
 proc send(req: sink StealRequest, task: sink Task, numStolen: int32 = 1) {.inline.}=
   debug: log("Worker %2d: sending %d tasks (task.fn 0x%.08x) to Worker %2d\n",
     myID(), numStolen, task.fn, req.thiefID, req.thiefAddr)
-  let taskSent = req.thiefAddr[].trySend(task)
+  let taskSent {.used.} = req.thiefAddr[].trySend(task)
   TargetLastThief:
     myThefts().lastThief = req.thiefID
 
@@ -191,7 +191,7 @@ proc dispatchElseDecline*(req: sink StealRequest) {.gcsafe.}=
     ascertain: myWorker().deque.isEmpty()
     decline(req)
 
-proc evalSplit(task: Task, req: StealRequest, workSharing: bool): int {.inline.}=
+proc evalSplit(task: Task, req: StealRequest, workSharing: bool): int =
   when SplitStrategy == SplitKind.half:
     return splitHalf(task)
   elif SplitStrategy == guided:

@@ -8,21 +8,16 @@
 import synthesis
 
 import
-  ./instrumentation/[contracts, profilers, loggers],
-  ./primitives/barriers,
-  ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars, sparsesets, binary_worker_trees, bounded_queues],
-  ./cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_spsc_single],
-  ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
-  ./contexts, ./config,
-  ./victims, ./loop_splitting,
-  ./thieves, ./workers,
-  ./random/rng, ./stealing_fsm, ./work_fsm, ./scheduler_fsm
+  ../instrumentation/[contracts, profilers, loggers],
+  ../datatypes/[sync_types, prell_deques, flowvars],
+  ../memory/lookaside_lists,
+  ../contexts, ../config,
+  ../victims,
+  ../thieves, ../workers,
+  ./recv_task_else_steal, ./handle_thieves
 
 # Await/sync future - Finite Automaton rewrite
 # ----------------------------------------------------------------------------------
-# This file is temporary and is used to make
-# progressive refactoring of the codebase to
-# finite state machine code.
 
 type AwaitState = enum
   AW_CheckTask
@@ -38,9 +33,11 @@ type AwaitEvent = enum
 declareAutomaton(awaitFSA, AwaitState, AwaitEvent)
 setPrologue(awaitFSA):
   ## Eagerly complete an awaited FlowVar
-  when compileOption("assertions"):
-    # Ensure that we keep hold on the task we are awaiting
-    let thisTask = myTask()
+
+  # TODO: tasks cannot be printed by "ascertain"
+  # when compileOption("assertions"):
+  #   # Ensure that we keep hold on the task we are awaiting
+  #   let thisTask = myTask()
 
   var task: Task
   debug: log("Worker %2d: forcefut 1 - task from local deque\n", myID())
@@ -83,7 +80,7 @@ behavior(awaitFSA):
   event: AWE_HasChildTask
   transition:
     profile(run_task):
-      runTask(task)
+      execute(task)
     profile(enq_deq_task):
       localCtx.taskCache.add(task)
   fin: AW_CheckTask
@@ -163,7 +160,7 @@ behavior(awaitFSA):
 
     # Run the rest
     profile(run_task):
-      runTask(task)
+      execute(task)
     profile(enq_deq_task):
       # The memory is reused but not zero-ed
       localCtx.taskCache.add(task)
@@ -172,20 +169,20 @@ behavior(awaitFSA):
 # -------------------------------------------
 
 synthesize(awaitFSA):
-  proc forceFuture*[T](fv: Flowvar[T], parentResult: var T)
+  proc forceFuture[T](fv: Flowvar[T], parentResult: var T)
 
 # -------------------------------------------
 
 EagerFV:
-  proc forceComplete*[T](fv: Flowvar[T], parentResult: var T) {.inline.} =
+  proc forceComplete[T](fv: Flowvar[T], parentResult: var T) {.inline.} =
     ## From the parent thread awaiting on the result, force its computation
     ## by eagerly processing only the child tasks spawned by the awaited task
     fv.forceFuture(parentResult)
     recycleChannel(fv)
 
 LazyFV:
-  template forceComplete*[T](fv: Flowvar[T], parentResult: var T) =
-    fv.forceFuture(parentResult)
+  template forceComplete[T](fv: Flowvar[T], parentResult: var T) =
+    forceFuture(fv, parentResult)
     # Reclaim memory
     if not fv.lfv.hasChannel:
       ascertain: fv.lfv.isReady
@@ -209,4 +206,4 @@ proc sync*[T](fv: FlowVar[T]): T {.inline.} =
 
 when isMainModule:
   const dotRepr = toGraphviz(awaitFSA)
-  writeFile("weave/await_fsm.dot", dotRepr)
+  writeFile("weave/sync.dot", dotRepr)

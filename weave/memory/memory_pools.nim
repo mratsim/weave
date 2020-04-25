@@ -540,7 +540,7 @@ proc recycle*[T](p: ptr T) {.gcsafe.} =
       arena.allocator[].considerRelease(arena)
   else:
     # remote arena - TODO: Poisoning except from the MPSC Queue?
-    let remoteRecycled = arena.meta.remoteFree.trySend(p)
+    let remoteRecycled {.used.} = arena.meta.remoteFree.trySend(p)
     postCondition: remoteRecycled
 
 proc teardown*(pool: var TLPoolAllocator): bool =
@@ -623,12 +623,13 @@ proc takeover*(pool: var TLPoolAllocator, target: sink TLPoolAllocator) =
 # TODO: Once upstream fixes https://github.com/nim-lang/Nim/issues/13122
 #       the size here will likely be wrong
 
-assert sizeof(ChannelMpscUnboundedBatch[ptr MemBlock]) == 320,
-  "MPSC channel size was " & $sizeof(ChannelMpscUnboundedBatch[ptr MemBlock])
+debugSizeAsserts:
+  doAssert sizeof(ChannelMpscUnboundedBatch[ptr MemBlock]) == 320,
+    "MPSC channel size was " & $sizeof(ChannelMpscUnboundedBatch[ptr MemBlock])
 
-assert sizeof(Arena) == WV_MemArenaSize,
-  "The real arena size was " & $sizeof(Arena) &
-  " but the asked WV_MemArenaSize was " & $WV_MemArenaSize
+  doAssert sizeof(Arena) == WV_MemArenaSize,
+    "The real arena size was " & $sizeof(Arena) &
+    " but the asked WV_MemArenaSize was " & $WV_MemArenaSize
 
 when isMainModule:
   import times, strformat, system/ansi_c, math, strutils

@@ -8,13 +8,13 @@
 import
   ./instrumentation/[contracts, profilers, loggers],
   ./primitives/barriers,
-  ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars, sparsesets, binary_worker_trees, bounded_queues],
-  ./cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_spsc_single, scoped_barriers],
+  ./datatypes/[sync_types, prell_deques, context_thread_local, sparsesets, binary_worker_trees, bounded_queues],
+  ./cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch],
   ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
   ./contexts, ./config,
-  ./victims, ./loop_splitting,
+  ./victims,
   ./thieves, ./workers,
-  ./random/rng, ./stealing_fsm, ./work_fsm, ./scheduler_fsm
+  ./random/rng, ./state_machines/decline_thief, ./state_machines/recv_task_else_steal, ./state_machines/handle_thieves
 
 # Local context
 # ----------------------------------------------------------------------------------
@@ -135,9 +135,7 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
 # Scheduler
 # ----------------------------------------------------------------------------------
 
-proc nextTask*(childTask: static bool): Task {.inline.} =
-  # TODO: rewrite as a finite state machine
-
+proc nextTask(childTask: static bool): Task {.inline.} =
   profile(enq_deq_task):
     if childTask:
       result = myWorker().deque.popFirstIfChild(myTask())
@@ -183,7 +181,7 @@ proc schedulingLoop() =
       # Prio is: children, then thieves then us
       ascertain: not task.fn.isNil
       profile(run_task):
-        runTask(task)
+        execute(task)
       profile(enq_deq_task):
         # The memory is reused but not zero-ed
         localCtx.taskCache.add(task)
@@ -224,7 +222,7 @@ proc schedulingLoop() =
     # 5. Work on what is left
     # debug: log("Worker %2d: schedloop 5 - working on leftover\n", myID())
     profile(run_task):
-      runTask(task)
+      execute(task)
     profile(enq_deq_task):
       # The memory is reused but not zero-ed
       localCtx.taskCache.add(task)

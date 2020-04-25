@@ -46,7 +46,7 @@ type
     # 3 - L1 and L2 cache eviction level
 
 when withBuiltins:
-  proc builtin_assume_aligned(data: pointer, alignment: csize): pointer {.importc: "__builtin_assume_aligned", noDecl.}
+  proc builtin_assume_aligned(data: pointer, alignment: csize_t): pointer {.importc: "__builtin_assume_aligned", noDecl.}
   proc builtin_prefetch(data: pointer, rw: PrefetchRW, locality: PrefetchLocality) {.importc: "__builtin_prefetch", noDecl.}
 
 when defined(cpp):
@@ -75,7 +75,7 @@ template prefetch*[T](
   else:
     discard
 
-template pragma_ivdep() =
+template pragma_ivdep() {.used.}=
   ## Tell the compiler to ignore unproven loop dependencies
   ## such as "a[i] = a[i + k] * c;" if k is unknown, as it introduces a loop
   ## dependency if it's negative
@@ -89,7 +89,7 @@ template pragma_ivdep() =
   else: # Supported on ICC and Cray
     {.emit: "pragma ivdep".}
 
-template withCompilerFunctionHints() =
+template withCompilerFunctionHints() {.used.}=
   ## Not exposed, Nim codegen will declare them as normal C function.
   ## This messes up with N_NIMCALL, N_LIB_PRIVATE, N_INLINE and also
   ## creates duplicate symbols when one function called by a hot or pure function
@@ -149,4 +149,3 @@ template withCompilerFunctionHints() =
   #
   # This wouldn't be needed with fast-math because compiler would consider FP addition associative
   # and create intermediate variables as needed to exploit this through put.
-

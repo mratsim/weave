@@ -6,7 +6,7 @@
 # Generic microkernel for matrix multiplication
 
 import
-  ./cpuinfo, ./compiler_optim_hints,
+  ./compiler_optim_hints,
   ./gemm_tiling, ./gemm_utils,
   macros
 
@@ -22,7 +22,6 @@ template ukernel_generic_impl*(){.dirty.} =
   const
     MR = ukernel.extract_mr()
     NR = ukernel.extract_nr()
-    simd = ukernel.extract_cpu_simd
 
   var AB{.align_variable.}: array[MR, array[NR, T]]
   var  A {.restrict.} = assume_aligned packedA # [kc, mc] by chunks of mr

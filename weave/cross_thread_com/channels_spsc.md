@@ -2,6 +2,8 @@
 
 Note: Channels are queues
 
+> This research while relevant has become unneeded as the only SPSC channel we use only needs to store a single element.
+
 ## Usage in the project
 
 Channels are used for the following types:

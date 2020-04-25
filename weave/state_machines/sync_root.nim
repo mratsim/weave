@@ -9,17 +9,15 @@ import synthesis
 
 import
   # Standard library
-  os, cpuinfo, strutils,
+  os,
   # Internal
-  ./instrumentation/[contracts, profilers, loggers],
-  ./contexts, ./config,
-  ./datatypes/[sync_types, prell_deques, binary_worker_trees],
-  ./cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch],
-  ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
-  ./scheduler, ./signals, ./workers, ./thieves, ./victims, ./work_fsm,
-  ./runtime, scheduler_fsm,
-  # Low-level primitives
-  ./primitives/barriers
+  ../instrumentation/[contracts, profilers, loggers],
+  ../contexts, ../config,
+  ../datatypes/[sync_types, prell_deques],
+  ../cross_thread_com/channels_spsc_single_ptr,
+  ../memory/lookaside_lists,
+  ../scheduler, ../workers, ../thieves, ../victims,
+  ./handle_thieves, ./recv_task_else_steal
 
 # Runtime - Finite Automaton rewrite
 # ----------------------------------------------------------------------------------
@@ -100,7 +98,7 @@ behavior(syncRootFSA):
   event: SYE_HasTask
   transition:
     profile(run_task):
-      runTask(task)
+      execute(task)
     profile(enq_deq_task):
       localCtx.taskCache.add(task)
   fin: SY_CheckTask
@@ -192,7 +190,7 @@ behavior(syncRootFSA):
     # 5. Work on what is left
     debug: log("Worker %2d: syncRoot 5 - working on leftover\n", myID())
     profile(run_task):
-      runTask(task)
+      execute(task)
     profile(enq_deq_task):
       # The memory is reused but not zero-ed
       localCtx.taskCache.add(task)
@@ -203,45 +201,9 @@ behavior(syncRootFSA):
 synthesize(syncRootFSA):
   proc syncRoot*(_: type Weave) {.gcsafe.}
 
-proc globalCleanup() =
-  for i in 1 ..< workforce():
-    joinThread(globalCtx.threadpool[i])
-
-  globalCtx.barrier.delete()
-  wv_free(globalCtx.threadpool)
-
-  # Channels, each thread cleaned its channels
-  # We just need to reclaim the memory
-  wv_free(globalCtx.com.thefts)
-  wv_free(globalCtx.com.tasks)
-
-  # The root task has no parent
-  ascertain: myTask().isRootTask()
-  delete(myTask())
-
-  # TODO takeover the leftover pools
-
-  metrics:
-    log("+========================================+\n")
-
-proc exit*(_: type Weave) =
-  syncRoot(_)
-  signalTerminate(nil)
-  localCtx.signaledTerminate = true
-
-  # 1 matching barrier in worker_entry_fn
-  discard globalCtx.barrier.wait()
-
-  # 1 matching barrier in metrics
-  workerMetrics()
-
-  threadLocalCleanup()
-  globalCleanup()
-
-
 # Dump the graph
 # -------------------------------------------
 
 when isMainModule:
   const dotRepr = toGraphviz(syncRootFSA)
-  writeFile("weave/runtime_fsm.dot", dotRepr)
+  writeFile("weave/sync_root.dot", dotRepr)
