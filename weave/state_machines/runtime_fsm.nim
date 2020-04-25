@@ -9,13 +9,13 @@ import synthesis
 
 import
   # Standard library
-  os, cpuinfo, strutils,
+  os,
   # Internal
   ../instrumentation/[contracts, profilers, loggers],
   ../contexts, ../config,
-  ../datatypes/[sync_types, prell_deques, binary_worker_trees],
-  ../cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch],
-  ../memory/[persistacks, lookaside_lists, allocs, memory_pools],
+  ../datatypes/[sync_types, prell_deques],
+  ../cross_thread_com/channels_spsc_single_ptr,
+  ../memory/[lookaside_lists, allocs],
   ../scheduler, ../signals, ../workers, ../thieves, ../victims,
   ./scheduler_fsm, ./work_fsm,
   ../runtime,

@@ -118,8 +118,6 @@ proc parallelForSplitted(index, start, stop, stride, captured, capturedTy, depen
 
   result = newStmtList()
   let parForSplitted = ident("weaveTask_DelayedParForSplit_")
-  var fnCall = newCall(bindSym"spawnDelayed")
-
   let pledge = dependsOn[0]
 
   if captured.len > 0:

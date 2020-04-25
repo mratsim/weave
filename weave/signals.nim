@@ -38,7 +38,7 @@ proc asyncSignal(fn: proc (_: pointer) {.nimcall, gcsafe.}, chan: var ChannelSps
     TargetLastVictim:
       dummy.victim = Not_a_worker
 
-    let signalSent = chan.trySend(dummy)
+    let signalSent {.used.} = chan.trySend(dummy)
     debugTermination: log("Worker %2d: sending asyncSignal\n", myID())
     postCondition: signalSent
 

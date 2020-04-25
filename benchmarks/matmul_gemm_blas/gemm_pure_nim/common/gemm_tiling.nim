@@ -32,7 +32,7 @@
 import
   ./compiler_optim_hints,
   ./memory, ./align_unroller,
-  typetraits, macros,
+  macros,
   ./gemm_utils
 
 # ############################################################

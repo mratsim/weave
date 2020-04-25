@@ -8,16 +8,11 @@
 import synthesis
 
 import
-  ../instrumentation/[contracts, profilers, loggers],
-  ../primitives/barriers,
-  ../datatypes/[sync_types, prell_deques, context_thread_local, flowvars, sparsesets, binary_worker_trees, bounded_queues],
-  ../cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_spsc_single],
-  ../memory/[persistacks, lookaside_lists, allocs, memory_pools],
-  ../contexts, ../config,
+  ../instrumentation/[contracts, loggers],
+  ../datatypes/[sync_types, prell_deques, context_thread_local],
+  ../contexts,
   ../victims, ../loop_splitting,
-  ../thieves, ../workers,
-  ../random/rng,
-  ./stealing_fsm, ./work_fsm
+  ../thieves
 
 # Scheduler - Finite Automaton rewrite
 # ----------------------------------------------------------------------------------

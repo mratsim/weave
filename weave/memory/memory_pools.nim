@@ -540,7 +540,7 @@ proc recycle*[T](p: ptr T) {.gcsafe.} =
       arena.allocator[].considerRelease(arena)
   else:
     # remote arena - TODO: Poisoning except from the MPSC Queue?
-    let remoteRecycled = arena.meta.remoteFree.trySend(p)
+    let remoteRecycled {.used.} = arena.meta.remoteFree.trySend(p)
     postCondition: remoteRecycled
 
 proc teardown*(pool: var TLPoolAllocator): bool =

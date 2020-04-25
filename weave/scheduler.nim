@@ -8,11 +8,11 @@
 import
   ./instrumentation/[contracts, profilers, loggers],
   ./primitives/barriers,
-  ./datatypes/[sync_types, prell_deques, context_thread_local, flowvars, sparsesets, binary_worker_trees, bounded_queues],
-  ./cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_spsc_single, scoped_barriers],
+  ./datatypes/[sync_types, prell_deques, context_thread_local, sparsesets, binary_worker_trees, bounded_queues],
+  ./cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch],
   ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
   ./contexts, ./config,
-  ./victims, ./loop_splitting,
+  ./victims,
   ./thieves, ./workers,
   ./random/rng, ./state_machines/stealing_fsm, ./state_machines/work_fsm, ./state_machines/scheduler_fsm
 

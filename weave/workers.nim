@@ -8,11 +8,9 @@
 import
   ./datatypes/[sync_types, context_thread_local],
   ./contexts,
-  ./instrumentation/[contracts, profilers, loggers],
-  ./cross_thread_com/[channels_spsc_single_ptr, scoped_barriers],
-  ./memory/persistacks,
-  ./config,
-  ./thieves
+  ./instrumentation/[contracts, loggers],
+  ./cross_thread_com/scoped_barriers,
+  ./config
 
 # Worker - Tasks handling
 # ----------------------------------------------------------------------------------

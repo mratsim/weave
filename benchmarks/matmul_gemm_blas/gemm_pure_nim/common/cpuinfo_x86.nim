@@ -1,6 +1,6 @@
 # From awr1: https://github.com/nim-lang/Nim/pull/11816/files
 
-proc cpuidX86(eaxi, ecxi: int32): tuple[eax, ebx, ecx, edx: int32] =
+proc cpuidX86(eaxi, ecxi: int32): tuple[eax, ebx, ecx, edx: int32] {.used.}=
   when defined(vcc):
     # limited inline asm support in vcc, so intrinsics, here we go:
     proc cpuidVcc(cpuInfo: ptr int32; functionID, subFunctionID: int32)
@@ -14,7 +14,7 @@ proc cpuidX86(eaxi, ecxi: int32): tuple[eax, ebx, ecx, edx: int32] =
       :"a"(`eaxi`), "c"(`ecxi`)"""
     (eaxr, ebxr, ecxr, edxr)
 
-proc cpuNameX86(): string =
+proc cpuNameX86(): string {.used.}=
   var leaves {.global.} = cast[array[48, char]]([
     cpuidX86(eaxi = 0x80000002'i32, ecxi = 0),
     cpuidX86(eaxi = 0x80000003'i32, ecxi = 0),

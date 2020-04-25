@@ -11,7 +11,7 @@ import
   ./instrumentation/[contracts, profilers, loggers],
   ./cross_thread_com/channels_mpsc_unbounded_batch,
   ./memory/persistacks,
-  ./config, ./signals,
+  ./config,
   std/atomics
 
 # Thief
@@ -40,9 +40,9 @@ proc rawSend(victimID: WorkerID, req: sink StealRequest) {.inline.}=
   # TODO: check for race condition on runtime exit
   # log("Worker %2d: sending request 0x%.08x to %d (Channel: 0x%.08x)\n",
   #       myID(), cast[ByteAddress](req), victimID, globalCtx.com.thefts[victimID].addr)
-  let stealRequestSent = globalCtx.com
-                                  .thefts[victimID]
-                                  .trySend(req)
+  let stealRequestSent {.used.} = globalCtx.com
+                                           .thefts[victimID]
+                                           .trySend(req)
 
   # The channel has a theoretical upper bound of
   # N steal requests (from N-1 workers + own request sent back)
