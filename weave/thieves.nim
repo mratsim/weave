@@ -17,7 +17,7 @@ import
 # Thief
 # ----------------------------------------------------------------------------------
 
-proc newStealRequest(): StealRequest {.inline.} =
+proc newStealRequest(): StealRequest =
   ## Create a new steal request
   ## This does not initialize the Thief state
   result = localCtx.stealCache.borrow()

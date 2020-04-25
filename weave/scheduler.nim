@@ -135,9 +135,7 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
 # Scheduler
 # ----------------------------------------------------------------------------------
 
-proc nextTask*(childTask: static bool): Task {.inline.} =
-  # TODO: rewrite as a finite state machine
-
+proc nextTask(childTask: static bool): Task {.inline.} =
   profile(enq_deq_task):
     if childTask:
       result = myWorker().deque.popFirstIfChild(myTask())

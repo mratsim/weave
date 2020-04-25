@@ -191,7 +191,7 @@ proc dispatchElseDecline*(req: sink StealRequest) {.gcsafe.}=
     ascertain: myWorker().deque.isEmpty()
     decline(req)
 
-proc evalSplit(task: Task, req: StealRequest, workSharing: bool): int {.inline.}=
+proc evalSplit(task: Task, req: StealRequest, workSharing: bool): int =
   when SplitStrategy == SplitKind.half:
     return splitHalf(task)
   elif SplitStrategy == guided:

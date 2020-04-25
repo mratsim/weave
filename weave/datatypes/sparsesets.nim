@@ -47,7 +47,7 @@ type
     len*: Setuint
     capacity*: Setuint
 
-func allocate*(s: var SparseSet, capacity: SomeInteger) =
+func allocate*(s: var SparseSet, capacity: SomeInteger) {.inline.} =
   preCondition: capacity <= WV_MaxWorkers
 
   s.capacity = Setuint capacity
@@ -55,7 +55,7 @@ func allocate*(s: var SparseSet, capacity: SomeInteger) =
   s.indices = s.rawBuffer
   s.values = cast[ptr UncheckedArray[Setuint]](s.rawBuffer[capacity].addr)
 
-func delete*(s: var SparseSet) =
+func delete*(s: var SparseSet) {.inline.} =
   s.indices = nil
   s.values = nil
   wv_free(s.rawBuffer)
@@ -116,7 +116,7 @@ func excl*(s: var SparseSet, n: SomeInteger) {.inline.} =
   # Erase the item
   s.indices[n] = Empty
 
-func randomPick*(s: SparseSet, rng: var RngState): int32 =
+func randomPick*(s: SparseSet, rng: var RngState): int32 {.inline.} =
   ## Randomly pick from the set.
   # The value is NOT removed from it.
   let pickIdx = rng.uniform(s.len)
