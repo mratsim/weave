@@ -28,7 +28,7 @@ proc restartWork*() =
   myWorker().isWaiting = false
   myThefts().dropped = 0
 
-proc runTask*(task: Task) {.inline, gcsafe.} =
+proc execute*(task: Task) {.inline, gcsafe.} =
   preCondition: not task.fn.isNil
 
   let suspendedTask = myTask()

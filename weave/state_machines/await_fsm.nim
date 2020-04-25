@@ -81,7 +81,7 @@ behavior(awaitFSA):
   event: AWE_HasChildTask
   transition:
     profile(run_task):
-      runTask(task)
+      execute(task)
     profile(enq_deq_task):
       localCtx.taskCache.add(task)
   fin: AW_CheckTask
@@ -161,7 +161,7 @@ behavior(awaitFSA):
 
     # Run the rest
     profile(run_task):
-      runTask(task)
+      execute(task)
     profile(enq_deq_task):
       # The memory is reused but not zero-ed
       localCtx.taskCache.add(task)

@@ -101,7 +101,7 @@ behavior(syncRootFSA):
   event: SYE_HasTask
   transition:
     profile(run_task):
-      runTask(task)
+      execute(task)
     profile(enq_deq_task):
       localCtx.taskCache.add(task)
   fin: SY_CheckTask
@@ -193,7 +193,7 @@ behavior(syncRootFSA):
     # 5. Work on what is left
     debug: log("Worker %2d: syncRoot 5 - working on leftover\n", myID())
     profile(run_task):
-      runTask(task)
+      execute(task)
     profile(enq_deq_task):
       # The memory is reused but not zero-ed
       localCtx.taskCache.add(task)
