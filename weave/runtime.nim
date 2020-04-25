@@ -74,6 +74,7 @@ proc init*(_: type Weave) =
   myWorker().currentTask = newTaskFromCache()
   myTask().parent = nil
   myTask().fn = cast[type myTask().fn](0xEFFACED)
+  myTask().scopedBarrier = nil
 
   init(localCtx)
   # Wait for the child threads

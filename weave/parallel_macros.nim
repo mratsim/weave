@@ -11,7 +11,8 @@ import
   # Internal
   ./datatypes/[sync_types, flowvars], ./contexts,
   ./instrumentation/profilers,
-  ./scheduler
+  ./scheduler,
+  ./cross_thread_com/scoped_barriers
 
 when not defined(cpp):
   import ./cross_thread_com/pledges
@@ -308,6 +309,8 @@ proc addLoopTask*(
           let `task` = newTaskFromCache()
           `task`.parent = myTask()
           `task`.fn = `asyncFn`
+          registerDescendant(mySyncScope())
+          `task`.scopedBarrier = mySyncScope()
 
           `task`.start = `start`
           `task`.cur = `start`
@@ -337,6 +340,8 @@ proc addLoopTask*(
           let `task` = newTaskFromCache()
           `task`.parent = myTask()
           `task`.fn = `asyncFn`
+          registerDescendant(mySyncScope())
+          `task`.scopedBarrier = mySyncScope()
           `task`.isLoop = true
           `task`.start = `start`
           `task`.cur = `start`

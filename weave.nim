@@ -6,7 +6,10 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  weave/[parallel_tasks, parallel_for, parallel_for_staged, runtime, runtime_fsm, await_fsm],
+  weave/[
+    parallel_tasks, parallel_for, parallel_for_staged,
+    runtime,
+    runtime_fsm, await_fsm, sync_scope_fsm],
   weave/datatypes/flowvars
 
 export
@@ -18,7 +21,9 @@ export
   isSpawned,
   getThreadId,
   # Experimental threadlocal prologue/epilogue
-  parallelForStaged, parallelForStagedStrided
+  parallelForStaged, parallelForStagedStrided,
+  # Experimental scope barrier
+  syncScope
 
 when not defined(cpp):
   # Experimental dataflow parallelism

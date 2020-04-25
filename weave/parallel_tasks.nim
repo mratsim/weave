@@ -14,7 +14,8 @@ import
   # Internal
   ./scheduler, ./contexts, ./await_fsm,
   ./datatypes/[flowvars, sync_types],
-  ./instrumentation/[contracts, profilers]
+  ./instrumentation/[contracts, profilers],
+  ./cross_thread_com/scoped_barriers
 
 when not defined(cpp):
   import ./cross_thread_com/pledges
@@ -124,6 +125,8 @@ proc spawnImpl(pledges: NimNode, funcCall: NimNode): NimNode =
         let `task` = newTaskFromCache()
         `task`.parent = myTask()
         `task`.fn = `async_fn`
+        registerDescendant(mySyncScope())
+        `task`.scopedBarrier = mySyncScope()
         when bool(`withArgs`):
           cast[ptr `argsTy`](`task`.data.addr)[] = `args`
         `scheduleBlock`
@@ -171,6 +174,8 @@ proc spawnImpl(pledges: NimNode, funcCall: NimNode): NimNode =
         let `task` = newTaskFromCache()
         `task`.parent = myTask()
         `task`.fn = `async_fn`
+        registerDescendant(mySyncScope())
+        `task`.scopedBarrier = mySyncScope()
         `task`.has_future = true
         `task`.futureSize = uint8(sizeof(`retType`))
         let `fut` = newFlowvar(myMemPool(), `freshIdent`)

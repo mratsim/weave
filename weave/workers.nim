@@ -9,7 +9,7 @@ import
   ./datatypes/[sync_types, context_thread_local],
   ./contexts,
   ./instrumentation/[contracts, profilers, loggers],
-  ./cross_thread_com/channels_spsc_single_ptr,
+  ./cross_thread_com/[channels_spsc_single_ptr, scoped_barriers],
   ./memory/persistacks,
   ./config,
   ./thieves
@@ -33,12 +33,14 @@ proc restartWork*() =
 proc runTask*(task: Task) {.inline, gcsafe.} =
   preCondition: not task.fn.isNil
 
-  # TODO - logic seems sketchy, why do we do this <-> task.
-  let this = myTask()
+  let suspendedTask = myTask()
+  let suspendedScope = mySyncScope()
   myTask() = task
   debug: log("Worker %2d: running task.fn 0x%.08x (%d pending)\n", myID(), task.fn, myWorker().deque.pendingTasks)
   task.fn(task.data.addr)
-  myTask() = this
+  task.scopedBarrier.unlistDescendant()
+  myTask() = suspendedTask
+  mySyncScope() = suspendedScope
   ascertain:
     if task.isLoop: task.stop > task.start
     else: true

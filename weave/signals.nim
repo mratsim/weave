@@ -10,7 +10,7 @@ import
   ./contexts, ./config,
   ./instrumentation/[contracts, loggers, profilers],
   ./memory/persistacks,
-  ./cross_thread_com/channels_spsc_single_ptr
+  ./cross_thread_com/[channels_spsc_single_ptr, scoped_barriers]
 
 # Signals
 # ----------------------------------------------------------------------------------
@@ -32,6 +32,8 @@ proc asyncSignal(fn: proc (_: pointer) {.nimcall, gcsafe.}, chan: var ChannelSps
   profile(send_recv_task):
     let dummy = newTaskFromCache()
     dummy.fn = fn
+    dummy.parent = myTask()
+    dummy.scopedBarrier.registerDescendant()
     TargetLastVictim:
       dummy.victim = Not_a_worker
 
