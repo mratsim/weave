@@ -169,20 +169,20 @@ behavior(awaitFSA):
 # -------------------------------------------
 
 synthesize(awaitFSA):
-  proc forceFuture*[T](fv: Flowvar[T], parentResult: var T)
+  proc forceFuture[T](fv: Flowvar[T], parentResult: var T)
 
 # -------------------------------------------
 
 EagerFV:
-  proc forceComplete*[T](fv: Flowvar[T], parentResult: var T) {.inline.} =
+  proc forceComplete[T](fv: Flowvar[T], parentResult: var T) {.inline.} =
     ## From the parent thread awaiting on the result, force its computation
     ## by eagerly processing only the child tasks spawned by the awaited task
     fv.forceFuture(parentResult)
     recycleChannel(fv)
 
 LazyFV:
-  template forceComplete*[T](fv: Flowvar[T], parentResult: var T) =
-    fv.forceFuture(parentResult)
+  template forceComplete[T](fv: Flowvar[T], parentResult: var T) =
+    forceFuture(fv, parentResult)
     # Reclaim memory
     if not fv.lfv.hasChannel:
       ascertain: fv.lfv.isReady

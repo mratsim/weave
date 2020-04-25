@@ -24,7 +24,6 @@ else:
     discard
 
 # workaround visibility issues
-export forceFuture
 export profilers, contexts
 
 proc spawnImpl(pledges: NimNode, funcCall: NimNode): NimNode =
