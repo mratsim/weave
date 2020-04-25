@@ -36,6 +36,7 @@ proc runTask*(task: Task) {.inline, gcsafe.} =
   let suspendedTask = myTask()
   let suspendedScope = mySyncScope()
   myTask() = task
+  mySyncScope() = task.scopedBarrier
   debug: log("Worker %2d: running task.fn 0x%.08x (%d pending)\n", myID(), task.fn, myWorker().deque.pendingTasks)
   task.fn(task.data.addr)
   task.scopedBarrier.unlistDescendant()

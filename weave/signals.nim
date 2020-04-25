@@ -33,7 +33,8 @@ proc asyncSignal(fn: proc (_: pointer) {.nimcall, gcsafe.}, chan: var ChannelSps
     let dummy = newTaskFromCache()
     dummy.fn = fn
     dummy.parent = myTask()
-    dummy.scopedBarrier.registerDescendant()
+    mySyncScope().registerDescendant
+    dummy.scopedBarrier = mySyncScope()
     TargetLastVictim:
       dummy.victim = Not_a_worker
 

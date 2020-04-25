@@ -57,6 +57,9 @@ type
     ## This means that in case of nested scopes, only the inner scope needs to track its descendants.
     descendants: Atomic[int]
 
+# Note: If one is defined, the other destructors proc are not implictly create inline
+#       even if trivial
+
 proc `=`*(dst: var ScopedBarrier, src: ScopedBarrier) {.error: "A scoped barrier cannot be copied.".}
 
 proc `=sink`*(dst: var ScopedBarrier, src: ScopedBarrier) {.inline.} =
@@ -64,9 +67,9 @@ proc `=sink`*(dst: var ScopedBarrier, src: ScopedBarrier) {.inline.} =
   {.warning: "Moving a shared resource (an atomic type).".}
   system.`=sink`(dst.descendants, src.descendants)
 
-debug:
-  proc `=destroy`*(sb: var ScopedBarrier) {.inline.}=
-    preCondition: sb.descendants.load(moRelaxed) == 0
+proc `=destroy`*(sb: var ScopedBarrier) {.inline.}=
+  preCondition: sb.descendants.load(moRelaxed) == 0
+  # system.`=destroy`(sb.descendants)
 
 proc initialize*(scopedBarrier: var ScopedBarrier) {.inline.} =
   ## Initialize a scoped barrier
@@ -90,6 +93,7 @@ proc unlistDescendant*(scopedBarrier: ptr ScopedBarrier) {.inline.} =
   ## are still running, however they must have been registered to the scoped barrier toa void race conditions.
   if not scopedBarrier.isNil:
     preCondition: scopedBarrier.descendants.load(moAcquire) >= 1
+    fence(moRelease)
     discard scopedBarrier.descendants.fetchSub(1, moRelaxed)
     preCondition: scopedBarrier.descendants.load(moAcquire) >= 0
 
@@ -97,4 +101,5 @@ proc hasDescendantTasks*(scopedBarrier: var ScopedBarrier): bool {.inline.} =
   ## Returns true if a scoped barrier has at least a descendant task.
   ## This should only be called from the thread that created the scoped barrier.
   preCondition: scopedBarrier.descendants.load(moAcquire) >= 0
-  scopedBarrier.descendants.load(moAcquire) == 0
+  scopedBarrier.descendants.load(moRelaxed) == 0
+  fence(moAcquire)

@@ -77,6 +77,13 @@ task test, "Run Weave tests":
     if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
       test "-d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
 
+  # Full test that combine everything:
+  # - Nested parallelFor + parallelStrided
+  # - spawn
+  # - spawnDelayed by pledges
+  # - syncScope
+  test "-d:danger", "benchmarks/matmul_gemm_blas/test_gemm_output.nim"
+
 task test_gc_arc, "Run Weave tests with --gc:arc":
   test "--gc:arc", "weave/cross_thread_com/channels_spsc_single.nim"
   test "--gc:arc", "weave/cross_thread_com/channels_spsc_single_ptr.nim"
@@ -127,3 +134,10 @@ task test_gc_arc, "Run Weave tests with --gc:arc":
   when defined(i386) or defined(amd64):
     if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
       test "--gc:arc -d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
+
+  # Full test that combine everything:
+  # - Nested parallelFor + parallelStrided
+  # - spawn
+  # - spawnDelayed by pledges
+  # - syncScope
+  test "-d:danger", "benchmarks/matmul_gemm_blas/test_gemm_output.nim"

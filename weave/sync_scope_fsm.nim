@@ -179,11 +179,13 @@ synthesize(syncScopeFSA):
 template syncScope*(body: untyped): untyped =
   bind wait
   block:
+    let suspendedScope = mySyncScope()
     var scopedBarrier {.noInit.}: ScopedBarrier
     initialize(scopedBarrier)
     mySyncScope() = addr(scopedBarrier)
     body
     wait(scopedBarrier)
+    mySyncScope() = suspendedScope
 
 # Dump the graph
 # -------------------------------------------

@@ -83,7 +83,7 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
   myWorker().initialize(maxID())
   myWorker().deque.initialize()
   myWorker().workSharingRequests.initialize()
-  myWorker().currentScope = nil
+  mySyncScope() = nil
 
   Backoff:
     myParking().initialize()
