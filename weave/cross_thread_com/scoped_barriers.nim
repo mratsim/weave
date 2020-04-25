@@ -101,5 +101,5 @@ proc hasDescendantTasks*(scopedBarrier: var ScopedBarrier): bool {.inline.} =
   ## Returns true if a scoped barrier has at least a descendant task.
   ## This should only be called from the thread that created the scoped barrier.
   preCondition: scopedBarrier.descendants.load(moAcquire) >= 0
-  scopedBarrier.descendants.load(moRelaxed) == 0
+  result = scopedBarrier.descendants.load(moRelaxed) == 0
   fence(moAcquire)
