@@ -15,16 +15,8 @@ import
   ./scheduler, ./contexts, ./state_machines/sync,
   ./datatypes/[flowvars, sync_types],
   ./instrumentation/[contracts, profilers],
-  ./cross_thread_com/scoped_barriers
+  ./cross_thread_com/[scoped_barriers, pledges]
 
-when not defined(cpp):
-  import ./cross_thread_com/pledges
-else:
-  template delayedUntilMulti(task, pool: untyped, pledges: varargs[untyped]): untyped =
-    discard
-
-# workaround visibility issues
-export profilers, contexts
 
 proc spawnImpl(pledges: NimNode, funcCall: NimNode): NimNode =
   # We take typed argument so that overloading resolution
@@ -252,70 +244,67 @@ when isMainModule:
 
     main2()
 
-  when not defined(cpp):
-    import ./cross_thread_com/pledges
+  block: # Delayed computation
 
-    block: # Delayed computation
+    proc echoA(pA: Pledge) =
+      echo "Display A, sleep 1s, create parallel streams 1 and 2"
+      sleep(1000)
+      pA.fulfill()
 
-      proc echoA(pA: Pledge) =
-        echo "Display A, sleep 1s, create parallel streams 1 and 2"
-        sleep(1000)
-        pA.fulfill()
+    proc echoB1(pB1: Pledge) =
+      echo "Display B1, sleep 1s"
+      sleep(1000)
+      pB1.fulfill()
 
-      proc echoB1(pB1: Pledge) =
-        echo "Display B1, sleep 1s"
-        sleep(1000)
-        pB1.fulfill()
+    proc echoB2() =
+      echo "Display B2, exit stream"
 
-      proc echoB2() =
-        echo "Display B2, exit stream"
+    proc echoC1() =
+      echo "Display C1, exit stream"
 
-      proc echoC1() =
-        echo "Display C1, exit stream"
+    proc main() =
+      echo "Sanity check 3: Dataflow parallelism"
+      init(Weave)
+      let pA = newPledge()
+      let pB1 = newPledge()
+      spawnDelayed pB1, echoC1()
+      spawnDelayed pA, echoB2()
+      spawnDelayed pA, echoB1(pB1)
+      spawn echoA(pA)
+      exit(Weave)
 
-      proc main() =
-        echo "Sanity check 3: Dataflow parallelism"
-        init(Weave)
-        let pA = newPledge()
-        let pB1 = newPledge()
-        spawnDelayed pB1, echoC1()
-        spawnDelayed pA, echoB2()
-        spawnDelayed pA, echoB1(pB1)
-        spawn echoA(pA)
-        exit(Weave)
+    main()
 
-      main()
+  block: # Delayed computation with multiple dependencies
 
-    block: # Delayed computation with multiple dependencies
+    proc echoA(pA: Pledge) =
+      echo "Display A, sleep 1s, create parallel streams 1 and 2"
+      sleep(1000)
+      pA.fulfill()
 
-      proc echoA(pA: Pledge) =
-        echo "Display A, sleep 1s, create parallel streams 1 and 2"
-        sleep(1000)
-        pA.fulfill()
+    proc echoB1(pB1: Pledge) =
+      echo "Display B1, sleep 1s"
+      sleep(1000)
+      pB1.fulfill()
 
-      proc echoB1(pB1: Pledge) =
-        echo "Display B1, sleep 1s"
-        sleep(1000)
-        pB1.fulfill()
+    proc echoB2(pB2: Pledge) =
+      echo "Display B2, no sleep"
+      pB2.fulfill()
 
-      proc echoB2(pB2: Pledge) =
-        echo "Display B2, no sleep"
-        pB2.fulfill()
+    proc echoC12() =
+      echo "Display C12, exit stream"
 
-      proc echoC12() =
-        echo "Display C12, exit stream"
+    proc main() =
+      echo "Sanity check 4: Dataflow parallelism with multiple dependencies"
+      init(Weave)
+      let pA = newPledge()
+      let pB1 = newPledge()
+      let pB2 = newPledge()
+      spawnDelayed pB1, pB2, echoC12()
+      spawnDelayed pA, echoB2(pB2)
+      spawnDelayed pA, echoB1(pB1)
+      spawn echoA(pA)
+      exit(Weave)
+      echo "Weave runtime exited"
 
-      proc main() =
-        echo "Sanity check 4: Dataflow parallelism with multiple dependencies"
-        init(Weave)
-        let pA = newPledge()
-        let pB1 = newPledge()
-        let pB2 = newPledge()
-        spawnDelayed pB1, pB2, echoC12()
-        spawnDelayed pA, echoB2(pB2)
-        spawnDelayed pA, echoB1(pB1)
-        spawn echoA(pA)
-        exit(Weave)
-        echo "Weave runtime exited"
-
-      main()
+    main()

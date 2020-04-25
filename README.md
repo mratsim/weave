@@ -225,14 +225,8 @@ For example on MacOS, the `pthread` implementation does not expose barrier funct
 
 ### C++ compilation
 
-Weave provides a "dataflow parallelism" feature that
-allows:
-- building a computation graph lazily
-- by delaying parallel tasks depending on arbitrary conditions
-
-It requires a data structure (`Pledge`) that is valid in C but invalid in C++ due to an incompatible mix of `Atomics<T>` in `union type` and `flexible array member`. https://github.com/mratsim/weave/issues/95.
-
-This feature is deactivated when compiling to C++.
+The `syncScope` feature will not compile correctly in C++ mode if it is used in a for loop.
+Upstream: https://github.com/nim-lang/Nim/issues/14118
 
 ### Windows 32-bit
 
