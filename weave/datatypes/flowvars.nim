@@ -80,7 +80,7 @@ EagerFV:
   proc readyWith*[T](fv: Flowvar[T], childResult: T) {.inline.} =
     ## Send the Flowvar result from the child thread processing the task
     ## to its parent thread.
-    let resultSent = fv.chan[].trySend(childResult)
+    let resultSent {.used.} = fv.chan[].trySend(childResult)
     postCondition: resultSent
 
   template isFutReady*(fv: Flowvar): bool =
