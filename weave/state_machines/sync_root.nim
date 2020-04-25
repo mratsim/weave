@@ -15,12 +15,9 @@ import
   ../contexts, ../config,
   ../datatypes/[sync_types, prell_deques],
   ../cross_thread_com/channels_spsc_single_ptr,
-  ../memory/[lookaside_lists, allocs],
-  ../scheduler, ../signals, ../workers, ../thieves, ../victims,
-  ./handle_thieves, ./recv_task_else_steal,
-  ../runtime,
-  # Low-level primitives
-  ../primitives/barriers
+  ../memory/lookaside_lists,
+  ../scheduler, ../workers, ../thieves, ../victims,
+  ./handle_thieves, ./recv_task_else_steal
 
 # Runtime - Finite Automaton rewrite
 # ----------------------------------------------------------------------------------
@@ -203,42 +200,6 @@ behavior(syncRootFSA):
 
 synthesize(syncRootFSA):
   proc syncRoot*(_: type Weave) {.gcsafe.}
-
-proc globalCleanup() =
-  for i in 1 ..< workforce():
-    joinThread(globalCtx.threadpool[i])
-
-  globalCtx.barrier.delete()
-  wv_free(globalCtx.threadpool)
-
-  # Channels, each thread cleaned its channels
-  # We just need to reclaim the memory
-  wv_free(globalCtx.com.thefts)
-  wv_free(globalCtx.com.tasks)
-
-  # The root task has no parent
-  ascertain: myTask().isRootTask()
-  delete(myTask())
-
-  # TODO takeover the leftover pools
-
-  metrics:
-    log("+========================================+\n")
-
-proc exit*(_: type Weave) =
-  syncRoot(_)
-  signalTerminate(nil)
-  localCtx.signaledTerminate = true
-
-  # 1 matching barrier in worker_entry_fn
-  discard globalCtx.barrier.wait()
-
-  # 1 matching barrier in metrics
-  workerMetrics()
-
-  threadLocalCleanup()
-  globalCleanup()
-
 
 # Dump the graph
 # -------------------------------------------

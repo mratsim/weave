@@ -14,7 +14,8 @@ import
   ./datatypes/[sync_types, prell_deques, binary_worker_trees],
   ./cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch],
   ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
-  ./scheduler, ./victims,
+  ./scheduler, ./victims, ./signals,
+  ./state_machines/sync_root,
   # Low-level primitives
   ./primitives/barriers
 
@@ -25,8 +26,6 @@ else:
 
 # Runtime public routines
 # ----------------------------------------------------------------------------------
-
-type Weave* = object
 
 proc init*(_: type Weave) =
   # TODO detect Hyper-Threading and NUMA domain
@@ -131,3 +130,38 @@ proc getThreadId*(_: type Weave): int {.inline.} =
 proc getNumThreads*(_: type Weave): int {.inline.} =
   ## Returns the number of threads available in Weave threadpool
   workforce().int
+
+proc globalCleanup() =
+  for i in 1 ..< workforce():
+    joinThread(globalCtx.threadpool[i])
+
+  globalCtx.barrier.delete()
+  wv_free(globalCtx.threadpool)
+
+  # Channels, each thread cleaned its channels
+  # We just need to reclaim the memory
+  wv_free(globalCtx.com.thefts)
+  wv_free(globalCtx.com.tasks)
+
+  # The root task has no parent
+  ascertain: myTask().isRootTask()
+  delete(myTask())
+
+  # TODO takeover the leftover pools
+
+  metrics:
+    log("+========================================+\n")
+
+proc exit*(_: type Weave) =
+  syncRoot(_)
+  signalTerminate(nil)
+  localCtx.signaledTerminate = true
+
+  # 1 matching barrier in worker_entry_fn
+  discard globalCtx.barrier.wait()
+
+  # 1 matching barrier in metrics
+  workerMetrics()
+
+  threadLocalCleanup()
+  globalCleanup()

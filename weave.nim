@@ -19,7 +19,7 @@ export
   init, exit,
   loadBalance,
   isSpawned,
-  getThreadId,
+  getThreadId, getNumThreads,
   # Experimental threadlocal prologue/epilogue
   parallelForStaged, parallelForStagedStrided,
   # Experimental scope barrier
