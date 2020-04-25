@@ -8,12 +8,12 @@
 import synthesis
 
 import
-  ./datatypes/[sync_types, context_thread_local,
-               sparsesets, binary_worker_trees],
-  ./contexts, ./config,
-  ./instrumentation/[contracts, profilers, loggers],
-  ./thieves,
-  ./signals, ./targets
+  ../datatypes/[sync_types, context_thread_local,
+                sparsesets, binary_worker_trees],
+  ../contexts, ../config,
+  ../instrumentation/[contracts, profilers, loggers],
+  ../thieves,
+  ../signals, ../targets
 
 # Victims & Thiefs - Finite Automaton rewrite
 # ----------------------------------------------------------------------------------

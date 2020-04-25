@@ -16,7 +16,7 @@ import
   ./parallel_macros, ./parallel_reduce,
   ./contexts, ./runtime, ./config,
   ./instrumentation/[loggers, contracts],
-  ./datatypes/flowvars, ./await_fsm,
+  ./datatypes/flowvars, ./state_machines/await_fsm,
   ./parallel_tasks
 
 when not compileOption("threads"):
@@ -306,7 +306,7 @@ macro parallelForStrided*(loopParams: untyped, stride: Positive, body: untyped):
 # --------------------------------------------------------
 
 when isMainModule:
-  import ./instrumentation/loggers, ./runtime, ./runtime_fsm, os
+  import ./instrumentation/loggers, ./runtime, ./state_machines/runtime_fsm, os
 
   block:
     proc main() =

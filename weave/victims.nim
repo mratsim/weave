@@ -12,7 +12,7 @@ import
   ./instrumentation/[contracts, profilers, loggers],
   ./cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, channels_spsc_single, scoped_barriers],
   ./thieves, ./loop_splitting,
-  ./stealing_fsm
+  ./state_machines/stealing_fsm
 
 # Victims - Proxy handling on behalf of idle child workers
 # ----------------------------------------------------------------------------------

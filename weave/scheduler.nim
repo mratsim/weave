@@ -14,7 +14,7 @@ import
   ./contexts, ./config,
   ./victims, ./loop_splitting,
   ./thieves, ./workers,
-  ./random/rng, ./stealing_fsm, ./work_fsm, ./scheduler_fsm
+  ./random/rng, ./state_machines/stealing_fsm, ./state_machines/work_fsm, ./state_machines/scheduler_fsm
 
 # Local context
 # ----------------------------------------------------------------------------------

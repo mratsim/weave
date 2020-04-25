@@ -12,7 +12,7 @@ import
   # Standard library
   macros, typetraits,
   # Internal
-  ./scheduler, ./contexts, ./await_fsm,
+  ./scheduler, ./contexts, ./state_machines/await_fsm,
   ./datatypes/[flowvars, sync_types],
   ./instrumentation/[contracts, profilers],
   ./cross_thread_com/scoped_barriers
@@ -212,7 +212,7 @@ macro spawnDelayed*(pledges: varargs[typed], fnCall: typed): untyped =
 # --------------------------------------------------------
 
 when isMainModule:
-  import ./runtime, ./runtime_fsm, os
+  import ./runtime, ./state_machines/runtime_fsm, os
 
   block: # Async without result
 

@@ -8,14 +8,14 @@
 import synthesis
 
 import
-  ./instrumentation/[contracts, profilers, loggers],
-  ./primitives/barriers,
-  ./datatypes/[sync_types, prell_deques, context_thread_local],
-  ./cross_thread_com/scoped_barriers,
-  ./memory/lookaside_lists,
-  ./contexts, ./config,
-  ./victims,
-  ./thieves, ./workers,
+  ../instrumentation/[contracts, profilers, loggers],
+  ../primitives/barriers,
+  ../datatypes/[sync_types, prell_deques, context_thread_local],
+  ../cross_thread_com/scoped_barriers,
+  ../memory/lookaside_lists,
+  ../contexts, ../config,
+  ../victims,
+  ../thieves, ../workers,
   ./work_fsm, ./scheduler_fsm
 
 # Scoped Barrier - Finite state machine

@@ -8,8 +8,8 @@
 import
   weave/[
     parallel_tasks, parallel_for, parallel_for_staged,
-    runtime,
-    runtime_fsm, await_fsm, sync_scope_fsm],
+    runtime],
+  weave/state_machines/[runtime_fsm, await_fsm, sync_scope_fsm],
   weave/datatypes/flowvars
 
 export
