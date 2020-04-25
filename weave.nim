@@ -34,9 +34,3 @@ when not defined(cpp):
     fulfill, newPledge
 else:
   {.warning: "In C++ mode Pledges (for data flow parallelism) are not available, https://github.com/mratsim/weave/issues/95".}
-
-# TODO, those are workaround for not binding symbols in spawn macro
-import weave/contexts
-export
-  readyWith,
-  isRootTask
