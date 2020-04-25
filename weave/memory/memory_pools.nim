@@ -146,7 +146,7 @@ type
     ##    on the heap instead of with {.threadvar.}
     ##    if you need to disconnect its lifetime
     ##    from its owning thread.
-    first{.align: WV_CacheLinePadding.}: ptr Arena
+    first{.align: WV_CacheLinePadding.}: ptr Arena # Alignment is **VERY** critical (40% perf difference)
     last: ptr Arena
     numArenas: range[int32(0) .. high(int32)]
     threadID: int
