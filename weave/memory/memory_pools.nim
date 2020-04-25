@@ -623,12 +623,13 @@ proc takeover*(pool: var TLPoolAllocator, target: sink TLPoolAllocator) =
 # TODO: Once upstream fixes https://github.com/nim-lang/Nim/issues/13122
 #       the size here will likely be wrong
 
-assert sizeof(ChannelMpscUnboundedBatch[ptr MemBlock]) == 320,
-  "MPSC channel size was " & $sizeof(ChannelMpscUnboundedBatch[ptr MemBlock])
+debugSizeAsserts:
+  doAssert sizeof(ChannelMpscUnboundedBatch[ptr MemBlock]) == 320,
+    "MPSC channel size was " & $sizeof(ChannelMpscUnboundedBatch[ptr MemBlock])
 
-assert sizeof(Arena) == WV_MemArenaSize,
-  "The real arena size was " & $sizeof(Arena) &
-  " but the asked WV_MemArenaSize was " & $WV_MemArenaSize
+  doAssert sizeof(Arena) == WV_MemArenaSize,
+    "The real arena size was " & $sizeof(Arena) &
+    " but the asked WV_MemArenaSize was " & $WV_MemArenaSize
 
 when isMainModule:
   import times, strformat, system/ansi_c, math, strutils

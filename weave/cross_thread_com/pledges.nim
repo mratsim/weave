@@ -526,7 +526,7 @@ macro delayedUntilMulti*(task: Task, pool: var TLPoolAllocator, pledges: varargs
 # Sanity checks
 # ------------------------------------------------------------------------------
 
-debug:
+debugSizeAsserts:
   when sizeof(pointer) == 8:
     let expectedSize = 40
   else:

@@ -36,9 +36,11 @@ type AwaitEvent = enum
 declareAutomaton(awaitFSA, AwaitState, AwaitEvent)
 setPrologue(awaitFSA):
   ## Eagerly complete an awaited FlowVar
-  when compileOption("assertions"):
-    # Ensure that we keep hold on the task we are awaiting
-    let thisTask = myTask()
+
+  # TODO: tasks cannot be printed by "ascertain"
+  # when compileOption("assertions"):
+  #   # Ensure that we keep hold on the task we are awaiting
+  #   let thisTask = myTask()
 
   var task: Task
   debug: log("Worker %2d: forcefut 1 - task from local deque\n", myID())

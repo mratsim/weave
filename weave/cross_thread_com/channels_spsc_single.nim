@@ -10,7 +10,7 @@ import
   ../config,
   ../instrumentation/[contracts, loggers]
 
-when compileOption("assertions") or defined(WV_Asserts):
+when defined(WV_Asserts) or compileOption("assertions") or defined(WV_Debug):
   import ../memory/memory_pools
 
 type
