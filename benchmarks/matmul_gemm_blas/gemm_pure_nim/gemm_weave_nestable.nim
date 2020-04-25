@@ -288,7 +288,7 @@ when isMainModule:
               [3.0, 3]]
 
     var res_ab: array[3, array[2, float]]
-    gemm_strided(
+    gemm_strided_nestable(
       3, 2, 3,
       1.0,  a[0][0].unsafeAddr, 3, 1,
             b[0][0].unsafeAddr, 2, 1,
@@ -314,7 +314,7 @@ when isMainModule:
               [24.0, 24]]
 
     var res_ab: array[3, array[2, float]]
-    gemm_strided(
+    gemm_strided_nestable(
       3, 2, 3,
       1.0,  a[0][0].unsafeAddr, 3, 1,
             b[0][0].unsafeAddr, 2, 1,
@@ -338,7 +338,7 @@ when isMainModule:
               [139.0,154]]
 
     var res_ab: array[2, array[2, float]]
-    gemm_strided(
+    gemm_strided_nestable(
       2, 2, 3,
       1.0,  a[0][0].unsafeAddr, 3, 1,
             b[0][0].unsafeAddr, 2, 1,
@@ -363,7 +363,7 @@ when isMainModule:
               [27, 7, 34,-19]]
 
     var res_ab: array[2, array[4, int]]
-    gemm_strided(
+    gemm_strided_nestable(
       2, 4, 3,
       1,  a[0][0].unsafeAddr, 3, 1,
           b[0][0].unsafeAddr, 4, 1,
@@ -395,7 +395,7 @@ when isMainModule:
               [ 66, 43,39,15]]
 
     var res_ab: array[5, array[4, int]]
-    gemm_strided(
+    gemm_strided_nestable(
       5, 4, 4,
       1,  a[0][0].unsafeAddr, 4, 1,
           b[0][0].unsafeAddr, 4, 1,
@@ -425,7 +425,7 @@ when isMainModule:
               [14,23]]
 
     var res_ab: array[2, array[2, int]]
-    gemm_strided(
+    gemm_strided_nestable(
       2, 2, 8,
       1,  a[0][0].unsafeAddr, 8, 1,
           b[0][0].unsafeAddr, 2, 1,
@@ -461,7 +461,7 @@ when isMainModule:
               [ 8,  8,  0, 16,  0,  0, 16,  8]]
 
     var res_ab: array[8, array[8, int]]
-    gemm_strided(
+    gemm_strided_nestable(
       8, 8, 2,
       1,  a[0][0].unsafeAddr, 2, 1,
           b[0][0].unsafeAddr, 8, 1,
@@ -506,7 +506,7 @@ when isMainModule:
               [14,12, 9,22,27,17,51,23]]
 
     var res_ab: array[8, array[8, int]]
-    gemm_strided(
+    gemm_strided_nestable(
       8, 8, 8,
       1,  a[0][0].unsafeAddr, 8, 1,
           b[0][0].unsafeAddr, 8, 1,
