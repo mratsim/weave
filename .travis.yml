@@ -70,6 +70,12 @@ matrix:
 git:
   submodules: false
 
+addons:
+  apt:
+    packages:
+      # On Linux we need OpenBLAS, on OSX Apple Accelerate is present by default
+      - libopenblas-dev
+
 before_install:
   - |
     if [ "${CHANNEL}" = stable ]; then

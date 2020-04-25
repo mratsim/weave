@@ -186,6 +186,15 @@ steps:
     displayName: 'Building the package dependencies'
 
   - bash: |
+      sudo apt-get update
+      sudo apt-get install libopenblas-dev
+    displayName: 'Install OpenBLAS test dependency for property-based testing'
+    condition: and(
+                 ne(variables['TEST_LANG'], 'cpp'),
+                 eq(variables['Agent.OS'], 'Linux')
+               )
+
+  - bash: |
       echo "PATH=${PATH}"
       export ucpu=${UCPU}
       nimble test

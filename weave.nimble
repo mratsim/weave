@@ -27,12 +27,12 @@ proc test(flags, path: string) =
   exec "nim " & lang & " " & flags & " --verbosity:0 --hints:off --warnings:off --threads:on -d:release --outdir:build -r " & path
 
 task test, "Run Weave tests":
-  test "", "weave/channels/channels_spsc_single.nim"
-  test "", "weave/channels/channels_spsc_single_ptr.nim"
-  test "", "weave/channels/channels_mpsc_unbounded_batch.nim"
+  test "", "weave/cross_thread_com/channels_spsc_single.nim"
+  test "", "weave/cross_thread_com/channels_spsc_single_ptr.nim"
+  test "", "weave/cross_thread_com/channels_mpsc_unbounded_batch.nim"
 
   if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
-    test "", "weave/channels/pledges.nim"
+    test "", "weave/cross_thread_com/pledges.nim"
 
   test "", "weave/datatypes/binary_worker_trees.nim"
   test "", "weave/datatypes/bounded_queues.nim"
@@ -77,13 +77,22 @@ task test, "Run Weave tests":
     if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
       test "-d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
 
+  # Full test that combine everything:
+  # - Nested parallelFor + parallelStrided
+  # - spawn
+  # - spawnDelayed by pledges
+  # - syncScope
+  when not defined(windows) and (defined(i386) or defined(amd64)):
+    if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
+      test "-d:danger", "benchmarks/matmul_gemm_blas/test_gemm_output.nim"
+
 task test_gc_arc, "Run Weave tests with --gc:arc":
-  test "--gc:arc", "weave/channels/channels_spsc_single.nim"
-  test "--gc:arc", "weave/channels/channels_spsc_single_ptr.nim"
-  test "--gc:arc", "weave/channels/channels_mpsc_unbounded_batch.nim"
+  test "--gc:arc", "weave/cross_thread_com/channels_spsc_single.nim"
+  test "--gc:arc", "weave/cross_thread_com/channels_spsc_single_ptr.nim"
+  test "--gc:arc", "weave/cross_thread_com/channels_mpsc_unbounded_batch.nim"
 
   if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
-    test "--gc:arc", "weave/channels/pledges.nim"
+    test "--gc:arc", "weave/cross_thread_com/pledges.nim"
 
   test "--gc:arc", "weave/datatypes/binary_worker_trees.nim"
   test "--gc:arc", "weave/datatypes/bounded_queues.nim"
@@ -127,3 +136,12 @@ task test_gc_arc, "Run Weave tests with --gc:arc":
   when defined(i386) or defined(amd64):
     if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
       test "--gc:arc -d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
+
+  # Full test that combine everything:
+  # - Nested parallelFor + parallelStrided
+  # - spawn
+  # - spawnDelayed by pledges
+  # - syncScope
+  when not defined(windows) and (defined(i386) or defined(amd64)):
+    if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
+      test "-d:danger", "benchmarks/matmul_gemm_blas/test_gemm_output.nim"

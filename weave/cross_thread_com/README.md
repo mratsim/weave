@@ -1,6 +1,6 @@
-# Communications channels
+# Cross-Thread Communication
 
-In this folder, you will find all cross-thread synchronization types used in Weave.
+In this folder, you will find all cross-thread synchronization primitives used in Weave.
 
 The main type is the Channel which comes in different flavors depending on its use.
 

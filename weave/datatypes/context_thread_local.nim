@@ -10,7 +10,8 @@ import
   ../config,
   ../memory/[lookaside_lists, persistacks, allocs],
   ../instrumentation/contracts,
-  ../random/rng
+  ../random/rng,
+  ../cross_thread_com/scoped_barriers
 
 # Thread-local context
 # ----------------------------------------------------------------------------------
@@ -45,6 +46,7 @@ type
     workSharingRequests*: BoundedQueue[2, StealRequest]
     deque*: PrellDeque[Task]
     currentTask*: Task
+    currentScope*: ptr ScopedBarrier
     leftIsWaiting*: bool
     rightIsWaiting*: bool
     isWaiting*: bool

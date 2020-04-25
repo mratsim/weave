@@ -6,7 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
-  ../channels/channels_spsc_single,
+  ../cross_thread_com/channels_spsc_single,
   ../memory/[allocs, memory_pools],
   ../instrumentation/contracts,
   ../config, ../contexts

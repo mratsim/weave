@@ -7,7 +7,7 @@
 
 import
   ./datatypes/[context_global, context_thread_local, sync_types, prell_deques, binary_worker_trees],
-  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch],
+  ./cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, scoped_barriers],
   ./memory/[persistacks, lookaside_lists, memory_pools, allocs],
   ./config,
   ./instrumentation/[profilers, loggers, contracts]
@@ -16,10 +16,10 @@ when defined(WV_metrics):
   import system/ansi_c, ./primitives/barriers
 
 Backoff:
-  import ./channels/event_notifiers
+  import ./cross_thread_com/event_notifiers
 
 when not defined(cpp):
-  import ./channels/pledges
+  import ./cross_thread_com/pledges
 
 # Contexts
 # ----------------------------------------------------------------------------------
@@ -83,6 +83,9 @@ template myMetrics*: untyped =
   metrics:
     localCtx.counters
 
+template mySyncScope*: ptr ScopedBarrier =
+  localCtx.worker.currentScope
+
 Backoff:
   template myParking*: EventNotifier =
     globalCtx.com.parking[localCtx.worker.ID]
@@ -106,6 +109,7 @@ proc newTaskFromCache*(): Task =
 
   # result.fn = nil # Always overwritten
   # result.parent = nil # Always overwritten
+  # result.scopedBarrier = nil # Always overwritten
   result.prev = nil
   result.next = nil
   result.start = 0

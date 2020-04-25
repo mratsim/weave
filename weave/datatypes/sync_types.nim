@@ -8,7 +8,7 @@
 import
   ./sparsesets, ./binary_worker_trees,
   ../config,
-  ../channels/channels_spsc_single_ptr,
+  ../cross_thread_com/[channels_spsc_single_ptr, scoped_barriers],
   ../instrumentation/contracts,
   std/atomics
 
@@ -39,6 +39,7 @@ type
     stop*: int
     stride*: int
     # 64 bytes
+    scopedBarrier*: ptr ScopedBarrier
     futures*: pointer    # LinkedList of futures required by the current task
     futureSize*: uint8   # Size of the future result type if relevant
     hasFuture*: bool     # If a task is associated with a future, the future is stored at data[0]
@@ -46,7 +47,7 @@ type
     isInitialIter*: bool # Awaitable for-loops return true for the initial iter
     when FirstVictim == LastVictim:
       victim*: WorkerID
-    # 79 bytes
+    # 84 bytes (or 88 with FirstVictim = LastVictim)
     # User data - including the FlowVar channel to send back result.
     # It is very likely that User data contains a pointer (the Flowvar channel)
     # We align to avoid torn reads/extra bookkeeping.

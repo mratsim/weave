@@ -38,9 +38,16 @@ when isMainModule:
     let weave = benchWeaveGEMM(a, b, (M,K), (K,N), NbSamples)
     exit(Weave)
 
+    init(Weave)
+    let weave_nestable = benchWeaveGEMM_nestable(a, b, (M,K), (K,N), NbSamples)
+    exit(Weave)
+
     let weaveError = mean_relative_error(weave, mkl)
+    let weaveNestableError = mean_relative_error(weave_nestable, mkl)
     echo "Mean Relative Error of Weave vs reference: ", weaveError
     doAssert weaveError <= 1e-5'f32, $weaveError
+    echo "Mean Relative Error of Weave (nestable) vs reference: ", weaveNestableError
+    doAssert weaveNestableError <= 1e-5'f32, $weaveNestableError
 
     # let laserError = mean_relative_error(laser, mkl)
     # echo "Mean Relative Error of Laser vs reference: ", laserError

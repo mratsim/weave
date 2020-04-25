@@ -113,7 +113,7 @@ proc parallelForSplitted(index, start, stop, stride, captured, capturedTy, depen
   ## In case a parallelFor depends on iteration pledge indexed by the loop variable
   ## we can't use regular parallel loop with lazy splitting
   ## we need to split the loop eagerly so that each iterations can be started independently
-  ## as soo as the corresponding iteration pledge is fulfilled.
+  ## as soon as the corresponding iteration pledge is fulfilled.
   ## In that case, the loop cannot have futures.
 
   result = newStmtList()
@@ -404,7 +404,7 @@ when isMainModule:
     echo "-------------------------"
 
   when not defined(cpp):
-    import ./channels/pledges
+    import ./cross_thread_com/pledges
 
     block:
       proc main6() =

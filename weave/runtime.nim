@@ -12,7 +12,7 @@ import
   ./instrumentation/[contracts, profilers, loggers],
   ./contexts, ./config,
   ./datatypes/[sync_types, prell_deques, binary_worker_trees],
-  ./channels/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch],
+  ./cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch],
   ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
   ./scheduler, ./signals, ./workers, ./thieves, ./victims, ./work_fsm,
   # Low-level primitives
@@ -74,6 +74,7 @@ proc init*(_: type Weave) =
   myWorker().currentTask = newTaskFromCache()
   myTask().parent = nil
   myTask().fn = cast[type myTask().fn](0xEFFACED)
+  myTask().scopedBarrier = nil
 
   init(localCtx)
   # Wait for the child threads

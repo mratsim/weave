@@ -29,7 +29,7 @@
 # On NUMA, we need to ensure the locality of the pages
 
 import
-  ../channels/channels_mpsc_unbounded_batch,
+  ../cross_thread_com/channels_mpsc_unbounded_batch,
   ../instrumentation/[contracts, loggers, sanitizers],
   ../config,
   ./allocs, ./thread_id,

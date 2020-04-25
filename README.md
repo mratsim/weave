@@ -157,8 +157,25 @@ exit(Weave)
 - `newPledge`, `fulfill` and `spawnDelayed` (experimental) to delay a task until some dependencies are met. This allows expressing precise data dependencies and producer-consumer relationships.
 - `sync(Flowvar)` will await a Flowvar and block until you receive a result.
 - `syncRoot(Weave)` is a global barrier for the main thread on the main task.
+  Using syncRoot in a proc means that the can only be called from the main thread.
+  `syncRoot(Weave)` is implicitly called by `exit(Weave)`
+- `syncScope` is a scope barrier. The thread will not move beyond the scope until
+  all tasks and parallel loops spawned and their descendants are finished.
+  `syncScope` is composable, it can be called by any thread, it can be nested.
+  It has the syntax of a block statement:
+  ```Nim
+  syncScope():
+    parallelFor i in 0 ..< N:
+      captures: {a, b}
+      parallelFor j in 0 ..< N:
+        captures: {i, a, b}
+    spawn foo()
+  ```
+  In this example, the thread encountering syncScope will create all the tasks for parallel loop i, will spawn foo() and then will be waiting at the end of the scope.
+  A thread blocked at the end of its scope is not idle, it still helps processing all the work existing and that
+  may be created by the current tasks.
 - `parallelFor`, `parallelForStrided`, `parallelForStaged`, `parallelForStagedStrided` are described above and in the experimental section.
-- `loadBalance(Weave)` gives the runtime the opportunity to distribute work. Insert this within long computation as due to Weave design, it's busy workers hat are also in charge of load balancing. This is done automatically when using `parallelFor`.
+- `loadBalance(Weave)` gives the runtime the opportunity to distribute work. Insert this within long computation as due to Weave design, it's the busy workers that are also in charge of load balancing. This is done automatically when using `parallelFor`.
 - `isSpawned` allows you to build speculative algorithm where a thread is spawned only if certain conditions are valid. See the `nqueens` benchmark for an example.
 - `getThreadId` returns a unique thread ID. The thread ID is in the range 0 ..< number of threads.
 
