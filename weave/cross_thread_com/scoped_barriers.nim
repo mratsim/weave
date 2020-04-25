@@ -59,6 +59,11 @@ type
 
 proc `=`*(dst: var ScopedBarrier, src: ScopedBarrier) {.error: "A scoped barrier cannot be copied.".}
 
+proc `=sink`*(dst: var ScopedBarrier, src: ScopedBarrier) {.inline.} =
+  # Nim doesn't respect noinit and tries to zeroMem then move the type
+  {.warning: "Moving a shared resource (an atomic type).".}
+  system.`=sink`(dst.descendants, src.descendants)
+
 debug:
   proc `=destroy`*(sb: var ScopedBarrier) {.inline.}=
     preCondition: sb.descendants.load(moRelaxed) == 0
