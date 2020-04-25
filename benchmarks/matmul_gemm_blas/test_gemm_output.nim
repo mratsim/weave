@@ -1,9 +1,5 @@
 # Apache v2 License
 # Mamy Ratsimbazafy
-#
-# Test vs OpenBLAS
-{.passC:"-fopenmp".}
-{.passL:"-fopenmp".}
 
 import
   std/[random, sequtils],
@@ -11,7 +7,10 @@ import
   ./gemm_pure_nim/[gemm_weave, gemm_weave_nestable],
   ../../weave
 
-const blas = "libopenblas.so"
+when defined(osx):
+  const blas = "libblas.dylib"
+else:
+  const blas = "libopenblas.so"
 
 type
   TransposeType* {.size: sizeof(cint).} = enum
