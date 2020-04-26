@@ -12,9 +12,9 @@ import
   # Standard library
   macros, typetraits,
   # Internal
-  ./scheduler, ./contexts, ./state_machines/sync,
+  ./scheduler, ./contexts,
   ./datatypes/[flowvars, sync_types],
-  ./instrumentation/[contracts, profilers],
+  ./instrumentation/contracts,
   ./cross_thread_com/[scoped_barriers, pledges]
 
 

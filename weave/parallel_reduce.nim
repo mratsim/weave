@@ -15,7 +15,7 @@ import
   ./parallel_macros, ./config,
   ./contexts,
   ./datatypes/flowvars,
-  ./instrumentation/[contracts, profilers]
+  ./instrumentation/contracts
 
 when not compileOption("threads"):
   {.error: "This requires --threads:on compilation flag".}
@@ -148,8 +148,6 @@ macro parallelReduceImpl*(loopParams: untyped, stride: int, body: untyped): unty
   ##   of suffer from data dependency latency (3 or 4 cycles)
   ##   https://software.intel.com/sites/landingpage/IntrinsicsGuide/#techs=SSE&expand=158
   ##   The reduction becomes memory-bound instead of CPU-latency-bound.
-  {.warning: "Parallel reduction is experimental.".}
-
   result = newStmtList()
 
   # Loop parameters

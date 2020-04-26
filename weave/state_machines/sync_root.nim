@@ -16,14 +16,12 @@ import
   ../datatypes/[sync_types, prell_deques],
   ../cross_thread_com/channels_spsc_single_ptr,
   ../memory/lookaside_lists,
-  ../scheduler, ../workers, ../thieves, ../victims,
-  ./handle_thieves, ./recv_task_else_steal
+  ../workers, ../thieves, ../victims,
+  ./handle_thieves, ./recv_task_else_steal,
+  ./dispatch_events
 
-# Runtime - Finite Automaton rewrite
+# Sync Root - Global runtime barrier
 # ----------------------------------------------------------------------------------
-# This file is temporary and is used to make
-# progressive refactoring of the codebase to
-# finite state machine code.
 
 type
   SyncState = enum
@@ -206,4 +204,4 @@ synthesize(syncRootFSA):
 
 when isMainModule:
   const dotRepr = toGraphviz(syncRootFSA)
-  writeFile("weave/sync_root.dot", dotRepr)
+  writeFile("weave/state_machines/sync_root.dot", dotRepr)

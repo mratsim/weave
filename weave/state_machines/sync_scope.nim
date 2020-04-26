@@ -192,4 +192,4 @@ template syncScope*(body: untyped): untyped =
 
 when isMainModule:
   const dotRepr = toGraphviz(syncScopeFSA)
-  writeFile("weave/sync_scope.dot", dotRepr)
+  writeFile("weave/state_machines/sync_scope.dot", dotRepr)

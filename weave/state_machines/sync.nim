@@ -206,4 +206,4 @@ proc sync*[T](fv: FlowVar[T]): T {.inline.} =
 
 when isMainModule:
   const dotRepr = toGraphviz(awaitFSA)
-  writeFile("weave/sync.dot", dotRepr)
+  writeFile("weave/state_machines/sync.dot", dotRepr)

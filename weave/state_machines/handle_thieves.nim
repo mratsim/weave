@@ -96,4 +96,4 @@ synthesize(handleThievesFSA):
 
 when isMainModule:
   const dotRepr = toGraphviz(handleThievesFSA)
-  writeFile("weave/handle_thieves.dot", dotRepr)
+  writeFile("weave/state_machines/handle_thieves.dot", dotRepr)
