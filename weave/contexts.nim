@@ -7,7 +7,7 @@
 
 import
   ./datatypes/[context_global, context_thread_local, sync_types, prell_deques, binary_worker_trees],
-  ./cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, scoped_barriers],
+  ./cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, scoped_barriers, pledges],
   ./memory/[persistacks, lookaside_lists, memory_pools, allocs],
   ./config,
   ./instrumentation/[profilers, loggers, contracts]
@@ -17,9 +17,6 @@ when defined(WV_metrics):
 
 Backoff:
   import ./cross_thread_com/event_notifiers
-
-when not defined(cpp):
-  import ./cross_thread_com/pledges
 
 # Contexts
 # ----------------------------------------------------------------------------------
@@ -138,36 +135,35 @@ proc flushAndDispose*(dq: var PrellDeque) =
   for task in items(leftovers):
     recycle(task)
 
-# Pledges
+# Pledges - Dataflow parallelism
 # ----------------------------------------------------------------------------------
-when not defined(cpp):
-  proc newPledge*(): Pledge =
-    ## Creates a pledge
-    ## Tasks associated with a pledge are only scheduled when the pledge is fulfilled.
-    ## A pledge can only be fulfilled once.
-    ## Pledges enable modeling precise producer-consumer data dependencies.
-    result.initialize(myMemPool())
+proc newPledge*(): Pledge =
+  ## Creates a pledge
+  ## Tasks associated with a pledge are only scheduled when the pledge is fulfilled.
+  ## A pledge can only be fulfilled once.
+  ## Pledges enable modeling precise producer-consumer data dependencies.
+  result.initialize(myMemPool())
 
-  proc newPledge*(start, stop, stride: SomeInteger): Pledge =
-    ## Creates a loop iteration pledge.
-    ## With a loop iteration pledge, tasks can be associated with a precise loop index.
-    ##
-    ## Tasks associated with a pledge are only scheduled when the pledge is fulfilled.
-    ## A pledge can only be fulfilled once.
-    ## Pledges enable modeling precise producer-consumer data dependencies.
-    result.initialize(myMemPool(), start.int32, stop.int32, stride.int32)
+proc newPledge*(start, stop, stride: SomeInteger): Pledge =
+  ## Creates a loop iteration pledge.
+  ## With a loop iteration pledge, tasks can be associated with a precise loop index.
+  ##
+  ## Tasks associated with a pledge are only scheduled when the pledge is fulfilled.
+  ## A pledge can only be fulfilled once.
+  ## Pledges enable modeling precise producer-consumer data dependencies.
+  result.initialize(myMemPool(), start.int32, stop.int32, stride.int32)
 
-  proc fulfill*(pledge: Pledge) =
-    ## Fulfills a pledge
-    ## All ready tasks that depended on that pledge will be scheduled immediately.
-    ## A ready task is a task that has all its pledged dependencies fulfilled.
-    fulfillImpl(pledge, myWorker().deque, addFirst)
+proc fulfill*(pledge: Pledge) =
+  ## Fulfills a pledge
+  ## All ready tasks that depended on that pledge will be scheduled immediately.
+  ## A ready task is a task that has all its pledged dependencies fulfilled.
+  fulfillImpl(pledge, myWorker().deque, addFirst)
 
-  proc fulfill*(pledge: Pledge, index: SomeInteger) =
-    ## Fulfills an iteration pledge
-    ## All ready tasks that depended on that pledge will be scheduled immediately.
-    ## A ready task is a task that has all its pledged dependencies fulfilled.
-    fulfillIterImpl(pledge, int32(index), myWorker().deque, addFirst)
+proc fulfill*(pledge: Pledge, index: SomeInteger) =
+  ## Fulfills an iteration pledge
+  ## All ready tasks that depended on that pledge will be scheduled immediately.
+  ## A ready task is a task that has all its pledged dependencies fulfilled.
+  fulfillIterImpl(pledge, int32(index), myWorker().deque, addFirst)
 
 # Dynamic Scopes
 # ----------------------------------------------------------------------------------

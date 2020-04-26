@@ -10,7 +10,9 @@ import
     parallel_tasks, parallel_for, parallel_for_staged,
     runtime],
   weave/state_machines/[sync_root, sync, sync_scope],
-  weave/datatypes/flowvars
+  weave/datatypes/flowvars,
+  weave/cross_thread_com/pledges,
+  weave/contexts
 
 export
   Flowvar, Weave,
@@ -23,14 +25,7 @@ export
   # Experimental threadlocal prologue/epilogue
   parallelForStaged, parallelForStagedStrided,
   # Experimental scope barrier
-  syncScope
-
-when not defined(cpp):
+  syncScope,
   # Experimental dataflow parallelism
-  import weave/cross_thread_com/pledges
-
-  export
-    spawnDelayed, Pledge,
-    fulfill, newPledge
-else:
-  {.warning: "In C++ mode Pledges (for data flow parallelism) are not available, https://github.com/mratsim/weave/issues/95".}
+  spawnDelayed, Pledge,
+  fulfill, newPledge

@@ -15,8 +15,6 @@ import
   ../instrumentation/contracts,
   ../config
 
-static: doAssert not defined(cpp), "Pledges are not compatible with C++ target at the moment: https://github.com/nim-lang/Nim/issues/13062, https://github.com/nim-lang/Nim/issues/13093"
-
 # Pledges
 # ----------------------------------------------------
 # Pledges are the counterpart to Flowvar.
@@ -149,15 +147,19 @@ type
     Single
     Iteration
 
+  PledgeIter = object
+    numBuckets: int32
+    start, stop, stride: int32
+    impls: ptr UncheckedArray[PledgeImpl]
+
+  PledgeUnion {.union.} = object
+    impl: PledgeImpl
+    iter: PledgeIter
+
   PledgePtr = ptr object
     refCount: Atomic[int32]
-    case kind: PledgeKind
-    of Single:
-      impl: PledgeImpl
-    of Iteration:
-      numBuckets: int32
-      start, stop, stride: int32
-      impls: ptr UncheckedArray[PledgeImpl]
+    kind: PledgeKind
+    union: PledgeUnion
 
   PledgeImpl = object
     # Issue: https://github.com/mratsim/weave/issues/93
@@ -191,7 +193,7 @@ proc `=destroy`*(pledge: var Pledge) =
     # We have the last reference
     if not pledge.p.isNil:
       if pledge.p.kind == Iteration:
-        wv_free(pledge.p.impls)
+        wv_free(pledge.p.union.iter.impls)
       # Return memory to the memory pool
       recycle(pledge.p)
   else:
@@ -219,22 +221,23 @@ proc delayedUntilSingle(taskNode: TaskNode, curTask: Task): bool =
   ## The task should not be accessed anymore by the current worker.
   ## Returns `false` if the task can be scheduled right away by the current worker thread.
   preCondition: not taskNode.pledge.p.isNil
+  preCondition: taskNode.pledge.p.kind == Single
 
-  if taskNode.pledge.p.impl.fulfilled.load(moRelaxed):
+  if taskNode.pledge.p.union.impl.fulfilled.load(moRelaxed):
     fence(moAcquire)
     return false
 
   # Mutual exclusion / prevent races
-  discard taskNode.pledge.p.impl.deferredIn.fetchAdd(1, moRelaxed)
+  discard taskNode.pledge.p.union.impl.deferredIn.fetchAdd(1, moRelaxed)
 
-  if taskNode.pledge.p.impl.fulfilled.load(moRelaxed):
+  if taskNode.pledge.p.union.impl.fulfilled.load(moRelaxed):
     fence(moAcquire)
-    discard taskNode.pledge.p.impl.deferredOut.fetchAdd(1, moRelaxed)
+    discard taskNode.pledge.p.union.impl.deferredOut.fetchAdd(1, moRelaxed)
     return false
 
   # Send the task to the pledge fulfiller
-  discard taskNode.pledge.p.impl.chan.trySend(taskNode)
-  discard taskNode.pledge.p.impl.deferredOut.fetchAdd(1, moRelaxed)
+  discard taskNode.pledge.p.union.impl.chan.trySend(taskNode)
+  discard taskNode.pledge.p.union.impl.deferredOut.fetchAdd(1, moRelaxed)
   return true
 
 proc delayedUntilIter(taskNode: TaskNode, curTask: Task): bool =
@@ -246,21 +249,21 @@ proc delayedUntilIter(taskNode: TaskNode, curTask: Task): bool =
   ## Returns `false` if the task can be scheduled right away by the current worker thread.
   preCondition: not taskNode.pledge.p.isNil
 
-  if taskNode.pledge.p.impls[taskNode.bucketID].fulfilled.load(moRelaxed):
+  if taskNode.pledge.p.union.iter.impls[taskNode.bucketID].fulfilled.load(moRelaxed):
     fence(moAcquire)
     return false
 
   # Mutual exclusion / prevent races
-  discard taskNode.pledge.p.impls[taskNode.bucketID].deferredIn.fetchAdd(1, moRelaxed)
+  discard taskNode.pledge.p.union.iter.impls[taskNode.bucketID].deferredIn.fetchAdd(1, moRelaxed)
 
-  if taskNode.pledge.p.impls[taskNode.bucketID].fulfilled.load(moRelaxed):
+  if taskNode.pledge.p.union.iter.impls[taskNode.bucketID].fulfilled.load(moRelaxed):
     fence(moAcquire)
-    discard taskNode.pledge.p.impls[taskNode.bucketID].deferredOut.fetchAdd(1, moRelaxed)
+    discard taskNode.pledge.p.union.iter.impls[taskNode.bucketID].deferredOut.fetchAdd(1, moRelaxed)
     return false
 
   # Send the task to the pledge fulfiller
-  discard taskNode.pledge.p.impls[taskNode.bucketID].chan.trySend(taskNode)
-  discard taskNode.pledge.p.impls[taskNode.bucketID].deferredOut.fetchAdd(1, moRelaxed)
+  discard taskNode.pledge.p.union.iter.impls[taskNode.bucketID].chan.trySend(taskNode)
+  discard taskNode.pledge.p.union.iter.impls[taskNode.bucketID].deferredOut.fetchAdd(1, moRelaxed)
   return true
 
 proc delayedUntil*(taskNode: TaskNode, curTask: Task): bool =
@@ -290,7 +293,7 @@ proc initialize*(pledge: var Pledge, pool: var TLPoolAllocator) =
   zeroMem(pledge.p, sizeof(deref(PledgePtr))) # We start the refCount at 0
   # TODO: mempooled MPSC channel https://github.com/mratsim/weave/issues/93
   pledge.p.kind = Single
-  pledge.p.impl.chan.initialize()
+  pledge.p.union.impl.chan.initialize()
 
 proc delayedUntil*(task: Task, pledge: Pledge, pool: var TLPoolAllocator): bool =
   ## Defers a task until a pledge is fulfilled
@@ -302,16 +305,16 @@ proc delayedUntil*(task: Task, pledge: Pledge, pool: var TLPoolAllocator): bool 
   preCondition: pledge.p.kind == Single
 
   # Optimization to avoid paying the cost of atomics
-  if pledge.p.impl.fulfilled.load(moRelaxed):
+  if pledge.p.union.impl.fulfilled.load(moRelaxed):
     fence(moAcquire)
     return false
 
   # Mutual exclusion / prevent races
-  discard pledge.p.impl.deferredIn.fetchAdd(1, moRelaxed)
+  discard pledge.p.union.impl.deferredIn.fetchAdd(1, moRelaxed)
 
-  if pledge.p.impl.fulfilled.load(moRelaxed):
+  if pledge.p.union.impl.fulfilled.load(moRelaxed):
     fence(moAcquire)
-    discard pledge.p.impl.deferredOut.fetchAdd(1, moRelaxed)
+    discard pledge.p.union.impl.deferredOut.fetchAdd(1, moRelaxed)
     return false
 
   # Send the task to the pledge fulfiller
@@ -319,10 +322,10 @@ proc delayedUntil*(task: Task, pledge: Pledge, pool: var TLPoolAllocator): bool 
   taskNode.task = task
   taskNode.next.store(nil, moRelaxed)
   taskNode.nextDep = nil
-  taskNode.pledge = default(Pledge) # Don't need to store the pledge reference if there is only the current one
+  taskNode.pledge.p = nil # Don't need to store the pledge reference if there is only the current one
   taskNode.bucketID = NoIter
-  discard pledge.p.impl.chan.trySend(taskNode)
-  discard pledge.p.impl.deferredOut.fetchAdd(1, moRelaxed)
+  discard pledge.p.union.impl.chan.trySend(taskNode)
+  discard pledge.p.union.impl.deferredOut.fetchAdd(1, moRelaxed)
   return true
 
 template fulfillImpl*(pledge: Pledge, queue, enqueue: typed) =
@@ -337,17 +340,17 @@ template fulfillImpl*(pledge: Pledge, queue, enqueue: typed) =
   ## This should be wrapped in a proc to avoid code-bloat as the template is big
   preCondition: not pledge.p.isNil
   preCondition: pledge.p.kind == Single
-  preCondition: not load(pledge.p.impl.fulfilled, moRelaxed)
+  preCondition: not load(pledge.p.union.impl.fulfilled, moRelaxed)
 
   # Lock the pledge, new tasks should be scheduled right away
   fence(moRelease)
-  store(pledge.p.impl.fulfilled, true, moRelaxed)
+  store(pledge.p.union.impl.fulfilled, true, moRelaxed)
 
   # TODO: some state machine here?
   while true:
     var task: Task
     var taskNode: TaskNode
-    while pledge.p.impl.chan.tryRecv(taskNode):
+    while pledge.p.union.impl.chan.tryRecv(taskNode):
       ascertain: not taskNode.isNil
       ascertain: taskNode.bucketID == NoIter
       task = taskNode.task
@@ -363,7 +366,7 @@ template fulfillImpl*(pledge: Pledge, queue, enqueue: typed) =
         enqueue(queue, task)
         recycle(taskNode)
 
-    if load(pledge.p.impl.deferredOut, moAcquire) != load(pledge.p.impl.deferredIn, moAcquire):
+    if load(pledge.p.union.impl.deferredOut, moAcquire) != load(pledge.p.union.impl.deferredIn, moAcquire):
       cpuRelax()
     else:
       break
@@ -379,27 +382,25 @@ proc initialize*(pledge: var Pledge, pool: var TLPoolAllocator, start, stop, str
   preCondition: pledge.p.isNil
 
   pledge.p = pool.borrow(deref(PledgePtr))
-  # We start refcount at 0 - and the need to workaround case object value change is a huge pain
-  pledge.p[] = deref(PledgePtr)(
-    kind: Iteration,
-    numBuckets: (stop - start + stride-1) div stride,
-    start: start,
-    stop: stop,
-    stride: stride
-  )
+  # We start refcount at 0
+  pledge.p.kind = Iteration
+  pledge.p.union.iter.numBuckets = (stop - start + stride-1) div stride
+  pledge.p.union.iter.start = start
+  pledge.p.union.iter.stop = stop
+  pledge.p.union.iter.stride = stride
 
   # The mempool doesn't support arrays
-  pledge.p.impls = wv_alloc(PledgeImpl, pledge.p.numBuckets)
-  zeroMem(pledge.p.impls, pledge.p.numBuckets * sizeof(PledgeImpl))
+  pledge.p.union.iter.impls = wv_alloc(PledgeImpl, pledge.p.union.iter.numBuckets)
+  zeroMem(pledge.p.union.iter.impls, pledge.p.union.iter.numBuckets * sizeof(PledgeImpl))
 
-  for i in 0 ..< pledge.p.numBuckets:
-    pledge.p.impls[i].chan.initialize()
+  for i in 0 ..< pledge.p.union.iter.numBuckets:
+    pledge.p.union.iter.impls[i].chan.initialize()
 
 proc getBucket(pledge: Pledge, index: int32): int32 {.inline.} =
   ## Convert a possibly offset and/or strided for-loop iteration index
   ## to a pledge bucket in the range [0, numBuckets)
-  preCondition: index in pledge.p.start ..< pledge.p.stop
-  result = (index - pledge.p.start) div pledge.p.stride
+  preCondition: index in pledge.p.union.iter.start ..< pledge.p.union.iter.stop
+  result = (index - pledge.p.union.iter.start) div pledge.p.union.iter.stride
 
 proc delayedUntil*(task: Task, pledge: Pledge, index: int32, pool: var TLPoolAllocator): bool =
   ## Defers a task until a pledge[index] is fulfilled
@@ -413,16 +414,16 @@ proc delayedUntil*(task: Task, pledge: Pledge, index: int32, pool: var TLPoolAll
   let bucket = pledge.getBucket(index)
 
   # Optimization to avoid paying the cost of atomics
-  if pledge.p.impls[bucket].fulfilled.load(moRelaxed):
+  if pledge.p.union.iter.impls[bucket].fulfilled.load(moRelaxed):
     fence(moAcquire)
     return false
 
   # Mutual exclusion / prevent races
-  discard pledge.p.impls[bucket].deferredIn.fetchAdd(1, moRelaxed)
+  discard pledge.p.union.iter.impls[bucket].deferredIn.fetchAdd(1, moRelaxed)
 
-  if pledge.p.impls[bucket].fulfilled.load(moRelaxed):
+  if pledge.p.union.iter.impls[bucket].fulfilled.load(moRelaxed):
     fence(moAcquire)
-    discard pledge.p.impls[bucket].deferredOut.fetchAdd(1, moRelaxed)
+    discard pledge.p.union.iter.impls[bucket].deferredOut.fetchAdd(1, moRelaxed)
     return false
 
   # Send the task to the pledge fulfiller
@@ -432,8 +433,8 @@ proc delayedUntil*(task: Task, pledge: Pledge, index: int32, pool: var TLPoolAll
   taskNode.nextDep = nil
   taskNode.pledge = default(Pledge) # Don't need to store the pledge reference if there is only the current one
   taskNode.bucketID = bucket
-  discard pledge.p.impls[bucket].chan.trySend(taskNode)
-  discard pledge.p.impls[bucket].deferredOut.fetchAdd(1, moRelaxed)
+  discard pledge.p.union.iter.impls[bucket].chan.trySend(taskNode)
+  discard pledge.p.union.iter.impls[bucket].deferredOut.fetchAdd(1, moRelaxed)
   return true
 
 template fulfillIterImpl*(pledge: Pledge, index: int32, queue, enqueue: typed) =
@@ -450,17 +451,17 @@ template fulfillIterImpl*(pledge: Pledge, index: int32, queue, enqueue: typed) =
   preCondition: pledge.p.kind == Iteration
 
   let bucket = getBucket(pledge, index)
-  preCondition: not load(pledge.p.impls[bucket].fulfilled, moRelaxed)
+  preCondition: not load(pledge.p.union.iter.impls[bucket].fulfilled, moRelaxed)
 
   # Lock the pledge, new tasks should be scheduled right away
   fence(moRelease)
-  store(pledge.p.impls[bucket].fulfilled, true, moRelaxed)
+  store(pledge.p.union.iter.impls[bucket].fulfilled, true, moRelaxed)
 
   # TODO: some state machine here?
   while true:
     var task {.inject.}: Task
     var taskNode: TaskNode
-    while pledge.p.impls[bucket].chan.tryRecv(taskNode):
+    while pledge.p.union.iter.impls[bucket].chan.tryRecv(taskNode):
       ascertain: not taskNode.isNil
       ascertain: taskNode.bucketID != NoIter
       task = taskNode.task
@@ -476,7 +477,7 @@ template fulfillIterImpl*(pledge: Pledge, index: int32, queue, enqueue: typed) =
         enqueue(queue, task)
         recycle(taskNode)
 
-    if load(pledge.p.impls[bucket].deferredOut, moAcquire) != load(pledge.p.impls[bucket].deferredIn, moAcquire):
+    if load(pledge.p.union.iter.impls[bucket].deferredOut, moAcquire) != load(pledge.p.union.iter.impls[bucket].deferredIn, moAcquire):
       cpuRelax()
     else:
       break
