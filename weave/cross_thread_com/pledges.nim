@@ -266,7 +266,7 @@ proc delayedUntilIter(taskNode: TaskNode, curTask: Task): bool =
   discard taskNode.pledge.p.union.iter.impls[taskNode.bucketID].deferredOut.fetchAdd(1, moRelaxed)
   return true
 
-proc delayedUntil*(taskNode: TaskNode, curTask: Task): bool =
+proc delayedUntil(taskNode: TaskNode, curTask: Task): bool =
   ## Redelay a task that depends on multiple pledges (in the `taskNode` linked list)
   ## with 1 or more pledge fulfilled but still some unfulfilled.
   ##
