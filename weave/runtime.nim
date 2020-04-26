@@ -9,7 +9,7 @@ import
   # Standard library
   os, cpuinfo, strutils,
   # Internal
-  ./instrumentation/[contracts, profilers, loggers],
+  ./instrumentation/[contracts, loggers],
   ./contexts, ./config,
   ./datatypes/[sync_types, prell_deques, binary_worker_trees],
   ./cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch],

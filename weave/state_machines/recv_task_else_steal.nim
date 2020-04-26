@@ -124,4 +124,4 @@ synthesize(recvTaskFSA):
 
 when isMainModule:
   const dotRepr = toGraphviz(recvTaskFSA)
-  writeFile("weave/recv_task_else_steal.dot", dotRepr)
+  writeFile("weave/state_machines/recv_task_else_steal.dot", dotRepr)

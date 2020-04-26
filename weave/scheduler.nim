@@ -13,8 +13,8 @@ import
   ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
   ./contexts, ./config,
   ./victims,
-  ./thieves, ./workers,
-  ./random/rng, ./state_machines/decline_thief, ./state_machines/recv_task_else_steal, ./state_machines/handle_thieves
+  ./random/rng,
+  ./state_machines/event_loop
 
 # Local context
 # ----------------------------------------------------------------------------------
@@ -135,98 +135,6 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
 # Scheduler
 # ----------------------------------------------------------------------------------
 
-proc nextTask(childTask: static bool): Task {.inline.} =
-  profile(enq_deq_task):
-    if childTask:
-      result = myWorker().deque.popFirstIfChild(myTask())
-    else:
-      result = myWorker().deque.popFirst()
-
-  when WV_StealEarly > 0:
-    if not result.isNil:
-      # If we have a big loop should we allow early thefts?
-      stealEarly()
-
-  shareWork()
-
-  # Check if someone requested to steal from us
-  # Send them extra tasks if we have them
-  # or split our popped task if possible
-  handleThieves(result)
-
-proc declineAll*() =
-  var req: StealRequest
-
-  profile_stop(idle)
-
-  if recv(req):
-    if req.thiefID == myID() and req.state == Working:
-      req.state = Stealing
-    decline(req)
-
-  profile_start(idle)
-
-proc schedulingLoop() =
-  ## Each worker thread execute this loop over and over
-
-  while not localCtx.signaledTerminate:
-    # Global state is intentionally minimized,
-    # It only contains the communication channels and read-only environment variables
-    # There is still the global barrier to ensure the runtime starts or stops only
-    # when all threads are ready.
-
-    # 1. Private task deque
-    # debug: log("Worker %2d: schedloop 1 - task from local deque\n", myID())
-    while (let task = nextTask(childTask = false); not task.isNil):
-      # Prio is: children, then thieves then us
-      ascertain: not task.fn.isNil
-      profile(run_task):
-        execute(task)
-      profile(enq_deq_task):
-        # The memory is reused but not zero-ed
-        localCtx.taskCache.add(task)
-
-    # 2. Run out-of-task, become a thief
-    # debug: log("Worker %2d: schedloop 2 - becoming a thief\n", myID())
-    trySteal(isOutOfTasks = true)
-    ascertain: myThefts().outstanding > 0
-
-    var task: Task
-    profile(idle):
-      while not recvElseSteal(task, isOutOfTasks = true):
-        ascertain: myWorker().deque.isEmpty()
-        ascertain: myThefts().outstanding > 0
-        declineAll()
-
-    # 3. We stole some task(s)
-    ascertain: not task.fn.isNil
-    # debug: log("Worker %2d: schedloop 3 - stoled tasks\n", myID())
-    TargetLastVictim:
-      if task.victim != Not_a_worker:
-        myThefts().lastVictim = task.victim
-        ascertain: myThefts().lastVictim != myID()
-
-    if not task.next.isNil:
-      # Add everything
-      myWorker().deque.addListFirst(task)
-      # And then only use the last
-      task = myWorker().deque.popFirst()
-
-    StealAdaptative:
-      myThefts().recentThefts += 1
-
-    # 4. Share loot with children
-    # debug: log("Worker %2d: schedloop 4 - sharing work\n", myID())
-    shareWork()
-
-    # 5. Work on what is left
-    # debug: log("Worker %2d: schedloop 5 - working on leftover\n", myID())
-    profile(run_task):
-      execute(task)
-    profile(enq_deq_task):
-      # The memory is reused but not zero-ed
-      localCtx.taskCache.add(task)
-
 proc threadLocalCleanup*() {.gcsafe.} =
   myWorker().deque.flushAndDispose()
 
@@ -255,8 +163,7 @@ proc worker_entry_fn*(id: WorkerID) {.gcsafe.} =
   localCtx.init()
   discard globalCtx.barrier.wait()
 
-  {.gcsafe.}: # Not GC-safe when multi-threaded due to globals
-    schedulingLoop()
+  eventLoop()
 
   # 1 matching barrier in init(Runtime) for lead thread
   discard globalCtx.barrier.wait()

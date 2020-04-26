@@ -200,4 +200,4 @@ synthesize(declineReqFSA):
 
 when isMainModule:
   const dotRepr = toGraphviz(declineReqFSA)
-  writeFile("weave/decline_thief.dot", dotRepr)
+  writeFile("weave/state_machines/decline_thief.dot", dotRepr)

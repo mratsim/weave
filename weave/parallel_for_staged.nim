@@ -14,7 +14,7 @@ import
   # Internal
   ./parallel_macros,
   ./contexts, ./config,
-  ./instrumentation/[contracts, profilers],
+  ./instrumentation/contracts,
   ./datatypes/flowvars, ./state_machines/sync
 
 when not compileOption("threads"):

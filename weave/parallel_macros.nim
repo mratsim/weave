@@ -10,7 +10,6 @@ import
   macros, typetraits,
   # Internal
   ./datatypes/[sync_types, flowvars], ./contexts,
-  ./instrumentation/profilers,
   ./scheduler,
   ./cross_thread_com/scoped_barriers
 
