@@ -203,7 +203,7 @@ macro spawnDelayed*(pledges: varargs[typed], fnCall: typed): untyped =
 # --------------------------------------------------------
 
 when isMainModule:
-  import ./runtime, ./state_machines/sync_root, os
+  import ./runtime, ./state_machines/[sync, sync_root], os
 
   block: # Async without result
 
