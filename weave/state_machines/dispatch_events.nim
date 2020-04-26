@@ -43,3 +43,9 @@ proc declineAll*() =
     decline(req)
 
   profile_start(idle)
+
+proc dispatchToChildrenAndThieves*() =
+  shareWork()
+  var req: StealRequest
+  while recv(req):
+    dispatchElseDecline(req)

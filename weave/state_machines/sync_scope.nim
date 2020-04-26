@@ -16,7 +16,7 @@ import
   ../contexts, ../config,
   ../victims,
   ../thieves, ../workers,
-  ./recv_task_else_steal, ./handle_thieves
+  ./recv_task_else_steal, ./dispatch_events
 
 # Scoped Barrier - Finite state machine
 # ----------------------------------------------------------------------------------
@@ -45,7 +45,7 @@ import
 
 type ScopedBarrierState = enum
   SB_CheckTask
-  SB_OutOfTasks
+  SB_OutOfDirectChildTasks
   SB_Steal
   SB_SuccessfulTheft
 
@@ -71,7 +71,7 @@ implEvent(syncScopeFSA, SBE_NoDescendants):
 behavior(syncScopeFSA):
   # In SB_Steal state we might recv tasks and steal requests which get stuck
   # in our queues when we exit once we have no descendant left.
-  ini: [SB_CheckTask, SB_OutOfTasks, SB_Steal]
+  ini: [SB_CheckTask, SB_OutOfDirectChildTasks, SB_Steal]
   interrupt: SBE_NoDescendants
   transition: discard
   fin: SB_Exit
@@ -80,18 +80,7 @@ implEvent(syncScopeFSA, SBE_HasTask):
   not task.isNil
 
 onEntry(syncScopeFSA, SB_CheckTask):
-  task = myWorker().deque.popFirst()
-
-  when WV_StealEarly > 0:
-    if not task.isNil:
-      # If we have a big loop should we allow early theft?
-      stealEarly()
-
-  shareWork()
-  # Check if someone requested to steal from us
-  # send them extra tasks if we have them
-  # or split our popped task if possible
-  handleThieves(task)
+  task = nextTask(childTask = true)
 
 behavior(syncScopeFSA):
   ini: SB_CheckTask
@@ -109,15 +98,19 @@ behavior(syncScopeFSA):
     # 2. Run out-of-task, become a thief and help other threads
     #    to reach their children faster
     debug: log("Worker %2d: syncScope 2 - becoming a thief\n", myID())
-  fin: SB_OutOfTasks
+  fin: SB_OutOfDirectChildTasks
 
 # -------------------------------------------
 # These states are interrupted when the scope has no more descendant
 
 behavior(syncScopeFSA):
-  ini: SB_OutOfTasks
+  ini: SB_OutOfDirectChildTasks
   transition:
+    # Steal and hope to advance towards the child tasks in other workers' queues.
     trySteal(isOutOfTasks = false)
+    # If someone wants our non-direct child tasks, let's oblige
+    # Note that we might have grandchildren tasks stuck in our own queue.
+    dispatchToChildrenAndThieves()
     profile_start(idle)
   fin: SB_Steal
 
@@ -140,10 +133,9 @@ behavior(syncScopeFSA):
     # dispatchElseDecline so resteal
     profile_stop(idle)
     trySteal(isOutOfTasks = false)
-    # If someone wants some of our tasks, let's oblige
-    var req: StealRequest
-    while recv(req):
-      dispatchElseDecline(req)
+    # If someone wants our non-direct child tasks, let's oblige
+    # Note that we might have grandchildren tasks stuck in our own queue.
+    dispatchToChildrenAndThieves()
     profile_start(idle)
 
 # -------------------------------------------
@@ -179,7 +171,7 @@ behavior(syncScopeFSA):
     profile(enq_deq_task):
       # The memory is re-used but not zero-ed
       localCtx.taskCache.add(task)
-  fin: SB_OutOfTasks
+  fin: SB_OutOfDirectChildTasks
 
 # -------------------------------------------
 

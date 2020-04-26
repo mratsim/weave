@@ -17,7 +17,7 @@ import
   ../cross_thread_com/channels_spsc_single_ptr,
   ../memory/lookaside_lists,
   ../workers, ../thieves, ../victims,
-  ./handle_thieves, ./recv_task_else_steal,
+  ./recv_task_else_steal,
   ./dispatch_events
 
 # Sync Root - Global runtime barrier
@@ -78,18 +78,7 @@ implEvent(syncRootFSA, SYE_SoleWorker):
 # -------------------------------------------
 
 onEntry(syncRootFSA, SY_CheckTask):
-  task = myWorker().deque.popFirst()
-
-  when WV_StealEarly > 0:
-    if not task.isNil:
-      # If we have a big loop should we allow early thefts?
-      stealEarly()
-
-  shareWork()
-  # Check if someone requested to steal from us
-  # Send them extra tasks if we have them
-  # or split our popped task if possible
-  handleThieves(task)
+  task = nextTask(childTask = false)
 
 behavior(syncRootFSA):
   ini: SY_CheckTask
