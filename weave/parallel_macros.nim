@@ -11,15 +11,7 @@ import
   # Internal
   ./datatypes/[sync_types, flowvars], ./contexts,
   ./scheduler,
-  ./cross_thread_com/scoped_barriers
-
-when not defined(cpp):
-  import ./cross_thread_com/pledges
-else:
-  template delayedUntilMulti(task, pool: untyped, pledges: varargs[untyped]): untyped =
-    discard
-
-  const NoIter = -1
+  ./cross_thread_com/[scoped_barriers, pledges]
 
 # Parallel for utilities
 # ----------------------------------------------------------

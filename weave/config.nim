@@ -10,9 +10,6 @@ import strutils
 # Platform support
 # ----------------------------------------------------------------------------------
 
-when defined(cpp) and (defined(gcc) or defined(clang) or defined(llvm_gcc)):
-  {.passC:"-std=c++11".}
-
 when defined(tlsEmulation):
   {.warning: "TLS Emulation (default on MacOS due to old iOS requiring it) is not supported. Please run Weave tests to ensure some degree of correctness.".}
 
