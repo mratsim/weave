@@ -16,7 +16,7 @@ import
   ../contexts, ../config,
   ../victims,
   ../thieves, ../workers,
-  ./recv_task_else_steal, ./handle_thieves
+  ./recv_task_else_steal, ./dispatch_events
 
 # Scoped Barrier - Finite state machine
 # ----------------------------------------------------------------------------------
@@ -30,15 +30,28 @@ import
 # The awaiting thread continues to help the runtime
 # by sharing the workload.
 
+# Note: we can focus on the child tasks of the current task
+# by calling `myWorker().deque.popFirstIfChild(myTask())`
+# instead of `myWorker().deque.popFirst(myTask())`
+#
+# but this seems to livelock the root thread from time to time
+# i.e. the task in deque could be a grandchildren task
+# and so is not cleared and then the root thread is stuck trying to steal
+# from idle threads.
+#
+# Furthermore while `sync_scope` guarantees only waiting for tasks created in the scope
+# and not emptying all tasks, doing so satistfies the "greedy" scheduler requirement
+# to have the asymptotically optimal speedup. (i.e. as long as there are tasks, workers are progressing on them)
+
 type ScopedBarrierState = enum
   SB_CheckTask
-  SB_OutOfChildTasks
+  SB_OutOfTasks
   SB_Steal
   SB_SuccessfulTheft
 
 type ScopedBarrierEvent = enum
   SBE_NoDescendants
-  SBE_HasChildTask
+  SBE_HasTask
   SBE_ReceivedTask
 
 declareAutomaton(syncScopeFSA, ScopedBarrierState, ScopedBarrierEvent)
@@ -58,31 +71,20 @@ implEvent(syncScopeFSA, SBE_NoDescendants):
 behavior(syncScopeFSA):
   # In SB_Steal state we might recv tasks and steal requests which get stuck
   # in our queues when we exit once we have no descendant left.
-  ini: [SB_CheckTask, SB_OutOfChildTasks, SB_Steal]
+  ini: [SB_CheckTask, SB_OutOfTasks, SB_Steal]
   interrupt: SBE_NoDescendants
   transition: discard
   fin: SB_Exit
 
-implEvent(syncScopeFSA, SBE_HasChildTask):
+implEvent(syncScopeFSA, SBE_HasTask):
   not task.isNil
 
 onEntry(syncScopeFSA, SB_CheckTask):
-  task = myWorker().deque.popFirstIfChild(myTask())
-
-  when WV_StealEarly > 0:
-    if not task.isNil:
-      # If we have a big loop should we allow early theft?
-      stealEarly()
-
-  shareWork()
-  # Check if someone requested to steal from us
-  # send them extra tasks if we have them
-  # or split our popped task if possible
-  handleThieves(task)
+  task = nextTask(childTask = false)
 
 behavior(syncScopeFSA):
   ini: SB_CheckTask
-  event: SBE_HasChildTask
+  event: SBE_HasTask
   transition:
     profile(run_task):
       execute(task)
@@ -96,20 +98,21 @@ behavior(syncScopeFSA):
     # 2. Run out-of-task, become a thief and help other threads
     #    to reach their children faster
     debug: log("Worker %2d: syncScope 2 - becoming a thief\n", myID())
-  fin: SB_OutOfChildTasks
+  fin: SB_OutOfTasks
 
 # -------------------------------------------
 # These states are interrupted when the scope has no more descendant
 
 behavior(syncScopeFSA):
-  ini: SB_OutOfChildTasks
+  ini: SB_OutOfTasks
   transition:
-    trySteal(isOutOfTasks = false)
+    # Steal and hope to advance towards the child tasks in other workers' queues.
+    trySteal(isOutOfTasks = false) # Don't sleep here or we might stall the runtime
     profile_start(idle)
   fin: SB_Steal
 
 onEntry(syncScopeFSA, SB_Steal):
-  let lootedTask = recvElseSteal(task, isOutOfTasks = false)
+  let lootedTask = recvElseSteal(task, isOutOfTasks = false) # Don't sleep here or we might stall the runtime
 
 implEvent(syncScopeFSA, SBE_ReceivedTask):
   lootedTask
@@ -123,14 +126,8 @@ behavior(syncScopeFSA):
 behavior(syncScopeFSA):
   steady: SB_Steal
   transition:
-    # We might inadvertently remove our own steal request in
-    # dispatchElseDecline so resteal
     profile_stop(idle)
-    trySteal(isOutOfTasks = false)
-    # If someone wants our non-child tasks, let's oblige
-    var req: StealRequest
-    while recv(req):
-      dispatchElseDecline(req)
+    dispatchToChildrenAndThieves()
     profile_start(idle)
 
 # -------------------------------------------
@@ -166,7 +163,7 @@ behavior(syncScopeFSA):
     profile(enq_deq_task):
       # The memory is re-used but not zero-ed
       localCtx.taskCache.add(task)
-  fin: SB_OutOfChildTasks
+  fin: SB_OutOfTasks
 
 # -------------------------------------------
 

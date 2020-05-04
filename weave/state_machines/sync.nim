@@ -14,14 +14,14 @@ import
   ../contexts, ../config,
   ../victims,
   ../thieves, ../workers,
-  ./recv_task_else_steal, ./handle_thieves
+  ./recv_task_else_steal, ./dispatch_events
 
 # Await/sync future - Finite Automaton rewrite
 # ----------------------------------------------------------------------------------
 
 type AwaitState = enum
   AW_CheckTask
-  AW_OutOfChildTasks
+  AW_OutOfDirectChildTasks
   AW_Steal
   AW_SuccessfulTheft
 
@@ -53,7 +53,7 @@ implEvent(awaitFSA, AWE_FutureReady):
 behavior(awaitFSA):
   # In AW_Steal we might recv tasks and steal requests which get stuck in our queues
   # when we exit once the future is ready.
-  ini: [AW_CheckTask, AW_OutOfChildTasks, AW_Steal]
+  ini: [AW_CheckTask, AW_OutOfDirectChildTasks, AW_Steal]
   interrupt: AWE_FutureReady
   transition: discard
   fin: AW_Exit
@@ -62,18 +62,7 @@ implEvent(awaitFSA, AWE_HasChildTask):
   not task.isNil
 
 onEntry(awaitFSA, AW_CheckTask):
-  task = myWorker().deque.popFirstIfChild(myTask())
-
-  when WV_StealEarly > 0:
-    if not task.isNil:
-      # If we have a big loop should we allow early thefts?
-      stealEarly()
-
-  shareWork()
-  # Check if someone requested to steal from us
-  # Send them extra tasks if we have them
-  # or split our popped task if possible
-  handleThieves(task)
+  task = nextTask(childTask = true)
 
 behavior(awaitFSA):
   ini: AW_CheckTask
@@ -94,15 +83,19 @@ behavior(awaitFSA):
     # 2. Run out-of-task, become a thief and help other threads
     #    to reach children faster
     debug: log("Worker %2d: forcefut 2 - becoming a thief\n", myID())
-  fin: AW_OutOfChildTasks
+  fin: AW_OutOfDirectChildTasks
 
 # -------------------------------------------
 # These states are interrupted when future is ready
 
 behavior(awaitFSA):
-  ini: AW_OutOfChildTasks
+  ini: AW_OutOfDirectChildTasks
   transition:
+    # Steal and hope to advance towards the child tasks in other workers' queues.
     trySteal(isOutOfTasks = false)
+    # If someone wants our non-direct child tasks, let's oblige
+    # Note that we might have grandchildren tasks stuck in our own queue.
+    dispatchToChildrenAndThieves()
     profile_start(idle)
   fin: AW_Steal
 
@@ -125,10 +118,9 @@ behavior(awaitFSA):
     # dispatchElseDecline so resteal
     profile_stop(idle)
     trySteal(isOutOfTasks = false)
-    # If someone wants our non-child tasks, let's oblige
-    var req: StealRequest
-    while recv(req):
-      dispatchElseDecline(req)
+    # If someone wants our non-direct child tasks, let's oblige
+    # Note that we might have grandchildren tasks stuck in our own queue.
+    dispatchToChildrenAndThieves()
     profile_start(idle)
 
 # -------------------------------------------
@@ -164,7 +156,7 @@ behavior(awaitFSA):
     profile(enq_deq_task):
       # The memory is reused but not zero-ed
       localCtx.taskCache.add(task)
-  fin: AW_OutOfChildTasks
+  fin: AW_OutOfDirectChildTasks
 
 # -------------------------------------------
 

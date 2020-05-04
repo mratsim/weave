@@ -47,14 +47,14 @@ proc testVsReference*(M, N, K: int) =
       0, result_blas[0].addr, N
     )
 
-  block weave:
-    gemm_strided(
-      M, N, K,
-      1'f32,  a[0].unsafeaddr, K, 1,       # stride row, stride col
-              b[0].unsafeAddr, N, 1,
-      0'f32,  result_weave[0].addr, N, 1
-    )
-    syncRoot(Weave)
+  # block weave:
+  #   gemm_strided(
+  #     M, N, K,
+  #     1'f32,  a[0].unsafeaddr, K, 1,       # stride row, stride col
+  #             b[0].unsafeAddr, N, 1,
+  #     0'f32,  result_weave[0].addr, N, 1
+  #   )
+  #   syncRoot(Weave)
 
   block weave_nestable:
     gemm_strided_nestable(

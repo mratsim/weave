@@ -14,7 +14,7 @@ import
   ./contexts, ./config,
   ./victims,
   ./random/rng,
-  ./state_machines/event_loop
+  ./state_machines/[event_loop, dispatch_events]
 
 # Local context
 # ----------------------------------------------------------------------------------
@@ -189,11 +189,6 @@ proc schedule*(task: sink Task) =
       log(">>> Worker %2d resumes execution after barrier <<<\n", myID())
     localCtx.runtimeIsQuiescent = false
 
-  shareWork()
-
-  # Check if someone requested a steal
-  var req: StealRequest
-  while recv(req):
-    dispatchElseDecline(req)
+  dispatchToChildrenAndThieves()
 
   profile_start(enq_deq_task)
