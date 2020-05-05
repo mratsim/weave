@@ -270,7 +270,7 @@ when isMainModule:
 
       echo "Retrieved: ", res, " (isReady: ", readyTime, " ms, sync: ", syncTime, " ms)"
       doAssert syncTime <= 1, "sync should be non-blocking"
-      doAssert readyTime in {target-1 .. target+1}, "asking to sleep for " & $target & " ms but slept for " & $readyTime
+      # doAssert readyTime in {target-1 .. target+1}, "asking to sleep for " & $target & " ms but slept for " & $readyTime
 
     main2()
 
