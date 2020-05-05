@@ -20,7 +20,7 @@ export
   parallelFor, parallelForStrided,
   init, exit,
   loadBalance,
-  isSpawned,
+  isSpawned, isReady,
   getThreadId, getNumThreads,
   # Experimental threadlocal prologue/epilogue
   parallelForStaged, parallelForStagedStrided,

@@ -48,7 +48,7 @@ setTerminalState(awaitFSA, AW_Exit)
 # -------------------------------------------
 
 implEvent(awaitFSA, AWE_FutureReady):
-  isFutReady(fv)
+  tryComplete(fv, parentResult)
 
 behavior(awaitFSA):
   # In AW_Steal we might recv tasks and steal requests which get stuck in our queues
