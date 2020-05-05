@@ -156,6 +156,7 @@ exit(Weave)
 - `spawn fnCall(args)` which spawns a function that may run on another thread and gives you an awaitable Flowvar handle.
 - `newPledge`, `fulfill` and `spawnDelayed` (experimental) to delay a task until some dependencies are met. This allows expressing precise data dependencies and producer-consumer relationships.
 - `sync(Flowvar)` will await a Flowvar and block until you receive a result.
+- `isReady(Flowvar)` will check if `sync` will actually block or return the result immediately.
 - `syncRoot(Weave)` is a global barrier for the main thread on the main task.
   Using syncRoot in a proc means that the can only be called from the main thread.
   `syncRoot(Weave)` is implicitly called by `exit(Weave)`
