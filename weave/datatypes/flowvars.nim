@@ -91,7 +91,7 @@ EagerFV:
     ## In that case `sync` will not block.
     ## Otherwise the current will block to help on all the pending tasks
     ## until the Flowvar is ready.
-    not fv.chan.isEmpty()
+    not fv.chan[].isEmpty()
 
 LazyFV:
   proc recycleChannel*(fv: Flowvar) {.inline.} =
@@ -130,7 +130,7 @@ LazyFV:
     if not fv.lfv.hasChannel:
       fv.lfv.isReady
     else:
-      not fv.lfv.lazy.chan.isEmpty()
+      not fv.lfv.lazy.chan[].isEmpty()
 
   import sync_types
 
