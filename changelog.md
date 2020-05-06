@@ -2,6 +2,10 @@
 
 ### v0.x.x - Unreleased
 
+#### Features
+
+- Added `isReady(Flowvar)` which will return true is `sync` would block on that Flowvar or if the result is actually immediately available.
+
 ### v0.4.0 - April 2020 - "Bespoke"
 
 #### Compatibility

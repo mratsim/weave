@@ -83,8 +83,15 @@ EagerFV:
     let resultSent {.used.} = fv.chan[].trySend(childResult)
     postCondition: resultSent
 
-  template isFutReady*(fv: Flowvar): bool =
+  template tryComplete*[T](fv: Flowvar, parentResult: var T): bool =
     fv.chan[].tryRecv(parentResult)
+
+  func isReady*[T](fv: Flowvar[T]): bool {.inline.} =
+    ## Returns true if the result of a Flowvar is ready.
+    ## In that case `sync` will not block.
+    ## Otherwise the current will block to help on all the pending tasks
+    ## until the Flowvar is ready.
+    not fv.chan[].isEmpty()
 
 LazyFV:
   proc recycleChannel*(fv: Flowvar) {.inline.} =
@@ -108,12 +115,22 @@ LazyFV:
       ascertain: not fv.lfv.lazy.chan.isNil
       discard fv.lfv.lazy.chan[].trySend(childResult)
 
-  template isFutReady*(fv: Flowvar): bool =
+  template tryComplete*[T](fv: Flowvar, parentResult: var T): bool =
     if fv.lfv.hasChannel:
       ascertain: not fv.lfv.lazy.chan.isNil
       fv.lfv.lazy.chan[].tryRecv(parentResult)
     else:
       fv.lfv.isReady
+
+  func isReady*[T](fv: Flowvar[T]): bool {.inline.} =
+    ## Returns true if the result of a Flowvar is ready.
+    ## In that case `sync` will not block.
+    ## Otherwise the current will block to help on all the pending tasks
+    ## until the Flowvar is ready.
+    if not fv.lfv.hasChannel:
+      fv.lfv.isReady
+    else:
+      not fv.lfv.lazy.chan[].isEmpty()
 
   import sync_types
 

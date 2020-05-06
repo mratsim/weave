@@ -203,7 +203,7 @@ macro spawnDelayed*(pledges: varargs[typed], fnCall: typed): untyped =
 # --------------------------------------------------------
 
 when isMainModule:
-  import ./runtime, ./state_machines/[sync, sync_root], os
+  import ./runtime, ./state_machines/[sync, sync_root], os, std/[times, monotimes]
 
   block: # Async without result
 
@@ -241,6 +241,36 @@ when isMainModule:
       exit(Weave)
 
       echo f
+
+    main2()
+
+  block: # isReady
+    proc sleepingLion(ms: int): int =
+      sleep(ms)
+      echo "--> Slept for ", ms, " ms"
+      return ms
+
+    proc main2() =
+      echo "Sanity check 3: isReady"
+      const target = 123
+
+      init(Weave)
+      echo "Spawning sleeping thread for ", target, " ms"
+      let start = getMonoTime()
+      let f = spawn sleepingLion(123)
+      while not f.isReady():
+        cpuRelax()
+      let stopReady = getMonoTime()
+      let res = sync(f)
+      let stopSync = getMonoTime()
+      exit(Weave)
+
+      let readyTime = inMilliseconds(stopReady-start)
+      let syncTime = inMilliseconds(stopSync-stopReady)
+
+      echo "Retrieved: ", res, " (isReady: ", readyTime, " ms, sync: ", syncTime, " ms)"
+      doAssert syncTime <= 1, "sync should be non-blocking"
+      # doAssert readyTime in {target-1 .. target+1}, "asking to sleep for " & $target & " ms but slept for " & $readyTime
 
     main2()
 
