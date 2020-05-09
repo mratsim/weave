@@ -260,10 +260,10 @@ when isMainModule:
         f1 = fib
 
     proc sleepingLion(stop_ms: int64): int64 =
-      let start = getTime()
+      let start = getMonoTime()
 
       while true:
-        let elapsed = inMilliseconds(getTime() - start)
+        let elapsed = inMilliseconds(getMonoTime() - start)
         if elapsed >= stop_ms:
           return elapsed
 
@@ -279,7 +279,7 @@ when isMainModule:
       let f = spawn sleepingLion(123)
       var spin_count: int64
       while not f.isReady():
-        # cpuRelax() # Reliable deadlocks on Azure OSX and Travis ARM
+        # cpuRelax() # Reliable deadlocks on Azure OSX and Travis ARM?
         spin_count += 1
       let stopReady = getMonoTime()
       let res = sync(f)
