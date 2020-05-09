@@ -246,7 +246,7 @@ when isMainModule:
 
   block: # isReady
     proc sleepingLion(ms: int): int =
-      for _ 0 ..< ms:
+      for _ in 0 ..< ms:
         sleep(1)
       echo "--> Slept for ~", ms, " ms"
       return ms
