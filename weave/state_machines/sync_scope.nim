@@ -163,7 +163,7 @@ behavior(syncScopeFSA):
     profile(enq_deq_task):
       # The memory is re-used but not zero-ed
       localCtx.taskCache.add(task)
-  fin: SB_OutOfTasks
+  fin: SB_CheckTask
 
 # -------------------------------------------
 

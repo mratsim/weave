@@ -15,7 +15,7 @@ digraph awaitFSA{
     AW_Steal_AWE_FutureReady -> AW_Steal_AWE_ReceivedTask[xlabel="normal flow"];
     AW_Steal_AWE_ReceivedTask -> AW_SuccessfulTheft [style=dashed, xlabel="true"];
     AW_Steal_AWE_ReceivedTask -> AW_Steal [xlabel="default"];
-    AW_SuccessfulTheft -> AW_OutOfDirectChildTasks [xlabel="default"];
+    AW_SuccessfulTheft -> AW_CheckTask [xlabel="default"];
     AW_CheckTask -> AW_CheckTask_AWE_FutureReady[style=bold, xlabel="always"];
     AW_CheckTask_AWE_FutureReady -> AW_Exit [color="coral", fontcolor="coral", xlabel="interrupted"];
     AW_CheckTask_AWE_FutureReady -> AW_CheckTask_AWE_HasChildTask[xlabel="normal flow"];

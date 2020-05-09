@@ -103,12 +103,11 @@ proc trySend*[T](chan: var ChannelMpscUnboundedBatch[T], src: sink T): bool {.in
   ## As the channel has unbounded capacity, this should never fail
 
   discard chan.count.fetchAdd(1, moRelaxed)
-  src.next.store(nil, moRelaxed)
-  fence(moRelease)
-  let oldBack = chan.back.exchange(src, moRelaxed)
+  src.next.store(nil, moRelease)
+  let oldBack = chan.back.exchange(src, moAcquireRelease)
   # Consumer can be blocked here, it doesn't see the (potentially growing) end of the queue
   # until the next instruction.
-  cast[T](oldBack).next.store(src, moRelaxed) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
+  cast[T](oldBack).next.store(src, moRelease) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
 
   return true
 
@@ -118,12 +117,11 @@ proc trySendBatch*[T](chan: var ChannelMpscUnboundedBatch[T], first, last: sink 
   ## As the channel has unbounded capacity this should never fail
 
   discard chan.count.fetchAdd(int(count), moRelaxed)
-  last.next.store(nil, moRelaxed)
-  fence(moRelease)
-  let oldBack = chan.back.exchange(last, moRelaxed)
+  last.next.store(nil, moRelease)
+  let oldBack = chan.back.exchange(last, moAcquireRelease)
   # Consumer can be blocked here, it doesn't see the (potentially growing) end of the queue
   # until the next instruction.
-  cast[T](oldBack).next.store(first, moRelaxed) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
+  cast[T](oldBack).next.store(first, moRelease) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
 
   return true
 
@@ -133,38 +131,43 @@ proc tryRecv*[T](chan: var ChannelMpscUnboundedBatch[T], dst: var T): bool =
   ## This can fail spuriously on the last element if producer
   ## enqueues a new element while the consumer was dequeing it
 
-  let first = cast[T](chan.front.next.load(moRelaxed))
+  let first = cast[T](chan.front.next.load(moAcquire))
   if first.isNil:
+    # According to the model checker, we can't put "fence(moAcquire)"
+    # here and use relaxed semantics for "first" as it may read from initialized load
+    # (due to compiler reordering?)
     return false
 
   # fast path
   block:
-    let next = first.next.load(moRelaxed)
+    let next = first.next.load(moAcquire)
     if not next.isNil:
       # Not competing with producers
       prefetch(first)
       discard chan.count.fetchSub(1, moRelaxed)
       chan.front.next.store(next, moRelaxed)
-      fence(moAcquire)
+      # fence(moAcquire) # Sync "first.next.load(moRelaxed)"
       dst = first
       return true
   # End fast-path
 
   # Competing with producers at the back
-  var last = chan.back.load(moRelaxed)
+  var last = chan.back.load(moAcquire)
   if first != last:
     # We lose the competition before even trying
+    # fence(moAcquire) # Sync "chan.back.load(moRelaxed)"
     return false
 
-  chan.front.next.store(nil, moRelaxed)
+  chan.front.next.store(nil, moAcquire)
   if compareExchange(chan.back, last, chan.front.addr, moAcquireRelease):
     # We won and replaced the last node with the channel front
+    prefetch(first)
     discard chan.count.fetchSub(1, moRelaxed)
     dst = first
     return true
 
   # We lost but now we know that there is an extra node coming very soon
-  var next = first.next.load(moRelaxed)
+  var next = first.next.load(moAcquire)
   while next.isNil:
     # We spinlock, unfortunately there seems to be a livelock potential
     # or contention issue if we don't use cpuRelax
@@ -173,14 +176,30 @@ proc tryRecv*[T](chan: var ChannelMpscUnboundedBatch[T], dst: var T): bool =
     # or fibonacci and the program will get stuck.
     # The queue should probably be model checked and/or run through Relacy
     cpuRelax()
-    next = first.next.load(moRelaxed)
+    next = first.next.load(moAcquire)
 
   prefetch(first)
   discard chan.count.fetchSub(1, moRelaxed)
   chan.front.next.store(next, moRelaxed)
-  fence(moAcquire)
+  # fence(moAcquire) # sync first.next.load(moRelaxed)
   dst = first
   return true
+
+  # # Alternative implementation
+  # #
+  # # We lost but now we know that there is an extra node coming very soon
+  # cpuRelax()
+  # let next = first.next.load(moAcquire)
+  # if not next.isNil:
+  #   # Extra nodes after this one, no more competition with producers
+  #   prefetch(first)
+  #   discard chan.count.fetchSub(1, moRelaxed)
+  #   chan.front.next.store(next, moRelease)
+  #   dst = first
+  #   return true
+
+  # # The last item wasn't linked to the list yet, bail out
+  # return false
 
 proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var T): int32 =
   ## Try receiving all items buffered in the channel
@@ -198,24 +217,24 @@ proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var
 
   result = 0
 
-  var front = cast[T](chan.front.next.load(moRelaxed))
+  var front = cast[T](chan.front.next.load(moAcquire))
   bFirst = front
   if front.isNil:
     return
 
   # Fast-forward to the end of the channel
-  var next = cast[T](front.next.load(moRelaxed))
+  var next = cast[T](front.next.load(moAcquire))
   while not next.isNil:
     result += 1
     bLast = front
     front = next
-    next = cast[T](next.next.load(moRelaxed))
+    next = cast[T](next.next.load(moAcquire))
 
   # Competing with producers at the back
-  var last = chan.back.load(moRelaxed)
+  var last = chan.back.load(moAcquire)
   if front != last:
     # We lose the competition, bail out
-    chan.front.next.store(front, moRelaxed)
+    chan.front.next.store(front, moRelease)
     discard chan.count.fetchSub(result, moRelaxed)
     postCondition: chan.count.load(moRelaxed) >= 0 # TODO: somehow it can be negative
     return
@@ -235,7 +254,7 @@ proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var
   # We don't spinlock unlike the single receive case
   # we assume that consumer has plenty of work to do with the
   # already retrived batch
-  next = cast[T](front.next.load(moRelaxed))
+  next = cast[T](front.next.load(moAcquire))
   while next.isNil:
     # We spinlock, unfortunately there seems to be a livelock potential
     # or contention issue if we don't use cpuRelax
@@ -244,13 +263,13 @@ proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var
     # or fibonacci and the program will get stuck.
     # The queue should probably be model checked and/or run through Relacy
     cpuRelax()
-    next = cast[T](front.next.load(moRelaxed))
+    next = cast[T](front.next.load(moAcquire))
 
   prefetch(front)
   result += 1
   discard chan.count.fetchSub(result, moRelaxed)
   chan.front.next.store(next, moRelaxed)
-  fence(moAcquire)
+  # fence(moAcquire)  # sync front.next.load(moRelaxed)
   bLast = front
   postCondition: chan.count.load(moRelaxed) >= 0
 

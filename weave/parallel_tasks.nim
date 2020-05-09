@@ -203,7 +203,9 @@ macro spawnDelayed*(pledges: varargs[typed], fnCall: typed): untyped =
 # --------------------------------------------------------
 
 when isMainModule:
-  import ./runtime, ./state_machines/[sync, sync_root], os, std/[times, monotimes]
+  import
+    ./runtime, ./state_machines/[sync, sync_root], os,
+    std/[times, monotimes]
 
   block: # Async without result
 
@@ -245,10 +247,29 @@ when isMainModule:
     main2()
 
   block: # isReady
-    proc sleepingLion(ms: int): int =
-      sleep(ms)
-      echo "--> Slept for ", ms, " ms"
-      return ms
+    template dummy_cpt(): untyped =
+      # Dummy computation
+      # Calculate fib(30) iteratively
+      var
+        fib = 0
+        f2 = 0
+        f1 = 1
+      for i in 2 .. 30:
+        fib = f1 + f2
+        f2 = f1
+        f1 = fib
+
+    proc sleepingLion(stop_ms: int64): int64 =
+      echo "Entering the Lion's Den"
+      let start = getMonoTime()
+
+      while true:
+        let elapsed = inMilliseconds(getMonoTime() - start)
+        if elapsed >= stop_ms:
+          echo "Exiting the Lion's Den"
+          return elapsed
+
+        dummy_cpt()
 
     proc main2() =
       echo "Sanity check 3: isReady"
@@ -258,8 +279,10 @@ when isMainModule:
       echo "Spawning sleeping thread for ", target, " ms"
       let start = getMonoTime()
       let f = spawn sleepingLion(123)
+      var spin_count: int64
       while not f.isReady():
-        cpuRelax()
+        loadBalance(Weave) # We need to send the task away, on OSX CI it seems like threads are not initialized fast enough
+        spin_count += 1
       let stopReady = getMonoTime()
       let res = sync(f)
       let stopSync = getMonoTime()
@@ -268,7 +291,7 @@ when isMainModule:
       let readyTime = inMilliseconds(stopReady-start)
       let syncTime = inMilliseconds(stopSync-stopReady)
 
-      echo "Retrieved: ", res, " (isReady: ", readyTime, " ms, sync: ", syncTime, " ms)"
+      echo "Retrieved: ", res, " (isReady: ", readyTime, " ms, sync: ", syncTime, " ms, spin_count: ", spin_count, ")"
       doAssert syncTime <= 1, "sync should be non-blocking"
       # doAssert readyTime in {target-1 .. target+1}, "asking to sleep for " & $target & " ms but slept for " & $readyTime
 

@@ -156,7 +156,7 @@ behavior(awaitFSA):
     profile(enq_deq_task):
       # The memory is reused but not zero-ed
       localCtx.taskCache.add(task)
-  fin: AW_OutOfDirectChildTasks
+  fin: AW_CheckTask
 
 # -------------------------------------------
 
