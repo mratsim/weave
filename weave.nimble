@@ -61,7 +61,8 @@ task test, "Run Weave tests":
     test "", "benchmarks/bouncing_producer_consumer/weave_bpc.nim"
   when defined(i386) or defined(amd64):
     if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
-      test "", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
+      # TODO: syncRoot doesn't block for Pledges - https://github.com/mratsim/weave/issues/97
+      # test "", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
       test "", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave_nestable.nim"
 
   test "-d:WV_LazyFlowvar", "benchmarks/dfs/weave_dfs.nim"
@@ -74,7 +75,8 @@ task test, "Run Weave tests":
     test "-d:WV_LazyFlowvar", "benchmarks/bouncing_producer_consumer/weave_bpc.nim"
   when defined(i386) or defined(amd64):
     if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
-      test "-d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
+      # TODO: syncRoot doesn't block for Pledges - https://github.com/mratsim/weave/issues/97
+      # test "-d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
       test "-d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave_nestable.nim"
 
   # Full test that combine everything:
@@ -121,7 +123,8 @@ task test_gc_arc, "Run Weave tests with --gc:arc":
     test "--gc:arc", "benchmarks/bouncing_producer_consumer/weave_bpc.nim"
   when defined(i386) or defined(amd64):
     if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
-      test "--gc:arc", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
+      # TODO: syncRoot doesn't block for Pledges - https://github.com/mratsim/weave/issues/97
+      # test "--gc:arc", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
       test "--gc:arc", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave_nestable.nim"
 
   test "--gc:arc -d:WV_LazyFlowvar", "benchmarks/dfs/weave_dfs.nim"
@@ -134,7 +137,8 @@ task test_gc_arc, "Run Weave tests with --gc:arc":
     test "--gc:arc -d:WV_LazyFlowvar", "benchmarks/bouncing_producer_consumer/weave_bpc.nim"
   when defined(i386) or defined(amd64):
     if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
-      test "--gc:arc -d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
+      # TODO: syncRoot doesn't block for Pledges - https://github.com/mratsim/weave/issues/97
+      # test "--gc:arc -d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave.nim"
       test "--gc:arc -d:WV_LazyFlowvar", "benchmarks/matmul_gemm_blas/gemm_pure_nim/gemm_weave_nestable.nim"
 
   # Full test that combine everything:
