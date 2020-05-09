@@ -23,5 +23,5 @@ digraph syncScopeFSA{
     SB_Steal_SBE_NoDescendants -> SB_Steal_SBE_ReceivedTask[xlabel="normal flow"];
     SB_Steal_SBE_ReceivedTask -> SB_SuccessfulTheft [style=dashed, xlabel="true"];
     SB_Steal_SBE_ReceivedTask -> SB_Steal [xlabel="default"];
-    SB_SuccessfulTheft -> SB_OutOfTasks [xlabel="default"];
+    SB_SuccessfulTheft -> SB_CheckTask [xlabel="default"];
 }
