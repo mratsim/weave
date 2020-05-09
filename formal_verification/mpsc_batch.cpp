@@ -233,7 +233,7 @@ class ChannelMpscUnboundedBatch
     // std::atomic_thread_fence(std::memory_order_acquire); // sync front.next.load(moRelaxed)
     *bLast = front;
 
-    MODEL_ASSERT(m_count.load(std::memory_order_relaxed)  0);
+    MODEL_ASSERT(m_count.load(std::memory_order_relaxed) >= 0);
     return result;
 
   }
