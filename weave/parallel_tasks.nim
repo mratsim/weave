@@ -260,11 +260,13 @@ when isMainModule:
         f1 = fib
 
     proc sleepingLion(stop_ms: int64): int64 =
+      echo "Entering the Lion's Den"
       let start = getMonoTime()
 
       while true:
         let elapsed = inMilliseconds(getMonoTime() - start)
         if elapsed >= stop_ms:
+          echo "Exiting the Lion's Den"
           return elapsed
 
         dummy_cpt()
