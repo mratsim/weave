@@ -314,7 +314,6 @@ int user_main_single(int argc, char **argv){
     thrd_create(&thr[i], (thrd_start_t)&thread_func_sender, &args[i]);
   }
   for (int i = 0; i < NumSenders+1; ++i){
-    // thrd_join(thr[i], nullptr);
     thrd_join(thr[i]);
   }
 

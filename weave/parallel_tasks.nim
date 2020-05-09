@@ -260,10 +260,10 @@ when isMainModule:
         f1 = fib
 
     proc sleepingLion(stop_ms: int64): int64 =
-      let start = getEpochTime()
+      let start = getTime()
 
       while true:
-        let elapsed = inMilliseconds(getEpochTime() - start)
+        let elapsed = inMilliseconds(getTime() - start)
         if elapsed >= stop_ms:
           return elapsed
 
