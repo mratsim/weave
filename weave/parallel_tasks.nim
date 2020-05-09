@@ -281,7 +281,7 @@ when isMainModule:
       let f = spawn sleepingLion(123)
       var spin_count: int64
       while not f.isReady():
-        loadBalance() # We need to send the task away, on OSX CI it seems like threads are not initialized fast enough
+        loadBalance(Weave) # We need to send the task away, on OSX CI it seems like threads are not initialized fast enough
         spin_count += 1
       let stopReady = getMonoTime()
       let res = sync(f)
