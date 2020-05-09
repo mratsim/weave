@@ -133,8 +133,11 @@ proc tryRecv*[T](chan: var ChannelMpscUnboundedBatch[T], dst: var T): bool =
   ## This can fail spuriously on the last element if producer
   ## enqueues a new element while the consumer was dequeing it
 
-  let first = cast[T](chan.front.next.load(moRelaxed))
+  let first = cast[T](chan.front.next.load(moAcquire))
   if first.isNil:
+    # According to the model checker, we can't put "fence(moAcquire)"
+    # here and use relaxed semantics for "first" as it may read from initialized load
+    # (due to compiler reordering?)
     return false
 
   # fast path
@@ -145,7 +148,7 @@ proc tryRecv*[T](chan: var ChannelMpscUnboundedBatch[T], dst: var T): bool =
       prefetch(first)
       discard chan.count.fetchSub(1, moRelaxed)
       chan.front.next.store(next, moRelaxed)
-      fence(moAcquire)
+      fence(moAcquire) # Sync "first.next.load(moRelaxed)"
       dst = first
       return true
   # End fast-path
@@ -154,11 +157,13 @@ proc tryRecv*[T](chan: var ChannelMpscUnboundedBatch[T], dst: var T): bool =
   var last = chan.back.load(moRelaxed)
   if first != last:
     # We lose the competition before even trying
+    fence(moAcquire) # Sync "chan.back.load(moRelaxed)"
     return false
 
   chan.front.next.store(nil, moRelaxed)
   if compareExchange(chan.back, last, chan.front.addr, moAcquireRelease):
     # We won and replaced the last node with the channel front
+    prefetch(first)
     discard chan.count.fetchSub(1, moRelaxed)
     dst = first
     return true
@@ -178,9 +183,26 @@ proc tryRecv*[T](chan: var ChannelMpscUnboundedBatch[T], dst: var T): bool =
   prefetch(first)
   discard chan.count.fetchSub(1, moRelaxed)
   chan.front.next.store(next, moRelaxed)
-  fence(moAcquire)
+  fence(moAcquire) # sync first.next.load(moRelaxed)
   dst = first
   return true
+
+  # Alternative implementation
+  #
+  # # We lost but now we know that there is an extra node coming very soon
+  # cpuRelax()
+  # let next = first.next.load(moRelaxed)
+  # if not next.isNil:
+  #   # Extra nodes after this one, no more competition with producers
+  #   prefetch(first)
+  #   discard chan.count.fetchSub(1, moRelaxed)
+  #   chan.front.next.store(next, moRelaxed)
+  #   fence(moAcquire) # Sync "first.next.load(moRelaxed)"
+  #   dst = first
+  #   return true
+
+  # # The last item wasn't linked to the list yet, bail out
+  # return false
 
 proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var T): int32 =
   ## Try receiving all items buffered in the channel
@@ -198,24 +220,24 @@ proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var
 
   result = 0
 
-  var front = cast[T](chan.front.next.load(moRelaxed))
+  var front = cast[T](chan.front.next.load(moAcquire))
   bFirst = front
   if front.isNil:
     return
 
   # Fast-forward to the end of the channel
-  var next = cast[T](front.next.load(moRelaxed))
+  var next = cast[T](front.next.load(moAcquire))
   while not next.isNil:
     result += 1
     bLast = front
     front = next
-    next = cast[T](next.next.load(moRelaxed))
+    next = cast[T](next.next.load(moAcquire))
 
   # Competing with producers at the back
-  var last = chan.back.load(moRelaxed)
+  var last = chan.back.load(moAcquire)
   if front != last:
     # We lose the competition, bail out
-    chan.front.next.store(front, moRelaxed)
+    chan.front.next.store(front, moRelease)
     discard chan.count.fetchSub(result, moRelaxed)
     postCondition: chan.count.load(moRelaxed) >= 0 # TODO: somehow it can be negative
     return
@@ -250,7 +272,7 @@ proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var
   result += 1
   discard chan.count.fetchSub(result, moRelaxed)
   chan.front.next.store(next, moRelaxed)
-  fence(moAcquire)
+  fence(moAcquire)  # sync front.next.load(moRelaxed)
   bLast = front
   postCondition: chan.count.load(moRelaxed) >= 0
 
