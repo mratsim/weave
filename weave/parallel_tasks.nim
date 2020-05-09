@@ -277,8 +277,10 @@ when isMainModule:
       echo "Spawning sleeping thread for ", target, " ms"
       let start = getMonoTime()
       let f = spawn sleepingLion(123)
+      var spin_count: int64
       while not f.isReady():
-        cpuRelax()
+        # cpuRelax() # Reliable deadlocks on Azure OSX and Travis ARM
+        spin_count += 1
       let stopReady = getMonoTime()
       let res = sync(f)
       let stopSync = getMonoTime()
@@ -287,7 +289,7 @@ when isMainModule:
       let readyTime = inMilliseconds(stopReady-start)
       let syncTime = inMilliseconds(stopSync-stopReady)
 
-      echo "Retrieved: ", res, " (isReady: ", readyTime, " ms, sync: ", syncTime, " ms)"
+      echo "Retrieved: ", res, " (isReady: ", readyTime, " ms, sync: ", syncTime, " ms, spin_count: ", spin_count, ")"
       doAssert syncTime <= 1, "sync should be non-blocking"
       # doAssert readyTime in {target-1 .. target+1}, "asking to sleep for " & $target & " ms but slept for " & $readyTime
 
