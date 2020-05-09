@@ -176,7 +176,7 @@ macro parallelForStagedImpl*(loopParams: untyped, stride: int, body: untyped): u
     result.add quote do:
       proc `parStagedTask`(param: pointer) {.nimcall, gcsafe.} =
         let this = myTask()
-        assert not isRootTask(this)
+        # assert not isRootTask(this)
 
         when bool(`withArgs`):
           let `env` = cast[ptr `CapturedTy`](param)
@@ -188,7 +188,7 @@ macro parallelForStagedImpl*(loopParams: untyped, stride: int, body: untyped): u
     result.add quote do:
       proc `parStagedTask`(param: pointer) {.nimcall, gcsafe.} =
         let this = myTask()
-        assert not isRootTask(this)
+        # assert not isRootTask(this)
 
         let lastLoopIter = cast[ptr FlowVar[bool]](param)
         when bool(`withArgs`):

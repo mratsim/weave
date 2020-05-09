@@ -32,7 +32,6 @@ proc asyncSignal(fn: proc (_: pointer) {.nimcall, gcsafe.}, chan: var ChannelSps
   profile(send_recv_task):
     let dummy = newTaskFromCache()
     dummy.fn = fn
-    dummy.parent = myTask()
     mySyncScope().registerDescendant
     dummy.scopedBarrier = mySyncScope()
     TargetLastVictim:

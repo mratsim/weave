@@ -14,8 +14,6 @@ type
     task is ptr
     task.prev is T
     task.next is T
-    # A task has a parent field
-    task.parent is T
     # task has a "fn" field with the proc to run
     task.fn is proc (param: pointer) {.nimcall.}
 
@@ -134,26 +132,6 @@ func addListFirst*[T](dq: var PrellDeque[T], head: sink T) =
     ascertain: cast[ByteAddress](tail.fn) != 0xFACADE
 
   dq.addListFirst(head, tail, count)
-
-# Task-specific routines
-# ---------------------------------------------------------------
-
-func popFirstIfChild*[T](dq: var PrellDeque[T], parentTask: T): T {.inline.} =
-  preCondition: not parentTask.isNil
-
-  if dq.isEmpty():
-    return nil
-
-  result = dq.head
-  if result.parent != parentTask:
-    # Not a child, don't pop it
-    return nil
-
-  dq.head = dq.head.next
-  dq.head.prev = nil
-  result.next = nil
-
-  dq.pendingTasks -= 1
 
 # Work-stealing routines
 # ---------------------------------------------------------------

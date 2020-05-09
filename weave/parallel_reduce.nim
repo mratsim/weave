@@ -207,7 +207,7 @@ macro parallelReduceImpl*(loopParams: untyped, stride: int, body: untyped): unty
   result.add quote do:
     proc `parReduceTask`(param: pointer) {.nimcall, gcsafe.} =
       let this = myTask()
-      assert not isRootTask(this)
+      # assert not isRootTask(this)
 
       let `fut` = cast[ptr `FutTy`](param)
       when bool(`withArgs`):

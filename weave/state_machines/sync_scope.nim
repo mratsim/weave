@@ -80,7 +80,7 @@ implEvent(syncScopeFSA, SBE_HasTask):
   not task.isNil
 
 onEntry(syncScopeFSA, SB_CheckTask):
-  task = nextTask(childTask = false)
+  task = nextTask()
 
 behavior(syncScopeFSA):
   ini: SB_CheckTask

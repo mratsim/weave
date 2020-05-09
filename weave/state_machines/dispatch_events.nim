@@ -13,12 +13,9 @@ import
   ../thieves,
   ./decline_thief, ./handle_thieves
 
-proc nextTask*(childTask: static bool): Task {.inline.} =
+proc nextTask*(): Task {.inline.} =
   profile(enq_deq_task):
-    if childTask:
-      result = myWorker().deque.popFirstIfChild(myTask())
-    else:
-      result = myWorker().deque.popFirst()
+    result = myWorker().deque.popFirst()
 
   when WV_StealEarly > 0:
     if not result.isNil:

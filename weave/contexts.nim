@@ -45,8 +45,8 @@ export timers
 # Aliases
 # ----------------------------------------------------------------------------------
 
-template isRootTask*(task: Task): bool =
-  task.parent.isNil
+# template isRootTask*(task: Task): bool =
+#   task.parent.isNil
 
 template myTodoBoxes*: Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]] =
   globalCtx.com.tasks[localCtx.worker.ID]
@@ -107,7 +107,6 @@ proc newTaskFromCache*(): Task =
   # Zeroing is expensive, it's 96 bytes
 
   # result.fn = nil # Always overwritten
-  # result.parent = nil # Always overwritten
   # result.scopedBarrier = nil # Always overwritten
   result.prev = nil
   result.next = nil

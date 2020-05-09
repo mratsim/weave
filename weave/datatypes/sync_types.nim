@@ -30,15 +30,14 @@ type
     # We save memory by using int32 instead of int on select properties
     # order field by size to optimize zero initialization (bottleneck on recursive algorithm)
     fn*: proc (param: pointer) {.nimcall, gcsafe.}
-    parent*: Task
     prev*: Task
     next*: Task
-    # 32 bytes
+    # 24 bytes
     start*: int
     cur*: int
     stop*: int
     stride*: int
-    # 64 bytes
+    # 56 bytes
     scopedBarrier*: ptr ScopedBarrier
     futures*: pointer    # LinkedList of futures required by the current task
     futureSize*: uint8   # Size of the future result type if relevant
@@ -47,7 +46,7 @@ type
     isInitialIter*: bool # Awaitable for-loops return true for the initial iter
     when FirstVictim == LastVictim:
       victim*: WorkerID
-    # 84 bytes (or 88 with FirstVictim = LastVictim)
+    # 76 bytes (or 84 with FirstVictim = LastVictim)
     # User data - including the FlowVar channel to send back result.
     # It is very likely that User data contains a pointer (the Flowvar channel)
     # We align to avoid torn reads/extra bookkeeping.

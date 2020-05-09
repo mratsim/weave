@@ -298,7 +298,6 @@ proc addLoopTask*(
           timer_start(timer_enq_deq_task)
         block enq_deq_task:
           let `task` = newTaskFromCache()
-          `task`.parent = myTask()
           `task`.fn = `asyncFn`
           registerDescendant(mySyncScope())
           `task`.scopedBarrier = mySyncScope()
@@ -329,7 +328,6 @@ proc addLoopTask*(
           timer_start(timer_enq_deq_task)
         block enq_deq_task:
           let `task` = newTaskFromCache()
-          `task`.parent = myTask()
           `task`.fn = `asyncFn`
           registerDescendant(mySyncScope())
           `task`.scopedBarrier = mySyncScope()

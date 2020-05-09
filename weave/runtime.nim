@@ -71,7 +71,6 @@ proc init*(_: type Weave) =
 
   # Root task
   myWorker().currentTask = newTaskFromCache()
-  myTask().parent = nil
   myTask().fn = cast[type myTask().fn](0xEFFACED)
   myTask().scopedBarrier = nil
 
@@ -144,7 +143,7 @@ proc globalCleanup() =
   wv_free(globalCtx.com.tasks)
 
   # The root task has no parent
-  ascertain: myTask().isRootTask()
+  # ascertain: myTask().isRootTask()
   delete(myTask())
 
   # TODO takeover the leftover pools

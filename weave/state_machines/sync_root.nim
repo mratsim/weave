@@ -49,7 +49,7 @@ setPrologue(syncRootFSA):
   Worker: return
   debugTermination:
     log(">>> Worker %2d enters barrier <<<\n", myID())
-  preCondition: myTask().isRootTask()
+  # preCondition: myTask().isRootTask()
 
   debug: log("Worker %2d: syncRoot 1 - task from local deque\n", myID())
   var task: Task
@@ -78,7 +78,7 @@ implEvent(syncRootFSA, SYE_SoleWorker):
 # -------------------------------------------
 
 onEntry(syncRootFSA, SY_CheckTask):
-  task = nextTask(childTask = false)
+  task = nextTask()
 
 behavior(syncRootFSA):
   ini: SY_CheckTask

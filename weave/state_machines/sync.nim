@@ -21,13 +21,13 @@ import
 
 type AwaitState = enum
   AW_CheckTask
-  AW_OutOfDirectChildTasks
+  AW_OutOfTasks
   AW_Steal
   AW_SuccessfulTheft
 
 type AwaitEvent = enum
   AWE_FutureReady
-  AWE_HasChildTask
+  AWE_HasTask
   AWE_ReceivedTask
 
 declareAutomaton(awaitFSA, AwaitState, AwaitEvent)
@@ -53,20 +53,20 @@ implEvent(awaitFSA, AWE_FutureReady):
 behavior(awaitFSA):
   # In AW_Steal we might recv tasks and steal requests which get stuck in our queues
   # when we exit once the future is ready.
-  ini: [AW_CheckTask, AW_OutOfDirectChildTasks, AW_Steal]
+  ini: [AW_CheckTask, AW_OutOfTasks, AW_Steal]
   interrupt: AWE_FutureReady
   transition: discard
   fin: AW_Exit
 
-implEvent(awaitFSA, AWE_HasChildTask):
+implEvent(awaitFSA, AWE_HasTask):
   not task.isNil
 
 onEntry(awaitFSA, AW_CheckTask):
-  task = nextTask(childTask = true)
+  task = nextTask()
 
 behavior(awaitFSA):
   ini: AW_CheckTask
-  event: AWE_HasChildTask
+  event: AWE_HasTask
   transition:
     profile(run_task):
       execute(task)
@@ -83,18 +83,16 @@ behavior(awaitFSA):
     # 2. Run out-of-task, become a thief and help other threads
     #    to reach children faster
     debug: log("Worker %2d: forcefut 2 - becoming a thief\n", myID())
-  fin: AW_OutOfDirectChildTasks
+  fin: AW_OutOfTasks
 
 # -------------------------------------------
 # These states are interrupted when future is ready
 
 behavior(awaitFSA):
-  ini: AW_OutOfDirectChildTasks
+  ini: AW_OutOfTasks
   transition:
     # Steal and hope to advance towards the child tasks in other workers' queues.
     trySteal(isOutOfTasks = false)
-    # If someone wants our non-direct child tasks, let's oblige
-    # Note that we might have grandchildren tasks stuck in our own queue.
     dispatchToChildrenAndThieves()
     profile_start(idle)
   fin: AW_Steal
@@ -118,8 +116,6 @@ behavior(awaitFSA):
     # dispatchElseDecline so resteal
     profile_stop(idle)
     trySteal(isOutOfTasks = false)
-    # If someone wants our non-direct child tasks, let's oblige
-    # Note that we might have grandchildren tasks stuck in our own queue.
     dispatchToChildrenAndThieves()
     profile_start(idle)
 

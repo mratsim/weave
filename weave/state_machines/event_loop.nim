@@ -70,7 +70,7 @@ behavior(workerEventLoop):
 onEntry(workerEventLoop, WEL_CheckTask):
   # If we have extra tasks, prio is: children, then thieves then us
   # This is done in `nextTask`
-  let task = nextTask(childTask = false)
+  let task = nextTask()
 
 implEvent(workerEventLoop, EV_FoundTask):
   not task.isNil
