@@ -203,7 +203,9 @@ macro spawnDelayed*(pledges: varargs[typed], fnCall: typed): untyped =
 # --------------------------------------------------------
 
 when isMainModule:
-  import ./runtime, ./state_machines/[sync, sync_root], os, std/[times, monotimes]
+  import
+    ./runtime, ./state_machines/[sync, sync_root], os,
+    std/[times, monotimes]
 
   block: # Async without result
 
@@ -245,11 +247,27 @@ when isMainModule:
     main2()
 
   block: # isReady
-    proc sleepingLion(ms: int): int =
-      for _ in 0 ..< ms:
-        sleep(1)
-      echo "--> Slept for ~", ms, " ms"
-      return ms
+    template dummy_cpt(): untyped =
+      # Dummy computation
+      # Calculate fib(30) iteratively
+      var
+        fib = 0
+        f2 = 0
+        f1 = 1
+      for i in 2 .. 30:
+        fib = f1 + f2
+        f2 = f1
+        f1 = fib
+
+    proc sleepingLion(stop_ms: int64): int64 =
+      let start = getMonoTime()
+
+      while true:
+        let elapsed = inMilliseconds(getMonoTime() - start)
+        if elapsed >= stop_ms:
+          return elapsed
+
+        dummy_cpt()
 
     proc main2() =
       echo "Sanity check 3: isReady"
