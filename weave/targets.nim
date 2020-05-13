@@ -84,7 +84,7 @@ proc findVictim*(req: var StealRequest): WorkerID =
     # and I was the last possible target.
     # or all threads but the main one are sleeping and it retrieved its own request
     # from one of the sleeper queues
-    postCondition: result != myID() or (result == myID() and myID() == LeaderID)
+    postCondition: result != myID() or (result == myID() and myID() == RootID)
 
   postCondition: result in 0 ..< workforce()
   postCondition: req.retry in 0 .. WV_MaxRetriesPerSteal

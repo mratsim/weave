@@ -16,14 +16,14 @@ import
 # ----------------------------------------------------------------------------------
 
 proc detectTermination*() {.inline.} =
-  preCondition: myID() == LeaderID
+  preCondition: myID() == RootID
   preCondition: myWorker().leftIsWaiting and myWorker().rightIsWaiting
-  preCondition: not localCtx.runtimeIsQuiescent
+  preCondition: not workerContext.runtimeIsQuiescent
 
   debugTermination:
     log(">>> Worker %2d detects termination <<<\n", myID())
 
-  localCtx.runtimeIsQuiescent = true
+  workerContext.runtimeIsQuiescent = true
 
 proc asyncSignal(fn: proc (_: pointer) {.nimcall, gcsafe.}, chan: var ChannelSpscSinglePtr[Task]) =
   ## Send an asynchronous signal `fn` to channel `chan`
@@ -43,7 +43,7 @@ proc asyncSignal(fn: proc (_: pointer) {.nimcall, gcsafe.}, chan: var ChannelSps
     postCondition: signalSent
 
 proc signalTerminate*(_: pointer) {.gcsafe.} =
-  preCondition: not localCtx.signaledTerminate
+  preCondition: not workerContext.signaledTerminate
 
   # 1. Terminating means everyone ran out of tasks
   #    so their cache for task channels should be full
@@ -64,4 +64,4 @@ proc signalTerminate*(_: pointer) {.gcsafe.} =
     # as a normal task
     decCounter(tasksExec)
 
-  localCtx.signaledTerminate = true
+  workerContext.signaledTerminate = true

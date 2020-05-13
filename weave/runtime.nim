@@ -75,7 +75,7 @@ proc init*(_: type Weave) =
   myTask().fn = cast[type myTask().fn](0xEFFACED)
   myTask().scopedBarrier = nil
 
-  init(localCtx)
+  setupWorker()
   # Wait for the child threads
   discard globalCtx.barrier.wait()
 
@@ -155,7 +155,7 @@ proc globalCleanup() =
 proc exit*(_: type Weave) =
   syncRoot(_)
   signalTerminate(nil)
-  localCtx.signaledTerminate = true
+  workerContext.signaledTerminate = true
 
   # 1 matching barrier in worker_entry_fn
   discard globalCtx.barrier.wait()
@@ -163,5 +163,5 @@ proc exit*(_: type Weave) =
   # 1 matching barrier in metrics
   workerMetrics()
 
-  threadLocalCleanup()
+  teardownWorker()
   globalCleanup()

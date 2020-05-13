@@ -49,7 +49,7 @@ setTerminalState(workerEventLoop, WEL_Exit)
 # -------------------------------------------
 
 implEvent(workerEventLoop, EV_SignaledTerminate):
-  localCtx.signaledTerminate
+  workerContext.signaledTerminate
 
 behavior(workerEventLoop):
   ini: WEL_CheckTermination
@@ -84,7 +84,7 @@ behavior(workerEventLoop):
       execute(task)
     profile(enq_deq_task):
       # The task memory is reused but not zero-ed
-      localCtx.taskCache.add(task)
+      workerContext.taskCache.add(task)
   fin: WEL_CheckTask
 
 behavior(workerEventLoop):
@@ -151,7 +151,7 @@ behavior(workerEventLoop):
       execute(task)
     profile(enq_deq_task):
       # The memory is reused but not zero-ed
-      localCtx.taskCache.add(task)
+      workerContext.taskCache.add(task)
   fin: WEL_CheckTermination
 
 # -------------------------------------------

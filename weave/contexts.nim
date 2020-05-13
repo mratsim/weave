@@ -24,10 +24,13 @@ Backoff:
 type Weave* = object
 
 var globalCtx*: GlobalContext
-var localCtx* {.threadvar.}: TLContext
+var workerContext* {.threadvar.}: WorkerContext
+  ## Worker context
   # TODO: tlsEmulation off by default on OSX and on by default on iOS?
 
-const LeaderID*: WorkerID = 0
+var jobProviderContext* {.threadvar.}: JobProviderContext
+
+const RootID*: WorkerID = 0
 
 # Profilers
 # ----------------------------------------------------------------------------------
@@ -49,16 +52,16 @@ template isRootTask*(task: Task): bool =
   task.parent.isNil
 
 template myTodoBoxes*: Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]] =
-  globalCtx.com.tasksStolen[localCtx.worker.ID]
+  globalCtx.com.tasksStolen[workerContext.worker.ID]
 
 template myThieves*: ChannelMpscUnboundedBatch[StealRequest] =
-  globalCtx.com.thefts[localCtx.worker.ID]
+  globalCtx.com.thefts[workerContext.worker.ID]
 
 template getThievesOf*(worker: WorkerID): ChannelMpscUnboundedBatch[StealRequest] =
   globalCtx.com.thefts[worker]
 
 template myMemPool*: TLPoolAllocator =
-  globalCtx.mempools[localCtx.worker.ID]
+  globalCtx.mempools[workerContext.worker.ID]
 
 template workforce*: int32 =
   globalCtx.numWorkers
@@ -67,32 +70,32 @@ template maxID*: int32 =
   globalCtx.numWorkers - 1
 
 template myID*: WorkerID =
-  localCtx.worker.ID
+  workerContext.worker.ID
 
 template myWorker*: Worker =
-  localCtx.worker
+  workerContext.worker
 
 template myTask*: Task =
-  localCtx.worker.currentTask
+  workerContext.worker.currentTask
 
 template myThefts*: Thefts =
-  localCtx.thefts
+  workerContext.thefts
 
 template myMetrics*: untyped =
   metrics:
-    localCtx.counters
+    workerContext.counters
 
 template mySyncScope*: ptr ScopedBarrier =
-  localCtx.worker.currentScope
+  workerContext.worker.currentScope
 
 Backoff:
   template myParking*: EventNotifier =
-    globalCtx.com.parking[localCtx.worker.ID]
+    globalCtx.com.parking[workerContext.worker.ID]
 
   template wakeup*(target: WorkerID) =
     mixin notify
     debugTermination:
-      log("Worker %2d: waking up child %2d\n", localCtx.worker.ID, target)
+      log("Worker %2d: waking up child %2d\n", workerContext.worker.ID, target)
     globalCtx.com.parking[target].notify()
 
   export event_notifiers.park, event_notifiers.prepareToPark, event_notifiers.initialize, event_notifiers.EventNotifier
@@ -101,7 +104,7 @@ Backoff:
 # ----------------------------------------------------------------------------------
 
 proc newTaskFromCache*(): Task =
-  result = localCtx.taskCache.pop()
+  result = workerContext.taskCache.pop()
   if result.isNil:
     result = myMemPool().borrow(deref(Task))
   # Zeroing is expensive, it's 96 bytes
@@ -168,12 +171,12 @@ proc fulfill*(pledge: Pledge, index: SomeInteger) =
 # Dynamic Scopes
 # ----------------------------------------------------------------------------------
 
-template Leader*(body: untyped) =
-  if localCtx.worker.ID == LeaderID:
+template Root*(body: untyped) =
+  if workerContext.worker.ID == RootID:
     body
 
 template Worker*(body: untyped) =
-  if localCtx.worker.ID != LeaderID:
+  if workerContext.worker.ID != RootID:
     body
 
 # Counters
@@ -182,18 +185,18 @@ template Worker*(body: untyped) =
 template incCounter*(name: untyped{ident}, amount = 1) =
   bind name
   metrics:
-    # Assumes localCtx is in the calling context
-    localCtx.counters.name += amount
+    # Assumes workerContext is in the calling context
+    workerContext.counters.name += amount
 
 template decCounter*(name: untyped{ident}) =
   bind name
   metrics:
-    # Assumes localCtx is in the calling context
-    localCtx.counters.name -= 1
+    # Assumes workerContext is in the calling context
+    workerContext.counters.name -= 1
 
 proc workerMetrics*() =
   metrics:
-    Leader:
+    Root:
       c_printf("\n")
       c_printf("+========================================+\n")
       c_printf("|  Per-worker statistics                 |\n")
@@ -202,25 +205,25 @@ proc workerMetrics*() =
 
     discard globalCtx.barrier.wait()
 
-    c_printf("Worker %2d: %u steal requests sent\n", myID(), localCtx.counters.stealSent)
-    c_printf("Worker %2d: %u steal requests handled\n", myID(), localCtx.counters.stealHandled)
-    c_printf("Worker %2d: %u steal requests declined\n", myID(), localCtx.counters.stealDeclined)
-    c_printf("Worker %2d: %u tasks executed\n", myID(), localCtx.counters.tasksExec)
-    c_printf("Worker %2d: %u tasks sent\n", myID(), localCtx.counters.tasksSent)
-    c_printf("Worker %2d: %u loops split\n", myID(), localCtx.counters.loopsSplit)
-    c_printf("Worker %2d: %u loops iterations executed\n", myID(), localCtx.counters.loopsIterExec)
+    c_printf("Worker %2d: %u steal requests sent\n", myID(), workerContext.counters.stealSent)
+    c_printf("Worker %2d: %u steal requests handled\n", myID(), workerContext.counters.stealHandled)
+    c_printf("Worker %2d: %u steal requests declined\n", myID(), workerContext.counters.stealDeclined)
+    c_printf("Worker %2d: %u tasks executed\n", myID(), workerContext.counters.tasksExec)
+    c_printf("Worker %2d: %u tasks sent\n", myID(), workerContext.counters.tasksSent)
+    c_printf("Worker %2d: %u loops split\n", myID(), workerContext.counters.loopsSplit)
+    c_printf("Worker %2d: %u loops iterations executed\n", myID(), workerContext.counters.loopsIterExec)
     StealAdaptative:
-      ascertain: localCtx.counters.stealOne + localCtx.counters.stealHalf == localCtx.counters.stealSent
-      if localCtx.counters.stealSent != 0:
+      ascertain: workerContext.counters.stealOne + workerContext.counters.stealHalf == workerContext.counters.stealSent
+      if workerContext.counters.stealSent != 0:
         c_printf("Worker %2d: %.2f %% steal-one\n", myID(),
-          localCtx.counters.stealOne.float64 / localCtx.counters.stealSent.float64 * 100)
+          workerContext.counters.stealOne.float64 / workerContext.counters.stealSent.float64 * 100)
         c_printf("Worker %2d: %.2f %% steal-half\n", myID(),
-          localCtx.counters.stealHalf.float64 / localCtx.counters.stealSent.float64 * 100)
+          workerContext.counters.stealHalf.float64 / workerContext.counters.stealSent.float64 * 100)
       else:
         c_printf("Worker %2d: %.2f %% steal-one\n", myID(), 0)
         c_printf("Worker %2d: %.2f %% steal-half\n", myID(), 0)
     LazyFV:
-      c_printf("Worker %2d: %u futures converted\n", myID(), localCtx.counters.futuresConverted)
+      c_printf("Worker %2d: %u futures converted\n", myID(), workerContext.counters.futuresConverted)
 
     profile_results(myID())
     flushFile(stdout)

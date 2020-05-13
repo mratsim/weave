@@ -6,10 +6,10 @@ digraph syncRootFSA{
     node [shape = octagon, fontcolor=black, fillcolor=lightsteelblue, style="rounded,filled"]; SY_OutOfTasks_SYE_SoleWorker SY_OutOfTasks_SYE_Quiescent SY_CheckTask_SYE_HasTask SY_Steal_SYE_ReceivedTask ;
     node [shape = diamond, fontcolor=black, fillcolor=coral, style="rounded,filled"]; SY_Steal_SYE_Quiescent ;
     SY_OutOfTasks_SYE_SoleWorker [label="SYE_SoleWorker\n  globalCtx.numWorkers ==    1"];
-    SY_OutOfTasks_SYE_Quiescent [label="SYE_Quiescent\nlocalCtx.runtimeIsQuiescent"];
+    SY_OutOfTasks_SYE_Quiescent [label="SYE_Quiescent\nworkerContext.runtimeIsQuiescent"];
     SY_CheckTask_SYE_HasTask [label="SYE_HasTask\nnot task.isNil"];
     SY_Steal_SYE_ReceivedTask [label="SYE_ReceivedTask\nlootedTask"];
-    SY_Steal_SYE_Quiescent [label="SYE_Quiescent\nlocalCtx.runtimeIsQuiescent"];
+    SY_Steal_SYE_Quiescent [label="SYE_Quiescent\nworkerContext.runtimeIsQuiescent"];
     SY_OutOfTasks -> SY_OutOfTasks_SYE_SoleWorker[style=bold, xlabel="always"];
     SY_OutOfTasks_SYE_SoleWorker -> SY_Exit [style=dashed, xlabel="true"];
     SY_OutOfTasks_SYE_SoleWorker -> SY_OutOfTasks_SYE_Quiescent[style=dotted, xlabel="false"];

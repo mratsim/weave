@@ -71,7 +71,7 @@ behavior(awaitFSA):
     profile(run_task):
       execute(task)
     profile(enq_deq_task):
-      localCtx.taskCache.add(task)
+      workerContext.taskCache.add(task)
   fin: AW_CheckTask
 
 behavior(awaitFSA):
@@ -155,7 +155,7 @@ behavior(awaitFSA):
       execute(task)
     profile(enq_deq_task):
       # The memory is reused but not zero-ed
-      localCtx.taskCache.add(task)
+      workerContext.taskCache.add(task)
   fin: AW_CheckTask
 
 # -------------------------------------------

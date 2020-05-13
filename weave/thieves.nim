@@ -20,7 +20,7 @@ import
 proc newStealRequest(): StealRequest =
   ## Create a new steal request
   ## This does not initialize the Thief state
-  result = localCtx.stealCache.borrow()
+  result = workerContext.stealCache.borrow()
   ascertain: result.victims.capacity.int32 == workforce()
 
   result.next.store(nil, moRelaxed)
@@ -144,7 +144,7 @@ proc forget*(req: sink StealRequest) {.gcsafe.} =
 
   myThefts().outstanding -= 1
   myTodoBoxes().recycle(req.thiefAddr)
-  localCtx.stealCache.recycle(req)
+  workerContext.stealCache.recycle(req)
 
 proc drop*(req: sink StealRequest) =
   ## Removes a steal request from circulation
@@ -162,7 +162,7 @@ proc drop*(req: sink StealRequest) =
   # don't decrement the count so that no new theft is initiated
   myThefts().dropped += 1
   myTodoBoxes().recycle(req.thiefAddr)
-  localCtx.stealCache.recycle(req)
+  workerContext.stealCache.recycle(req)
 
 proc stealEarly*(){.inline.} =
   if workforce() == 1:

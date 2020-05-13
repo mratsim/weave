@@ -89,7 +89,7 @@ behavior(syncScopeFSA):
     profile(run_task):
       execute(task)
     profile(enq_deq_task):
-      localCtx.taskCache.add(task)
+      workerContext.taskCache.add(task)
   fin: SB_CheckTask
 
 behavior(syncScopeFSA):
@@ -162,7 +162,7 @@ behavior(syncScopeFSA):
       execute(task)
     profile(enq_deq_task):
       # The memory is re-used but not zero-ed
-      localCtx.taskCache.add(task)
+      workerContext.taskCache.add(task)
   fin: SB_CheckTask
 
 # -------------------------------------------

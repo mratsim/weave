@@ -78,7 +78,7 @@ behavior(recvTaskFSA):
   event: RTE_FoundTask
   transition:
     myTodoBoxes().nowAvailable(curChanIdx)
-    localCtx.stealCache.nowAvailable(curChanIdx)
+    workerContext.stealCache.nowAvailable(curChanIdx)
     debug: log("Worker %2d: received a task with function address 0x%.08x (Channel 0x%.08x)\n",
       myID(), task.fn, myTodoBoxes().access(curChanIdx).addr)
   fin: RT_FoundTask
