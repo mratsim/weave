@@ -43,7 +43,7 @@ proc init*(_: type Weave) =
   globalCtx.mempools = wv_alloc(TLPoolAllocator, workforce())
   globalCtx.threadpool = wv_alloc(Thread[WorkerID], workforce())
   globalCtx.com.thefts = wv_alloc(ChannelMpscUnboundedBatch[StealRequest], workforce())
-  globalCtx.com.tasks = wv_alloc(Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]], workforce())
+  globalCtx.com.tasksStolen = wv_alloc(Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]], workforce())
   Backoff:
     globalCtx.com.parking = wv_alloc(EventNotifier, workforce())
   globalCtx.barrier.init(workforce())
@@ -141,7 +141,7 @@ proc globalCleanup() =
   # Channels, each thread cleaned its channels
   # We just need to reclaim the memory
   wv_free(globalCtx.com.thefts)
-  wv_free(globalCtx.com.tasks)
+  wv_free(globalCtx.com.tasksStolen)
 
   # The root task has no parent
   ascertain: myTask().isRootTask()

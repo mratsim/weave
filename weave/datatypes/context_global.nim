@@ -37,7 +37,8 @@ type
 
     # Theft channels are bounded to "NumWorkers * WV_MaxConcurrentStealPerWorker"
     thefts*: ptr UncheckedArray[ChannelMpscUnboundedBatch[StealRequest]]
-    tasks*: ptr UncheckedArray[Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]]]
+    tasksStolen*: ptr UncheckedArray[Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]]]
+    jobsSubmitted*: ptr UncheckedArray[ChannelMpscUnboundedBatch[Job]]
     when static(WV_Backoff):
       parking*: ptr UncheckedArray[EventNotifier]
 

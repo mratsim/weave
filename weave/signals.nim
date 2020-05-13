@@ -51,11 +51,11 @@ proc signalTerminate*(_: pointer) {.gcsafe.} =
   # 2. Since they have an unique parent, no one else sent them a signal (checked in asyncSignal)
   if myWorker().left != Not_a_worker:
     # Send the terminate signal
-    asyncSignal(signalTerminate, globalCtx.com.tasks[myWorker().left].access(0))
+    asyncSignal(signalTerminate, globalCtx.com.tasksStolen[myWorker().left].access(0))
     Backoff: # Wake the worker up so that it can process the terminate signal
       wakeup(myWorker().left)
   if myWorker().right != Not_a_worker:
-    asyncSignal(signalTerminate, globalCtx.com.tasks[myWorker().right].access(0))
+    asyncSignal(signalTerminate, globalCtx.com.tasksStolen[myWorker().right].access(0))
     Backoff:
       wakeup(myWorker().right)
 

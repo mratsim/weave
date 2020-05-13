@@ -53,12 +53,45 @@ type
     # We align to avoid torn reads/extra bookkeeping.
     data*{.align:sizeof(int).}: array[TaskDataSize, byte]
 
+  Job* = ptr object
+    ## Job
+    ## Represents a deferred computation that can be passed around threads.
+    ## The fields "prev" and "next" can be used
+    ## for intrusive containers
+    # We save memory by using int32 instead of int on select properties
+    # order field by size to optimize zero initialization (bottleneck on recursive algorithm)
+
+    # The same as a task except for next being Atomic
+    fn*: proc (param: pointer) {.nimcall, gcsafe.}
+    parent*: Task
+    prev*: Task
+    next*: Atomic[pointer] # For MPSC queue
+    # 32 bytes
+    start*: int
+    cur*: int
+    stop*: int
+    stride*: int
+    # 64 bytes
+    scopedBarrier*: ptr ScopedBarrier
+    futures*: pointer    # LinkedList of futures required by the current task
+    futureSize*: uint8   # Size of the future result type if relevant
+    hasFuture*: bool     # If a task is associated with a future, the future is stored at data[0]
+    isLoop*: bool
+    isInitialIter*: bool # Awaitable for-loops return true for the initial iter
+    when FirstVictim == LastVictim:
+      victim*: WorkerID
+    # 84 bytes (or 88 with FirstVictim = LastVictim)
+    # User data - including the FlowVar channel to send back result.
+    # It is very likely that User data contains a pointer (the Flowvar channel)
+    # We align to avoid torn reads/extra bookkeeping.
+    data*{.align:sizeof(int).}: array[TaskDataSize, byte]
+
   # Steal requests
   # ----------------------------------------------------------------------------------
 
   StealRequest* = ptr object
     # TODO: Remove workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
-    next*{.align:WV_CacheLinePadding.}: Atomic[pointer]                        # For intrusive lists and queues
+    next*{.align:WV_CacheLinePadding.}: Atomic[pointer] # For intrusive lists and queues
     thiefAddr*: ptr ChannelSpscSinglePtr[Task]    # Channel for sending tasks back to the thief
     thiefID*: WorkerID
     retry*: int32                                 # 0 <= retry <= num_workers

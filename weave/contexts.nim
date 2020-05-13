@@ -49,7 +49,7 @@ template isRootTask*(task: Task): bool =
   task.parent.isNil
 
 template myTodoBoxes*: Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]] =
-  globalCtx.com.tasks[localCtx.worker.ID]
+  globalCtx.com.tasksStolen[localCtx.worker.ID]
 
 template myThieves*: ChannelMpscUnboundedBatch[StealRequest] =
   globalCtx.com.thefts[localCtx.worker.ID]
