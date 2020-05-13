@@ -5,6 +5,12 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+# A task is a processing request emitted from a Weave worker thread.
+# They are scheduled in LIFO order and maximize throughput of the runtime.
+# In particular, it is optimized for fork-join parallelism
+# where the oldest tasks spawned the recent ones and cannot complete
+# without the recent tasks being complete.
+
 # Async/await spawn/sync for compute bound tasks
 # ----------------------------------------------------------
 

@@ -63,7 +63,7 @@ type
 
     # The same as a task except for next being Atomic
     fn*: proc (param: pointer) {.nimcall, gcsafe.}
-    parent*: Task
+    parent*: pointer       # Jobs will have for parent their JobProviderContext
     prev*: Task
     next*: Atomic[pointer] # For MPSC queue
     # 32 bytes
