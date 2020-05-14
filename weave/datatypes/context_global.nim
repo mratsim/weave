@@ -46,7 +46,11 @@ type
     com*: ComChannels
     threadpool*: ptr UncheckedArray[Thread[WorkerID]]
     numWorkers*: int32
-    barrier*: SyncBarrier
     mempools*: ptr UncheckedArray[TlPoolAllocator]
+    barrier*: SyncBarrier
+      ## Barrier for initialization and deinitialization
+    jobNotifier*: ptr EventNotifier
+      ## When Weave works as a dedicated execution engine
+      ## we need to park it when there is no CPU tasks.
 
     # TODO track workers per socket / NUMA domain

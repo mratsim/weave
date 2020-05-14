@@ -189,9 +189,17 @@ proc spawnImpl(pledges: NimNode, funcCall: NimNode): NimNode =
 
 macro spawn*(fnCall: typed): untyped =
   ## Spawns the input function call asynchronously, potentially on another thread of execution.
+  ##
+  ## To offload computation from a thread started with `createdThread`
+  ## (i.e. foreign to the Weave runtime)
+  ## use `setupJobProvider` + `submit` instead.
+  ##
   ## If the function calls returns a result, spawn will wrap it in a Flowvar.
-  ## You can use sync to block the current thread and extract the asynchronous result from the flowvar.
-  ## Spawn returns immediately.
+  ## You can use `sync` to block the current thread and extract the asynchronous result from the flowvar.
+  ## You can use `isReady` to check if result is available and if subsequent
+  ## `spawn` returns immediately.
+  ##
+  ## Tasks are processed approximately in Last-In-First-Out (LIFO) order
   result = spawnImpl(nil, fnCall)
 
 macro spawnDelayed*(pledges: varargs[typed], fnCall: typed): untyped =

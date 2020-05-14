@@ -102,7 +102,7 @@ type
   JobProviderContext* = object
     ## Thread-local context for non-Weave threads
     ## to allow them to submit jobs to Weave.
-    mempool*: TLPoolAllocator # TODO: have the main thread takeover the mempool on thread destruction
+    mempool*: ptr TLPoolAllocator # TODO: have the main thread takeover the mempool on thread destruction
     rng*: RngState
 
 # Worker proc

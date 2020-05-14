@@ -47,6 +47,7 @@ proc init*(_: type Weave) =
   Backoff:
     globalCtx.com.parking = wv_alloc(EventNotifier, workforce())
   globalCtx.barrier.init(workforce())
+  globalCtx.jobNotifier[].initialize()
 
   # Lead thread - pinned to CPU 0
   myID() = 0
