@@ -44,12 +44,13 @@ proc init*(_: type Weave) =
   globalCtx.threadpool = wv_alloc(Thread[WorkerID], workforce())
   globalCtx.com.thefts = wv_alloc(ChannelMpscUnboundedBatch[StealRequest], workforce())
   globalCtx.com.tasksStolen = wv_alloc(Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]], workforce())
+  globalCtx.com.jobsSubmitted = wv_alloc(ChannelMpscUnboundedBatch[Job], workforce())
   Backoff:
     globalCtx.com.parking = wv_alloc(EventNotifier, workforce())
   globalCtx.barrier.init(workforce())
-  globalCtx.jobNotifier[].initialize()
+  globalCtx.jobNotifier = globalCtx.com.parking[0].addr
 
-  # Lead thread - pinned to CPU 0
+  # Root thread - pinned to CPU 0
   myID() = 0
   when not(defined(cpp) and defined(vcc)):
     # TODO: Nim casts between Windows Handles but that requires reinterpret cast for C++

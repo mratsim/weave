@@ -95,6 +95,8 @@ proc setupWorker*() {.gcsafe.} =
 
   ascertain: myTodoBoxes().len == WV_MaxConcurrentStealPerWorker
 
+  myJobQueue.initialize()
+
   # Thieves
   # -----------------------------------------------------------
   myThieves().initialize()
