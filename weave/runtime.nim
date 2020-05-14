@@ -7,7 +7,7 @@
 
 import
   # Standard library
-  os, cpuinfo, strutils,
+  os, cpuinfo, strutils, atomics,
   # Internal
   ./instrumentation/[contracts, loggers],
   ./contexts, ./config,
@@ -29,6 +29,7 @@ else:
 
 proc init*(_: type Weave) =
   # TODO detect Hyper-Threading and NUMA domain
+  globalCtx.acceptsJobs.store(false, moRelaxed)
 
   if existsEnv"WEAVE_NUM_THREADS":
     workforce() = getEnv"WEAVE_NUM_THREADS".parseInt.int32
@@ -80,6 +81,7 @@ proc init*(_: type Weave) =
   setupWorker()
   # Wait for the child threads
   discard globalCtx.barrier.wait()
+  globalCtx.acceptsJobs.store(true, moRelaxed)
 
 proc loadBalance*(_: type Weave) {.gcsafe.} =
   ## This makes the current thread ensures it shares work with other threads.

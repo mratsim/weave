@@ -14,15 +14,26 @@
 
 import
   # Standard library
-  macros, typetraits,
+  macros, typetraits, atomics, os,
   # Internal
-  ./memory/memory_pools,
+  ./memory/[allocs, memory_pools],
   ./random/rng,
   ./scheduler, ./contexts,
   ./datatypes/[flowvars, sync_types],
   ./instrumentation/contracts,
-  ./cross_thread_com/[scoped_barriers, pledges, channels_mpsc_unbounded_batch],
+  ./cross_thread_com/[scoped_barriers, pledges, channels_mpsc_unbounded_batch, event_notifiers],
   ./state_machines/sync_root
+
+proc waitUntilReady(_: typedesc[Weave]) {.gcsafe.} =
+  ## Wait until Weave is ready to accept jobs
+  ## This blocks the thread until the Weave runtime (on another thread) is fully initialized
+  # We use a simple exponential backoff for waiting.
+  var backoff = 1
+  while not globalCtx.acceptsJobs.load(moRelaxed):
+    sleep(backoff)
+    backoff *= 2
+    if backoff > 16:
+      backoff = 16
 
 proc setupJobProvider*(_: typedesc[Weave]) {.gcsafe.} =
   ## Configure a thread so that it can submit jobs to the Weave runtime.
@@ -31,7 +42,10 @@ proc setupJobProvider*(_: typedesc[Weave]) {.gcsafe.} =
   ## and still being able to offload computation
   ## to it instead of mixing
   ## logic or IO and Weave on the main thread.
-  jobProviderContext.mempool.initialize()
+  ##
+  ## This will block until Weave is ready to accet jobs
+  jobProviderContext.mempool = wv_alloc(TLPoolAllocator)
+  jobProviderContext.mempool[].initialize()
   jobProviderContext.rng.seed(getThreadId()) # Seed from the Windows/Unix threadID (not the Weave ThreadID)
 
 proc teardownJobProvider*(_: typedesc[Weave]) {.gcsafe.} =
@@ -68,6 +82,7 @@ proc runForever*(_: typedesc[Weave]) {.gcsafe.} =
 proc submitJob(job: sink Job) {.inline.} =
   ## Submit a serialized job to a worker at random
   preCondition: not jobProviderContext.mempool.isNil
+  preCondition: globalCtx.acceptsJobs.load(moRelaxed)
 
   let workerID = jobProviderContext.rng.uniform(globalCtx.numWorkers)
   let sent {.used.} = globalCtx.com.jobsSubmitted[workerID].trySend job
@@ -168,7 +183,7 @@ proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
         # TODO - add timers for jobs
         discard timer_start(timer_enq_deq_job)
       block enq_deq_job:
-        let `job` = jobProviderContext.mempool.borrow(deref(Job))
+        let `job` = jobProviderContext.mempool[].borrow(deref(Job))
         `job`.parent = jobProviderContext.addr # By convention, we set the parent to the JobProvider address
         `job`.fn = `async_fn`
         # registerDescendant(mySyncScope()) # TODO: does it make sense?
@@ -177,7 +192,7 @@ proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
           cast[ptr `argsTy`](`job`.data.addr)[] = `args`
         `submitBlock`
 
-        globalCtx.jobNotifier.notify() # Wake up the runtime
+        globalCtx.jobNotifier[].notify() # Wake up the runtime
       when defined(WV_profile):
         timer_stop(timer_enq_deq_job)
 
@@ -295,3 +310,20 @@ when isMainModule:
 
   var executorThread: Thread[void]
   executorThread.createThread(eventLoop)
+
+  block: # Have an independant display service submit jobs to Weave
+    proc display_int(x: int) =
+      stdout.write(x)
+      stdout.write(" - SUCCESS\n")
+
+    proc displayService() =
+      setupJobProvider(Weave)
+      waitUntilReady(Weave)
+
+      submit display_int(123456)
+      submit display_int(654321)
+
+    var t: Thread[void]
+    t.createThread(displayService)
+    joinThread(t)
+

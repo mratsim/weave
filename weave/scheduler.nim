@@ -12,7 +12,6 @@ import
   ./cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch],
   ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
   ./contexts, ./config,
-  ./victims,
   ./random/rng,
   ./state_machines/[event_loop, dispatch_events]
 

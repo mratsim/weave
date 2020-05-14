@@ -6,6 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
+  std/atomics,
   ../cross_thread_com/channels_mpsc_unbounded_batch,
   ../cross_thread_com/channels_spsc_single_ptr,
   ../memory/[persistacks, memory_pools],
@@ -52,5 +53,7 @@ type
     jobNotifier*: ptr EventNotifier
       ## When Weave works as a dedicated execution engine
       ## we need to park it when there is no CPU tasks.
+    acceptsJobs*: Atomic[bool]
+      ## Weave is ready for jobs
 
     # TODO track workers per socket / NUMA domain
