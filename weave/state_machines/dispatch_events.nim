@@ -39,10 +39,15 @@ proc nextTask*(childTask: static bool): Task {.inline.} =
 
   Manager: # TODO: profiling
     # If we drained the task, try picking a new job (FIFO)
+    debugExecutor:
+      log("Manager %d: checking jobs (%d in queue)\n", myID(), managerJobQueue.peek())
     if result.isNil:
       var job: Job
       if managerJobQueue.tryRecv(job):
         result = cast[Task](job)
+
+        debugExecutor:
+          log("Manager %d: Received job 0x%.08x from provider 0x%.08x\n", myID(), job, job.parent)
 
   when WV_StealEarly > 0:
     if not result.isNil:

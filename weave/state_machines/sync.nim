@@ -163,26 +163,6 @@ behavior(awaitFSA):
 synthesize(awaitFSA):
   proc forceFuture[T](fv: Flowvar[T], parentResult: var T)
 
-# -------------------------------------------
-
-EagerFV:
-  proc forceComplete[T](fv: Flowvar[T], parentResult: var T) {.inline.} =
-    ## From the parent thread awaiting on the result, force its computation
-    ## by eagerly processing only the child tasks spawned by the awaited task
-    fv.forceFuture(parentResult)
-    recycleChannel(fv)
-
-LazyFV:
-  template forceComplete[T](fv: Flowvar[T], parentResult: var T) =
-    forceFuture(fv, parentResult)
-    # Reclaim memory
-    if not fv.lfv.hasChannel:
-      ascertain: fv.lfv.isReady
-      parentResult = cast[ptr T](fv.lfv.lazy.buf.addr)[]
-    else:
-      ascertain: not fv.lfv.lazy.chan.isNil
-      recycleChannel(fv)
-
 # Public
 # -------------------------------------------
 
@@ -190,8 +170,8 @@ proc sync*[T](fv: FlowVar[T]): T {.inline.} =
   ## Blocks the current thread until the flowvar is available
   ## and returned.
   ## The thread is not idle and will complete pending tasks.
-  fv.forceComplete(result)
-
+  forceFuture(fv, result)
+  cleanup(fv)
 
 # Dump the graph
 # -------------------------------------------

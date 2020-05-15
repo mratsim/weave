@@ -86,8 +86,8 @@ proc teardownJobProvider*(_: typedesc[Weave]) =
   # TODO: Have the main thread takeover the mempool if it couldn't be fully released
   let fullyReleased {.used.} = jobProviderContext.mempool.teardown()
 
-proc tryPark*(_: typedesc[Weave]) =
-  ## Try parking the weave runtime
+proc processAllandTryPark*(_: typedesc[Weave]) =
+  ## Process all tasks and then try parking the weave runtime
   ## This `syncRoot` then put the Weave runtime to sleep
   ## if no job submission was received concurrently
   ##
@@ -99,9 +99,12 @@ proc tryPark*(_: typedesc[Weave]) =
   ##   park(Weave)
   ##
   ## New job submissions will automatically wakeup the runtime
+
   manager.jobNotifier[].prepareToPark()
   syncRoot(Weave)
+  debugTermination: log("Parking Weave runtime\n")
   manager.jobNotifier[].park()
+  debugTermination: log("Waking Weave runtime\n")
 
 proc wakeup(_: typedesc[Weave]) =
   ## Wakeup the runtime manager if asleep
@@ -113,7 +116,16 @@ proc runForever*(_: typedesc[Weave]) =
   ## help process tasks
   ## and spin down when there is no work anymore.
   while true:
-    tryPark(Weave)
+    processAllandTryPark(Weave)
+
+proc runUntil*(_: typedesc[Weave], signal: ptr Atomic[bool]) =
+  ## Start a Weave event loop until signal is true
+  ## It wakes-up on job submission, handles multithreaded load balancing,
+  ## help process tasks
+  ## and spin down when there is no work anymore.
+  while not signal[].load(moRelaxed):
+    processAllandTryPark(Weave)
+  syncRoot(Weave)
 
 proc submitJob*(job: sink Job) =
   ## Submit a serialized job to a worker at random
@@ -122,7 +134,6 @@ proc submitJob*(job: sink Job) =
 
   let sent {.used.} = managerJobQueue.trySend job
   wakeup(Weave)
-  debugExecutor:
+  debugTermination:
     log("Thread %d: sent job to Weave runtime and woke it up.\n", getThreadID())
-
   postCondition: sent

@@ -92,7 +92,7 @@ proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
       if not `delayedMulti`:
         submitJob(`job`)
 
-  if not needFuture: # TODO: allow awaiting on a Flowvar[void]
+  if not needFuture: # TODO: allow awaiting on a Pending[void]
     if funcCall.len == 2:
       # With only 1 arg, the tuple syntax doesn't construct a tuple
       # let data = (123) # is an int
@@ -169,18 +169,18 @@ proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
         # TODO profiling templates visibility issue
         discard timer_start(timer_enq_deq_job)
       block enq_deq_task:
-        let `job` = jobProviderContext.mempool.borrow(deref(Job))
+        let `job` = jobProviderContext.mempool[].borrow(deref(Job))
         `job`.parent = jobProviderContext.addr # By convention, we set the parent to the JobProvider address
         `job`.fn = `async_fn`
         # registerDescendant(mySyncScope()) # TODO: does it make sense?
         # `task`.scopedBarrier = mySyncScope()
         `job`.has_future = true
         `job`.futureSize = uint8(sizeof(`retType`))
-        let `fut` = newFlowvar(jobProviderContext.mempool, `freshIdent`)
+        let `fut` = newPending(jobProviderContext.mempool[], `freshIdent`)
         cast[ptr `futArgsTy`](`job`.data.addr)[] = `futArgs`
         `submitBlock`
 
-        manager.jobNotifier.notify() # Wake up the runtime
+        manager.jobNotifier[].notify() # Wake up the runtime
         when defined(WV_profile):
           discard timer_stop(timer_enq_deq_job)
         # Return the future
@@ -239,27 +239,45 @@ when isMainModule:
     ./runtime, ./state_machines/[sync, sync_root], os,
     std/[times, monotimes]
 
-  proc eventLoop() {.gcSafe.} =
+  proc eventLoop(shutdown: ptr Atomic[bool]) {.thread.} =
     init(Weave)
-    runForever(Weave)
+    Weave.runUntil(shutdown)
 
-  var executorThread: Thread[void]
-  executorThread.createThread(eventLoop)
+  var shutdownWeave, serviceDone: Atomic[bool]
+  shutdownWeave.store(false, moRelaxed)
+  serviceDone.store(false, moRelaxed)
+
+  var executorThread: Thread[ptr Atomic[bool]]
+  executorThread.createThread(eventLoop, shutdownWeave.addr)
 
   block: # Have an independant display service submit jobs to Weave
-    proc display_int(x: int) =
+    serviceDone.store(false, moRelaxed)
+
+    proc display_int(x: int): bool =
       stdout.write(x)
       stdout.write(" - SUCCESS\n")
 
-    proc displayService() =
+      return true
+
+    proc displayService(serviceDone: ptr Atomic[bool]) =
       setupJobProvider(Weave)
       waitUntilReady(Weave)
 
-      submit display_int(123456)
-      submit display_int(654321)
+      discard submit display_int(123456)
+      let ok = submit display_int(654321)
 
-    var t: Thread[void]
-    t.createThread(displayService)
-    joinThread(t)
+      discard waitFor(ok)
+      serviceDone[].store(true, moRelaxed)
 
-  joinThread(executorThread)
+    var t: Thread[ptr Atomic[bool]]
+    t.createThread(displayService, serviceDone.addr)
+
+  # Wait until all tests are done
+  var backoff = 1
+  while not serviceDone.load(moRelaxed):
+    sleep(backoff)
+    backoff *= 2
+    if backoff > 16:
+      backoff = 16
+
+  shutdownWeave.store(true)

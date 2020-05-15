@@ -9,7 +9,8 @@ import
   ../cross_thread_com/channels_spsc_single,
   ../memory/[allocs, memory_pools],
   ../instrumentation/contracts,
-  ../config, ../contexts
+  ../config, ../contexts,
+  std/os
 
 type
   LazyChannel* {.union.} = object
@@ -93,6 +94,10 @@ EagerFV:
     ## until the Flowvar is ready.
     not fv.chan[].isEmpty()
 
+  func cleanup*(fv: Flowvar) {.inline.} =
+    ## Cleanup  after forcing a future
+    recycleChannel(fv)
+
 LazyFV:
   proc recycleChannel*(fv: Flowvar) {.inline.} =
     recycle(fv.lfv.lazy.chan)
@@ -153,6 +158,15 @@ LazyFV:
         convertLazyFlowvar(task)
       task = task.next
 
+  func cleanup*[T](fv: Flowvar[T]) {.inline.} =
+    ## Cleanup  after forcing a future
+    if not fv.lfv.hasChannel:
+      ascertain: fv.lfv.isReady
+      parentResult = cast[ptr T](fv.lfv.lazy.buf.addr)[]
+    else:
+      ascertain: not fv.lfv.lazy.chan.isNil
+      recycleChannel(fv)
+
 proc newFlowvarNode*(itemSize: uint8): FlowvarNode =
   ## Create a linked list of flowvars
   # Lazy flowvars unfortunately are allocated on the heap
@@ -202,22 +216,31 @@ func isSubmitted*[T](p: Pending[T]): bool {.inline.} =
   ## This is similar to Option or Maybe types
   p.fv.isSpawned
 
-proc recycleChannel*(p: Pending) {.inline.} =
-  recycleChannel(p.fv)
-
 template newPending*(pool: var TLPoolAllocator, T: typedesc): Pending[T] =
-  newFlowVar(pool, T)
-
-proc readyWith*[T](p: Pending[T], childResult: T) {.inline.} =
-  ## Send the Pending result from the child thread processing the task
-  ## to its parent thread.
-  p.fv.readyWith(childResult)
-
-proc tryComplete*[T](p: Pending[T], parentResult: var T): bool {.inline.}=
-  p.fv.tryComplete(parentResult)
+  Pending[T](fv: newFlowVar(pool, T))
 
 func isReady*[T](p: Pending[T]): bool {.inline.} =
   ## Returns true if the pending result is ready.
   ## In that case `settle` will not block.
   ## Otherwise the current thread will block.
   p.fv.isReady
+
+func readyWith*[T](p: Pending[T], childResult: T) {.inline.} =
+  ## Sends the Pending result from the child thread processing the task
+  ## to its parent thread.
+  p.fv.readyWith(childResult)
+
+proc waitFor*[T](p: Pending[T]): T {.inline.} =
+  ## Wait for a pending value
+  ## This blocks the thread until the value is ready
+  ## and then returns it.
+  var backoff = 1
+  while not p.isReady:
+    sleep(backoff)
+    backoff *= 2
+    if backoff > 16:
+      backoff = 16
+
+  let ok = p.fv.tryComplete(result)
+  ascertain: ok
+  cleanup(p.fv)
