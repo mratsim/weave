@@ -236,8 +236,9 @@ macro submitDelayed*(pledges: varargs[typed], fnCall: typed): untyped =
 
 when isMainModule:
   import
-    ./runtime, ./state_machines/[sync, sync_root], os,
-    std/[times, monotimes]
+    ./runtime, ./state_machines/[sync, sync_root],
+    ./parallel_tasks,
+    std/[os, times, monotimes]
 
   proc eventLoop(shutdown: ptr Atomic[bool]) {.thread.} =
     init(Weave)
@@ -263,6 +264,7 @@ when isMainModule:
       setupJobProvider(Weave)
       waitUntilReady(Weave)
 
+      echo "Sanity check 1: Printing 123456 654321 in parallel"
       discard submit display_int(123456)
       let ok = submit display_int(654321)
 
@@ -271,6 +273,35 @@ when isMainModule:
 
     var t: Thread[ptr Atomic[bool]]
     t.createThread(displayService, serviceDone.addr)
+    joinThread(t)
+
+  block: # Job that spawns tasks
+    serviceDone.store(false, moRelaxed)
+
+    proc async_fib(n: int): int =
+
+      if n < 2:
+        return n
+
+      let x = spawn async_fib(n-1)
+      let y = async_fib(n-2)
+
+      result = sync(x) + y
+
+    proc fibonacciService(serviceDone: ptr Atomic[bool]) =
+      setupJobProvider(Weave)
+      waitUntilReady(Weave)
+
+      echo "Sanity check 2: fib(20)"
+      let f = submit async_fib(20)
+
+      echo waitFor(f)
+      serviceDone[].store(true, moRelaxed)
+
+    var t: Thread[ptr Atomic[bool]]
+    t.createThread(fibonacciService, serviceDone.addr)
+    joinThread(t)
+
 
   # Wait until all tests are done
   var backoff = 1
