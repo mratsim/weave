@@ -159,7 +159,10 @@ proc spawnImpl(pledges: NimNode, funcCall: NimNode): NimNode =
 
         let `data` = cast[ptr `futArgsTy`](param) # TODO - restrict
         let res = `fnCall`
-        readyWith(`data`[0], res)
+        when typeof(`data`[]) is Flowvar:
+          readyWith(`data`[], res)
+        else:
+          readyWith(`data`[0], res)
 
     # Create the task
     let freshIdent = ident($retType)
@@ -326,18 +329,20 @@ when isMainModule:
     proc echoB2() =
       echo "Display B2, exit stream"
 
-    proc echoC1() =
+    proc echoC1(): bool =
       echo "Display C1, exit stream"
+      return true
 
     proc main() =
       echo "Sanity check 3: Dataflow parallelism"
       init(Weave)
       let pA = newPledge()
       let pB1 = newPledge()
-      spawnDelayed pB1, echoC1()
+      let done = spawnDelayed(pB1, echoC1())
       spawnDelayed pA, echoB2()
       spawnDelayed pA, echoB1(pB1)
       spawn echoA(pA)
+      discard sync(done)
       exit(Weave)
 
     main()

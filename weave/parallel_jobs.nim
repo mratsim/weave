@@ -76,7 +76,7 @@ proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
     let pledgeDesc = pledges[0]
     if pledgeDesc.kind in {nnkIdent, nnkSym}:
       submitBlock = quote do:
-        if not delayedUntil(cast[Task](`job`), `pledgeDesc`, jobProviderContext.mempool):
+        if not delayedUntil(cast[Task](`job`), `pledgeDesc`, jobProviderContext.mempool[]):
           submitJob(`job`)
     else:
       pledgeDesc.expectKind({nnkPar, nnkTupleConstr})
@@ -87,7 +87,7 @@ proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
           submitJob(`job`)
   else:
     let delayedMulti = quote do:
-      delayedUntilMulti(cast[Task](`job`), jobProviderContext.mempool, `pledges`)
+      delayedUntilMulti(cast[Task](`job`), jobProviderContext.mempool[], `pledges`)
     submitBlock = quote do:
       if not `delayedMulti`:
         submitJob(`job`)
@@ -160,7 +160,10 @@ proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
 
         let `data` = cast[ptr `futArgsTy`](param) # TODO - restrict
         let res = `fnCall`
-        readyWith(`data`[0], res)
+        when typeof(`data`[]) is Pending:
+          readyWith(`data`[], res)
+        else:
+          readyWith(`data`[0], res)
 
     # Create the task
     let freshIdent = ident($retType)
@@ -300,6 +303,45 @@ when isMainModule:
 
     var t: Thread[ptr Atomic[bool]]
     t.createThread(fibonacciService, serviceDone.addr)
+    joinThread(t)
+
+  block: # Delayed computation
+    serviceDone.store(false, moRelaxed)
+
+    proc echoA(pA: Pledge) =
+      echo "Display A, sleep 1s, create parallel streams 1 and 2"
+      sleep(1000)
+      pA.fulfill()
+
+    proc echoB1(pB1: Pledge) =
+      echo "Display B1, sleep 1s"
+      sleep(1000)
+      pB1.fulfill()
+
+    proc echoB2() =
+      echo "Display B2, exit stream"
+
+    proc echoC1(): bool =
+      echo "Display C1, exit stream"
+
+
+    proc echoService(serviceDone: ptr Atomic[bool]) =
+      setupJobProvider(Weave)
+      waitUntilReady(Weave)
+
+      echo "Sanity check 3: Dataflow parallelism"
+      let pA = newPledge()
+      let pB1 = newPledge()
+      let done = submitDelayed(pB1, echoC1())
+      submitDelayed pA, echoB2()
+      submitDelayed pA, echoB1(pB1)
+      submit echoA(pA)
+
+      discard waitFor(done)
+      serviceDone[].store(true, moRelaxed)
+
+    var t: Thread[ptr Atomic[bool]]
+    t.createThread(echoService, serviceDone.addr)
     joinThread(t)
 
 
