@@ -1,0 +1,128 @@
+# Weave
+# Copyright (c) 2019 Mamy André-Ratsimbazafy
+# Licensed and distributed under either of
+#   * MIT license (license terms in the root directory or at http://opensource.org/licenses/MIT).
+#   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
+# at your option. This file may not be copied, modified, or distributed except according to those terms.
+
+# Executor
+# ----------------------------------------------
+#
+# Weave can be used in "Executor-mode".
+# In that case jobs are submitted from threads that are foreign to Weave
+#
+# The hard part is combining all the following:
+# - Ensuring that the worker that receive the new job is awake.
+# - Ensure no race condition with awakening and termination detection.
+# - Limiting contention due to all workers writing to the same data structure.
+# - Limiting latency between scheduling and running the job.
+# - Greedy scheduler: as long as there is enough work, no worker is idle.
+#
+#
+# 1. Weave termination detection is distributed, based on combining-tree
+#    or what is called "Lifeline-based Global Load Balancing"
+#    - http://www.cs.columbia.edu/~martha/courses/4130/au12/p201-saraswat.pdf
+#    i.e. each worker has a parent and a parent cannot sleep before its children.
+#    This means that submitting job to a random Worker in the threadpool
+#    requires ensuring that the Worker is awake to avoid termination detection.
+#
+# 2. A global job queue will always have job distributed to awake workers.
+#    It also ensures minimum latency.
+#    But the queue becomes a contention and scalability bottleneck.
+#    Also lock-free intrusive MPMC queues are very hard to write.
+#
+# 3. We choose to create a ManagerContext which is in charge of
+#    distributing incoming jobs.
+#    The manager is the root thread, it is always awake on job submission via an EventNotifier
+#    The main issue is latency to distribute the jobs if the root thread is
+#    on a long-running task with few loadBalancing occasions
+#    but this already existed before the executor mode
+#    when all tasks where created on Weave's root thread.
+#
+# The ManagerContext can be extended further to support distributed computing
+# with Weave instances on muliple nodes of a cluster.
+# The manager thread can become a dedicated separate thread
+# if communication costs and jobs latnecy are high enough to justify it in the future.
+
+import
+  # Standard library
+  macros, typetraits, atomics, os,
+  # Internal
+  ./memory/[allocs, memory_pools],
+  ./contexts, ./config,
+  ./datatypes/[sync_types],
+  ./instrumentation/[contracts, loggers],
+  ./cross_thread_com/[scoped_barriers, pledges, channels_mpsc_unbounded_batch, event_notifiers],
+  ./state_machines/sync_root
+
+{.push gcsafe, inline.} # TODO raises: []
+
+proc waitUntilReady*(_: typedesc[Weave]) =
+  ## Wait until Weave is ready to accept jobs
+  ## This blocks the thread until the Weave runtime (on another thread) is fully initialized
+  # We use a simple exponential backoff for waiting.
+  var backoff = 1
+  while not globalCtx.manager.acceptsJobs.load(moRelaxed):
+    sleep(backoff)
+    backoff *= 2
+    if backoff > 16:
+      backoff = 16
+
+proc setupJobProvider*(_: typedesc[Weave]) =
+  ## Configure a thread so that it can submit jobs to the Weave runtime.
+  ## This is useful if we want Weave to work
+  ## as an independent "service" or "execution engine"
+  ## and still being able to offload computation
+  ## to it instead of mixing
+  ## logic or IO and Weave on the main thread.
+  ##
+  ## This will block until Weave is ready to accet jobs
+  jobProviderContext.mempool = wv_alloc(TLPoolAllocator)
+  jobProviderContext.mempool[].initialize()
+
+proc teardownJobProvider*(_: typedesc[Weave]) =
+  ## Maintenance before exiting a JobProvider thread
+
+  # TODO: Have the main thread takeover the mempool if it couldn't be fully released
+  let fullyReleased {.used.} = jobProviderContext.mempool.teardown()
+
+proc tryPark*(_: typedesc[Weave]) =
+  ## Try parking the weave runtime
+  ## This `syncRoot` then put the Weave runtime to sleep
+  ## if no job submission was received concurrently
+  ##
+  ## This should be used if Weave root thread (that called init(Weave))
+  ## is on a dedicated long-running thread
+  ## in an event loop:
+  ##
+  ## while true:
+  ##   park(Weave)
+  ##
+  ## New job submissions will automatically wakeup the runtime
+  manager.jobNotifier[].prepareToPark()
+  syncRoot(Weave)
+  manager.jobNotifier[].park()
+
+proc wakeup(_: typedesc[Weave]) =
+  ## Wakeup the runtime manager if asleep
+  manager.jobNotifier[].notify()
+
+proc runForever*(_: typedesc[Weave]) =
+  ## Start a never-ending event loop
+  ## that wakes-up on job submission, handles multithreaded load balancing,
+  ## help process tasks
+  ## and spin down when there is no work anymore.
+  while true:
+    tryPark(Weave)
+
+proc submitJob*(job: sink Job) =
+  ## Submit a serialized job to a worker at random
+  preCondition: not jobProviderContext.mempool.isNil
+  preCondition: globalCtx.manager.acceptsJobs.load(moRelaxed)
+
+  let sent {.used.} = managerJobQueue.trySend job
+  wakeup(Weave)
+  debugExecutor:
+    log("Thread %d: sent job to Weave runtime and woke it up.\n", getThreadID())
+
+  postCondition: sent

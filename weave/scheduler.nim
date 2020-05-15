@@ -93,9 +93,7 @@ proc setupWorker*() {.gcsafe.} =
     myTodoBoxes().access(i).initialize()
 
   ascertain: myTodoBoxes().len == WV_MaxConcurrentStealPerWorker
-
-  myJobQueue.initialize()
-
+  
   # Thieves
   # -----------------------------------------------------------
   myThieves().initialize()
@@ -184,7 +182,7 @@ proc schedule*(task: sink Task) =
 
   profile_stop(enq_deq_task)
 
-  # Lead thread
+  # Root thread
   if workerContext.runtimeIsQuiescent:
     ascertain: myID() == RootID
     debugTermination:

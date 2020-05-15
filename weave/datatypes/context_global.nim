@@ -39,7 +39,6 @@ type
     # Theft channels are bounded to "NumWorkers * WV_MaxConcurrentStealPerWorker"
     thefts*: ptr UncheckedArray[ChannelMpscUnboundedBatch[StealRequest]]
     tasksStolen*: ptr UncheckedArray[Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]]]
-    jobsSubmitted*: ptr UncheckedArray[ChannelMpscUnboundedBatch[Job]]
     when static(WV_Backoff):
       parking*: ptr UncheckedArray[EventNotifier]
 
@@ -49,11 +48,24 @@ type
     numWorkers*: int32
     mempools*: ptr UncheckedArray[TlPoolAllocator]
     barrier*: SyncBarrier
-      ## Barrier for initialization and deinitialization
-    jobNotifier*: ptr EventNotifier
-      ## When Weave works as a dedicated execution engine
-      ## we need to park it when there is no CPU tasks.
-    acceptsJobs*: Atomic[bool]
-      ## Weave is ready for jobs
+      ## Barrier for initialization and teardown
+    manager*: ManagerContext
 
-    # TODO track workers per socket / NUMA domain
+  ManagerContext* = object
+    ## Manager context
+    ## in charge of distributing incoming jobs.
+    ## The root thread is the Manager.
+    #
+    # In the future the Manager will also handle
+    # synchronization across machines in a distributed setting.
+    #
+    # We may also have a manager per socket/NUMA domain.
+    #
+    # It may become a thread dedicated to supervision, synchronization
+    # and job handling.
+    jobsIncoming*: ptr ChannelMpscUnboundedBatch[Job]
+    when static(WV_Backoff):
+      jobNotifier*: ptr EventNotifier
+        ## When Weave works as a dedicated execution engine
+        ## we need to park it when there is no CPU tasks.
+    acceptsJobs*: Atomic[bool]

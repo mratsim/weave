@@ -36,11 +36,13 @@ proc nextTask*(childTask: static bool): Task {.inline.} =
       result = myWorker().deque.popFirstIfChild(myTask())
     else:
       result = myWorker().deque.popFirst()
-      # If we drained the task, try picking a new job (FIFO)
-      if result.isNil:
-        var job: Job
-        if myJobQueue.tryRecv(job):
-          result = cast[Task](job)
+
+  Manager: # TODO: profiling
+    # If we drained the task, try picking a new job (FIFO)
+    if result.isNil:
+      var job: Job
+      if managerJobQueue.tryRecv(job):
+        result = cast[Task](job)
 
   when WV_StealEarly > 0:
     if not result.isNil:

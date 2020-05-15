@@ -193,7 +193,7 @@ behavior(declineReqFSA):
 # -------------------------------------------
 
 synthesize(declineReqFSA):
-  proc decline*(req: sink StealRequest) {.gcsafe.}
+  proc decline*(req: sink StealRequest) {.gcsafe, raises: [].}
 
 # Dump the graph
 # -------------------------------------------

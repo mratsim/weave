@@ -10,7 +10,7 @@ import synthesis
 import
   ../instrumentation/[contracts, loggers],
   ../datatypes/[sync_types, prell_deques, context_thread_local],
-  ../contexts,
+  ../contexts, ../config,
   ../victims, ../loop_splitting,
   ../thieves,
   ../cross_thread_com/channels_mpsc_unbounded_batch
@@ -24,13 +24,14 @@ import
 type IncomingThievesState = enum
   IT_CheckTheft
   IT_IncomingReq
-  IT_CheckJob
+  IT_ManagerCheckJob
   IT_CheckSplit
   IT_Split
 
 type IT_Event = enum
   ITE_FoundReq
   ITE_FoundTask
+  ITE_Manager
   ITE_FoundJob
   ITE_CanSplit
   ITE_ReqIsMine
@@ -68,6 +69,9 @@ behavior(handleThievesFSA):
 implEvent(handleThievesFSA, ITE_FoundTask):
   not myWorker.deque.isEmpty()
 
+implEvent(handleThievesFSA, ITE_Manager):
+  workerIsManager()
+
 # TODO, can we optimize by checking who the thief is before this step
 behavior(handleThievesFSA):
   ini: IT_IncomingReq
@@ -76,33 +80,42 @@ behavior(handleThievesFSA):
   fin: IT_CheckTheft
 
 behavior(handleThievesFSA):
-  # Fallback to check job
+  # Fallback to check split
+  ini: IT_IncomingReq
+  event: ITE_Manager
+  transition: discard
+  fin: IT_ManagerCheckJob
+
+behavior(handleThievesFSA):
+  # Fallback to check split
   ini: IT_IncomingReq
   transition: discard
-  fin: IT_CheckJob
+  fin: IT_CheckSplit
 
 # Job
 # ------------------------------------------------------
 
-onEntry(handleThievesFSA, IT_CheckJob):
+onEntry(handleThievesFSA, IT_ManagerCheckJob):
   var job: Job
-  let foundJob = myJobQueue.tryRecv(job)
+  let foundJob = managerJobQueue.tryRecv(job)
 
 implEvent(handleThievesFSA, ITE_FoundJob):
   foundJob
 
 behavior(handleThievesFSA):
-  ini: IT_CheckJob
+  ini: IT_ManagerCheckJob
   event: ITE_FoundJob
   transition:
     # TODO: not pretty to enqueue, to dequeue just after in dispatchElseDecline
+    debugExecutor:
+      log("Manager %d: schedule a new job for execution.\n", myID)
     myWorker().deque.addFirst cast[Task](job)
     req.dispatchElseDecline()
   fin: IT_CheckTheft
 
 behavior(handleThievesFSA):
   # Fallback to check split
-  ini: IT_CheckJob
+  ini: IT_ManagerCheckJob
   transition: discard
   fin: IT_CheckSplit
 

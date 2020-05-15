@@ -31,6 +31,9 @@ var workerContext* {.threadvar.}: WorkerContext
 var jobProviderContext* {.threadvar.}: JobProviderContext
 
 const RootID*: WorkerID = 0
+const ManagerID*: WorkerID = 0
+
+{.push gcsafe.}
 
 # Profilers
 # ----------------------------------------------------------------------------------
@@ -54,8 +57,8 @@ template isRootTask*(task: Task): bool =
 template myTodoBoxes*: Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]] =
   globalCtx.com.tasksStolen[workerContext.worker.ID]
 
-template myJobQueue*: ChannelMpscUnboundedBatch[Job] =
-  globalCtx.com.jobsSubmitted[workerContext.worker.ID]
+template managerJobQueue*: ChannelMpscUnboundedBatch[Job] =
+  globalCtx.manager.jobsIncoming[]
 
 template myThieves*: ChannelMpscUnboundedBatch[StealRequest] =
   globalCtx.com.thefts[workerContext.worker.ID]
@@ -178,8 +181,18 @@ template Root*(body: untyped) =
   if workerContext.worker.ID == RootID:
     body
 
+template workerIsManager*(): bool =
+  workerContext.worker.ID == ManagerID
+
+template manager*(): ManagerContext =
+  globalCtx.manager
+
+template Manager*(body: untyped) =
+  if workerIsManager:
+    body
+
 template Worker*(body: untyped) =
-  if workerContext.worker.ID != RootID:
+  if workerContext.worker.ID != ManagerID:
     body
 
 # Counters

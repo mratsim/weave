@@ -299,13 +299,14 @@ proc distributeWork*(req: sink StealRequest, workSharing: bool): bool =
     #        the branch that leads to termination
     #        and would logically return true
 
-  # Introduce a pending job otherwise
-  var job: Job
-  if myJobQueue.tryRecv(job):
-    # TODO: not pretty to enqueue, to dequeue just after in dispatchElseDecline
-    myWorker().deque.addFirst cast[Task](job)
-    req.dispatchElseDecline()
-    return true
+  Manager:
+    # Introduce a pending job otherwise
+    var job: Job
+    if managerJobQueue.tryRecv(job):
+      # TODO: not pretty to enqueue, to dequeue just after in dispatchElseDecline
+      myWorker().deque.addFirst cast[Task](job)
+      req.dispatchElseDecline()
+      return true
 
   # Otherwise try to split the current task
   if myTask().isSplittable():

@@ -9,7 +9,7 @@
 # They are scheduled in FIFO order and minimize latency for submitters.
 # In particular, it is optimized for jobs assumed independent.
 
-# Job Provider & Dedicated Job Executor
+# Job submission
 # ----------------------------------------------------------------------------------
 
 import
@@ -17,77 +17,12 @@ import
   macros, typetraits, atomics, os,
   # Internal
   ./memory/[allocs, memory_pools],
-  ./random/rng,
   ./scheduler, ./contexts,
   ./datatypes/[flowvars, sync_types],
   ./instrumentation/contracts,
-  ./cross_thread_com/[scoped_barriers, pledges, channels_mpsc_unbounded_batch, event_notifiers],
-  ./state_machines/sync_root
-
-proc waitUntilReady(_: typedesc[Weave]) {.gcsafe.} =
-  ## Wait until Weave is ready to accept jobs
-  ## This blocks the thread until the Weave runtime (on another thread) is fully initialized
-  # We use a simple exponential backoff for waiting.
-  var backoff = 1
-  while not globalCtx.acceptsJobs.load(moRelaxed):
-    sleep(backoff)
-    backoff *= 2
-    if backoff > 16:
-      backoff = 16
-
-proc setupJobProvider*(_: typedesc[Weave]) {.gcsafe.} =
-  ## Configure a thread so that it can submit jobs to the Weave runtime.
-  ## This is useful if we want Weave to work
-  ## as an independent "service" or "execution engine"
-  ## and still being able to offload computation
-  ## to it instead of mixing
-  ## logic or IO and Weave on the main thread.
-  ##
-  ## This will block until Weave is ready to accet jobs
-  jobProviderContext.mempool = wv_alloc(TLPoolAllocator)
-  jobProviderContext.mempool[].initialize()
-  jobProviderContext.rng.seed(getThreadId()) # Seed from the Windows/Unix threadID (not the Weave ThreadID)
-
-proc teardownJobProvider*(_: typedesc[Weave]) {.gcsafe.} =
-  ## Maintenance before exiting a JobProvider thread
-
-  # TODO: Have the main thread takeover the mempool if it couldn't be fully released
-  let fullyReleased {.used.} = jobProviderContext.mempool.teardown()
-
-proc tryPark*(_: typedesc[Weave]) {.gcsafe.} =
-  ## Try parking the weave runtime
-  ## This `syncRoot` then put the Weave runtime to sleep
-  ## if no job submission was received concurrently
-  ##
-  ## This should be used if Weave root thread (that called init(Weave))
-  ## is on a dedicated long-running thread
-  ## in an event loop:
-  ##
-  ## while true:
-  ##   park(Weave)
-  ##
-  ## New job submissions will automatically wakeup the runtime
-  globalCtx.jobNotifier[].prepareToPark()
-  syncRoot(Weave)
-  globalCtx.jobNotifier[].park()
-
-proc runForever*(_: typedesc[Weave]) {.gcsafe.} =
-  ## Start a never-ending event loop
-  ## that wakes-up on job submission, handles multithreaded load balancing,
-  ## help process tasks
-  ## and spin down when there is no work anymore.
-  while true:
-    tryPark(Weave)
-
-proc submitJob(job: sink Job) {.inline.} =
-  ## Submit a serialized job to a worker at random
-  preCondition: not jobProviderContext.mempool.isNil
-  preCondition: globalCtx.acceptsJobs.load(moRelaxed)
-
-  let workerID = jobProviderContext.rng.uniform(globalCtx.numWorkers)
-  let sent {.used.} = globalCtx.com.jobsSubmitted[workerID].trySend job
-
-  postCondition: sent
+  ./cross_thread_com/[pledges, channels_mpsc_unbounded_batch, event_notifiers],
+  ./state_machines/sync_root,
+  ./executor
 
 proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
   # We take typed argument so that overloading resolution
@@ -192,7 +127,7 @@ proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
           cast[ptr `argsTy`](`job`.data.addr)[] = `args`
         `submitBlock`
 
-        globalCtx.jobNotifier[].notify() # Wake up the runtime
+        manager.jobNotifier[].notify() # Wake up the runtime
       when defined(WV_profile):
         timer_stop(timer_enq_deq_job)
 
@@ -245,7 +180,7 @@ proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
         cast[ptr `futArgsTy`](`job`.data.addr)[] = `futArgs`
         `submitBlock`
 
-        globalCtx.jobNotifier.notify() # Wake up the runtime
+        manager.jobNotifier.notify() # Wake up the runtime
         when defined(WV_profile):
           discard timer_stop(timer_enq_deq_job)
         # Return the future
@@ -327,3 +262,4 @@ when isMainModule:
     t.createThread(displayService)
     joinThread(t)
 
+  joinThread(executorThread)

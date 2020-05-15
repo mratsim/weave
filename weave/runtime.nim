@@ -29,7 +29,7 @@ else:
 
 proc init*(_: type Weave) =
   # TODO detect Hyper-Threading and NUMA domain
-  globalCtx.acceptsJobs.store(false, moRelaxed)
+  manager.acceptsJobs.store(false, moRelaxed)
 
   if existsEnv"WEAVE_NUM_THREADS":
     workforce() = getEnv"WEAVE_NUM_THREADS".parseInt.int32
@@ -45,11 +45,10 @@ proc init*(_: type Weave) =
   globalCtx.threadpool = wv_alloc(Thread[WorkerID], workforce())
   globalCtx.com.thefts = wv_alloc(ChannelMpscUnboundedBatch[StealRequest], workforce())
   globalCtx.com.tasksStolen = wv_alloc(Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]], workforce())
-  globalCtx.com.jobsSubmitted = wv_alloc(ChannelMpscUnboundedBatch[Job], workforce())
   Backoff:
     globalCtx.com.parking = wv_alloc(EventNotifier, workforce())
   globalCtx.barrier.init(workforce())
-  globalCtx.jobNotifier = globalCtx.com.parking[0].addr
+
 
   # Root thread - pinned to CPU 0
   myID() = 0
@@ -79,9 +78,14 @@ proc init*(_: type Weave) =
   myTask().scopedBarrier = nil
 
   setupWorker()
+
+  # Manager
+  manager.jobNotifier = globalCtx.com.parking[0].addr
+  manager.jobsIncoming = wv_alloc(ChannelMpscUnboundedBatch[Job])
+
   # Wait for the child threads
   discard globalCtx.barrier.wait()
-  globalCtx.acceptsJobs.store(true, moRelaxed)
+  manager.acceptsJobs.store(true, moRelaxed)
 
 proc loadBalance*(_: type Weave) {.gcsafe.} =
   ## This makes the current thread ensures it shares work with other threads.
