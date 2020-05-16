@@ -26,6 +26,18 @@ import
 
 proc newJob(): Job {.inline.} =
   jobProviderContext.mempool[].borrow(deref(Job))
+  # result.fn = nil # Always overwritten
+  # result.parent = nil # Always overwritten
+  result.scopedBarrier = nil # Always overwritten
+  result.prev = nil
+  result.next = nil
+  result.start = 0
+  result.cur = 0
+  result.stop = 0
+  result.stride = 0
+  result.futures = nil
+  result.isLoop = false
+  result.hasFuture = false
 
 proc notifyJob() {.inline.} =
   Backoff:
