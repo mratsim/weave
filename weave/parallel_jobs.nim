@@ -17,7 +17,7 @@ import
   macros, typetraits, atomics, os,
   # Internal
   ./memory/[allocs, memory_pools],
-  ./scheduler, ./contexts,
+  ./scheduler, ./contexts, ./config,
   ./datatypes/[flowvars, sync_types],
   ./instrumentation/contracts,
   ./cross_thread_com/[pledges, channels_mpsc_unbounded_batch, event_notifiers],
@@ -28,7 +28,8 @@ proc newJob(): Job {.inline.} =
   jobProviderContext.mempool[].borrow(deref(Job))
 
 proc notifyJob() {.inline.} =
-  manager.jobNotifier[].notify()
+  Backoff:
+    manager.jobNotifier[].notify()
 
 proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
   # We take typed argument so that overloading resolution
