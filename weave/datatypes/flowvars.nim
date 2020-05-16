@@ -160,7 +160,7 @@ LazyFV:
         convertLazyFlowvar(task)
       task = task.next
 
-  func cleanup*[T](fv: Flowvar[T]) {.inline.} =
+  proc cleanup*[T](fv: Flowvar[T]) {.inline.} =
     ## Cleanup  after forcing a future
     if not fv.lfv.hasChannel:
       ascertain: fv.lfv.isReady
