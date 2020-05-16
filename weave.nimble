@@ -157,3 +157,20 @@ task test_gc_arc, "Run Weave tests with --gc:arc":
   when not defined(windows) and (defined(i386) or defined(amd64)):
     if not existsEnv"TEST_LANG" or getEnv"TEST_LANG" != "cpp":
       test "-d:danger", "benchmarks/matmul_gemm_blas/test_gemm_output.nim"
+
+task gen_book, "Generate Weave documentation":
+  exec "mdbook build docs"
+
+task publish_book, "Publish book on Github Pages":
+  exec """
+    git worktree add tmp-book gh-pages && \
+    rm -rf tmp-book/* && \
+    cp -a docs/book/* tmp-book/ && \
+    cd tmp-book && \
+    git add . && { \
+      git commit -m "publish book" && \
+      git push origin gh-pages || true; } && \
+    cd .. && \
+    git worktree remove -f tmp-book && \
+    rm -rf tmp-book
+  """
