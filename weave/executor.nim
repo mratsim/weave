@@ -111,21 +111,46 @@ proc wakeup(_: typedesc[Weave]) =
   manager.jobNotifier[].notify()
 
 proc runForever*(_: typedesc[Weave]) =
-  ## Start a never-ending event loop
+  ## Start a never-ending event loop on the current thread
   ## that wakes-up on job submission, handles multithreaded load balancing,
   ## help process tasks
   ## and spin down when there is no work anymore.
   while true:
     processAllandTryPark(Weave)
 
-proc runUntil*(_: typedesc[Weave], signal: ptr Atomic[bool]) =
-  ## Start a Weave event loop until signal is true
+proc runUntil*(_: typedesc[Weave], signal: ptr Atomic[bool] not nil) =
+  ## Start a Weave event loop until signal is true on the current thread.
   ## It wakes-up on job submission, handles multithreaded load balancing,
   ## help process tasks
   ## and spin down when there is no work anymore.
+  preCondition: not signal.isNil
   while not signal[].load(moRelaxed):
     processAllandTryPark(Weave)
   syncRoot(Weave)
+
+proc runInBackground*(
+       _: typedesc[Weave],
+       signalShutdown: ptr Atomic[bool] not nil
+     ): Thread[ptr Atomic[bool]] =
+  ## Start the Weave runtime on a background thread.
+  ## It wakes-up on job submissions, handles multithreaded load balancing,
+  ## help process tasks
+  ## and spin down when there is no work anymore.
+  proc eventLoop(shutdown: ptr Atomic[bool]) {.thread.} =
+    init(Weave)
+    Weave.runUntil(shutdown)
+    exit(Weave)
+  result.createThread(eventLoop, signalShutdown)
+
+proc runInBackground*(_: typedesc[Weave]): Thread[void] =
+  ## Start the Weave runtime on a background thread.
+  ## It wakes-up on job submissions, handles multithreaded load balancing,
+  ## help process tasks
+  ## and spin down when there is no work anymore.
+  proc eventLoop(shutdown: ptr Atomic[bool]) {.thread.} =
+    init(Weave)
+    Weave.runForever()
+  result.createThread(eventLoop)
 
 proc submitJob*(job: sink Job) =
   ## Submit a serialized job to a worker at random
