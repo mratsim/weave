@@ -112,7 +112,7 @@ type
     # ⚠️ Consumer thread field must be at the end
     #    to prevent cache-line contention
     #    and save on space (no padding on the next field)
-    remoteFree: ChannelMpscUnboundedBatch[ptr MemBlock]
+    remoteFree: ChannelMpscUnboundedBatch[ptr MemBlock, keepCount = true]
     # Freed blocks, kept separately to deterministically trigger slow path
     # after an amortized amount of allocation
     localFree: ptr MemBlock
@@ -624,8 +624,8 @@ proc takeover*(pool: var TLPoolAllocator, target: sink TLPoolAllocator) =
 #       the size here will likely be wrong
 
 debugSizeAsserts:
-  doAssert sizeof(ChannelMpscUnboundedBatch[ptr MemBlock]) == 320,
-    "MPSC channel size was " & $sizeof(ChannelMpscUnboundedBatch[ptr MemBlock])
+  doAssert sizeof(ChannelMpscUnboundedBatch[ptr MemBlock, keepCount = true]) == 320,
+    "MPSC channel size was " & $sizeof(ChannelMpscUnboundedBatch[ptr MemBlock, keepCount = true])
 
   doAssert sizeof(Arena) == WV_MemArenaSize,
     "The real arena size was " & $sizeof(Arena) &
@@ -689,13 +689,13 @@ when isMainModule:
   when not compileOption("threads"):
     {.error: "This requires --threads:on compilation flag".}
 
-  template sendLoop[T](chan: var ChannelMpscUnboundedBatch[T],
+  template sendLoop[T, keepCount](chan: var ChannelMpscUnboundedBatch[T, keepCount],
                        data: sink T,
                        body: untyped): untyped =
     while not chan.trySend(data):
       body
 
-  template recvLoop[T](chan: var ChannelMpscUnboundedBatch[T],
+  template recvLoop[T, keepCount](chan: var ChannelMpscUnboundedBatch[T, keepCount],
                        data: var T,
                        body: untyped): untyped =
     while not chan.tryRecv(data):
@@ -727,7 +727,7 @@ when isMainModule:
 
     ThreadArgs = object
       ID: WorkerKind
-      chan: ptr ChannelMpscUnboundedBatch[Val]
+      chan: ptr ChannelMpscUnboundedBatch[Val, true]
       pool: ptr TLPoolAllocator
 
     AllocKind = enum
@@ -809,7 +809,7 @@ when isMainModule:
       var threads: array[WorkerKind, Thread[ThreadArgs]]
       var pools: ptr array[WorkerKind, TLPoolAllocator]
 
-      let chan = createSharedU(ChannelMpscUnboundedBatch[Val])
+      let chan = createSharedU(ChannelMpscUnboundedBatch[Val, true])
       chan[].initialize()
 
       pools = cast[typeof pools](createSharedU(TLPoolAllocator, pools[].len))

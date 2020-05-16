@@ -61,10 +61,10 @@ template myTodoBoxes*: Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSin
 template managerJobQueue*: ChannelMpscUnboundedBatch[Job] =
   globalCtx.manager.jobsIncoming[]
 
-template myThieves*: ChannelMpscUnboundedBatch[StealRequest] =
+template myThieves*: ChannelMpscUnboundedBatch[StealRequest, keepCount = true] =
   globalCtx.com.thefts[workerContext.worker.ID]
 
-template getThievesOf*(worker: WorkerID): ChannelMpscUnboundedBatch[StealRequest] =
+template getThievesOf*(worker: WorkerID): ChannelMpscUnboundedBatch[StealRequest, keepCount = true] =
   globalCtx.com.thefts[worker]
 
 template myMemPool*: TLPoolAllocator =
