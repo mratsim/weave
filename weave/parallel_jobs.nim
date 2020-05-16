@@ -25,12 +25,12 @@ import
   ./executor
 
 proc newJob(): Job {.inline.} =
-  jobProviderContext.mempool[].borrow(deref(Job))
+  result = jobProviderContext.mempool[].borrow(deref(Job))
   # result.fn = nil # Always overwritten
   # result.parent = nil # Always overwritten
   result.scopedBarrier = nil # Always overwritten
   result.prev = nil
-  result.next = nil
+  result.next.store(nil, moRelaxed)
   result.start = 0
   result.cur = 0
   result.stop = 0
