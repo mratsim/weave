@@ -337,13 +337,17 @@ It can be disabled with `-d:WV_Backoff=off`.
 
 ### Weave using all CPUs
 
-Weave multithreading is cooperative, idle threads send steal requests instead of actively stealing in other workers queue.
+Weave multithreading is cooperative, idle threads send steal requests instead of actively stealing in other workers queue. This is called "work-requesting" in the literatture as opposed to "work-stealing".
 
 This means that a thread sleeping or stuck in a long computation may starve other threads and they will spin burning CPU cycles.
 
 - Don't sleep or block a thread as this blocks Weave scheduler. This is a similar to `async`/`await` libraries.
-- If you really need to sleep or block the main thread, make sure to empty all the tasks beforehand with `syncRoot(Weave)` in the main thread. The child threads will be put to sleep until new tasks are spawned.
+- If you really need to sleep or block the root thread, make sure to empty all the tasks beforehand with `syncRoot(Weave)` in the root thread. The child threads will be put to sleep until new tasks are spawned.
 - The `loadBalance(Weave)` call can be used in the middle of heavy computations to force the worker to answer steal requests. This is automatically done in `parallelFor` loops.
+  `loadBalance(Weave)` is a very fast call that makes a worker thread checks its queue
+  and dispatch its pending tasks to others. It does not block.
+
+We call the root thread the thread that called `init(Weave)`
 
 ## Experimental features
 
@@ -368,7 +372,7 @@ Calling `sync` on the awaitable loop Flowvar will return `true` for the last thr
 - It's the thread that spawned the loop task that will always be the last thread to exit.
   The `false` value is only internal to `Weave`
 
-> ⚠️ This is not a barrier: if that loop spawns tasks (including via a nested loop) and exits, the thread will continue, it will not wait for the grandchildren tasks to be finished.
+> ⚠️ This is not a barrier: if that loop spawns tasks (including via a nested loop) and exits, the thread will continue, it will not wait for the grandchildren tasks to be finished. Use a `syncScope` section to wait on all tasks and descendants including grandchildren.
 
 ```Nim
 import weave
@@ -451,8 +455,6 @@ In the future the `waitableSum` will probably be not required to be declared bef
 Or parallel reduce might be removed to only keep parallelForStaged.
 
 ### Dataflow parallelism
-
-> Warning ⚠️: This feature is not available with the C++ backend.
 
 Dataflow parallelism allows expressing fine-grained data dependencies between tasks.
 Concretly a task is delayed until all its dependencies are met and once met,
