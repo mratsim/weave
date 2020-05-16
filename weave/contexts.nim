@@ -29,6 +29,7 @@ var workerContext* {.threadvar.}: WorkerContext
   # TODO: tlsEmulation off by default on OSX and on by default on iOS?
 
 var jobProviderContext* {.threadvar.}: JobProviderContext
+var localThreadKind* {.threadvar.}: ThreadKind
 
 const RootID*: WorkerID = 0
 const ManagerID*: WorkerID = 0
@@ -194,6 +195,13 @@ template Manager*(body: untyped) =
 template Worker*(body: untyped) =
   if workerContext.worker.ID != ManagerID:
     body
+
+template onWeaveThread*(): bool =
+  localThreadKind == WorkerThread
+
+template onSubmitterThread*(): bool =
+  localThreadKind == SubmitterThread
+
 
 # Counters
 # ----------------------------------------------------------------------------------

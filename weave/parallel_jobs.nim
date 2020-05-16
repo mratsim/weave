@@ -29,6 +29,8 @@ proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
   # is already done and arguments are semchecked
   funcCall.expectKind(nnkCall)
   result = newStmtList()
+  result.add quote do:
+    preCondition: onSubmitterThread()
 
   # Get the return type if any
   let retType = funcCall[0].getImpl[3][0]
@@ -204,7 +206,7 @@ macro submit*(fnCall: typed): untyped =
   ## Submit the input function call asynchronously to the Weave runtime.
   ##
   ## This is a compatibility routine for foreign threads.
-  ## `setupJobProvider` MUST be called on the submitter thread beforehand
+  ## `setupSubmitterThread` MUST be called on the submitter thread beforehand
   ##
   ## This procedure is intended for interoperability with long-running threads
   ## started with `createThread`
@@ -212,9 +214,9 @@ macro submit*(fnCall: typed): untyped =
   ## use `spawn` otherwise.
   ##
   ## If the function calls returns a result, submit will wrap it in a Pending[T].
-  ## You can use `settle` to block the current thread and extract the asynchronous result from the Pending[T].
+  ## You can use `waitFor` to block the current thread and extract the asynchronous result from the Pending[T].
   ## You can use `isReady` to check if result is available and if subsequent
-  ## `settle` calls would block or return immediately.
+  ## `waitFor` calls would block or return immediately.
   ##
   ## `submit` returns immediately.
   ##
@@ -226,7 +228,7 @@ macro submitDelayed*(pledges: varargs[typed], fnCall: typed): untyped =
   ## The function call will only be scheduled when the pledge is fulfilled.
   ##
   ## This is a compatibility routine for foreign threads.
-  ## `setupJobProvider` MUST be called on the submitter thread beforehand
+  ## `setupSubmitterThread` MUST be called on the submitter thread beforehand
   ##
   ## This procedure is intended for interoperability with long-running threads
   ## started with `createThread`
@@ -250,16 +252,11 @@ when isMainModule:
     ./parallel_tasks,
     std/os
 
-  proc eventLoop(shutdown: ptr Atomic[bool]) {.thread.} =
-    init(Weave)
-    Weave.runUntil(shutdown)
-
   var shutdownWeave, serviceDone: Atomic[bool]
   shutdownWeave.store(false, moRelaxed)
   serviceDone.store(false, moRelaxed)
 
-  var executorThread: Thread[ptr Atomic[bool]]
-  executorThread.createThread(eventLoop, shutdownWeave.addr)
+  let executorThread = runInBackground(Weave, shutdownWeave.addr)
 
   block: # Have an independant display service submit jobs to Weave
     serviceDone.store(false, moRelaxed)
@@ -271,7 +268,7 @@ when isMainModule:
       return true
 
     proc displayService(serviceDone: ptr Atomic[bool]) =
-      setupJobProvider(Weave)
+      setupSubmitterThread(Weave)
       waitUntilReady(Weave)
 
       echo "Sanity check 1: Printing 123456 654321 in parallel"
@@ -299,7 +296,7 @@ when isMainModule:
       result = sync(x) + y
 
     proc fibonacciService(serviceDone: ptr Atomic[bool]) =
-      setupJobProvider(Weave)
+      setupSubmitterThread(Weave)
       waitUntilReady(Weave)
 
       echo "Sanity check 2: fib(20)"
@@ -332,7 +329,7 @@ when isMainModule:
       echo "Display C1, exit stream"
 
     proc echoService(serviceDone: ptr Atomic[bool]) =
-      setupJobProvider(Weave)
+      setupSubmitterThread(Weave)
       waitUntilReady(Weave)
 
       echo "Sanity check 3: Dataflow parallelism"
@@ -372,7 +369,7 @@ when isMainModule:
       return true
 
     proc echoService(serviceDone: ptr Atomic[bool]) =
-      setupJobProvider(Weave)
+      setupSubmitterThread(Weave)
       waitUntilReady(Weave)
 
       echo "Sanity check 4: Dataflow parallelism with multiple dependencies"

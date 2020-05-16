@@ -29,6 +29,8 @@ proc spawnImpl(pledges: NimNode, funcCall: NimNode): NimNode =
   # is already done and arguments are semchecked
   funcCall.expectKind(nnkCall)
   result = newStmtList()
+  result.add quote do:
+    preCondition: onWeaveThread()
 
   # Get the return type if any
   let retType = funcCall[0].getImpl[3][0]
@@ -195,7 +197,7 @@ macro spawn*(fnCall: typed): untyped =
   ##
   ## To offload computation from a thread started with `createdThread`
   ## (i.e. foreign to the Weave runtime)
-  ## use `setupJobProvider` + `submit` instead.
+  ## use `setupSubmitterThread` + `submit` instead.
   ##
   ## If the function calls returns a result, spawn will wrap it in a Flowvar.
   ## You can use `sync` to block the current thread and extract the asynchronous result from the flowvar.

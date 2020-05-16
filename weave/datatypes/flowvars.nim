@@ -162,10 +162,12 @@ LazyFV:
     ## Cleanup  after forcing a future
     if not fv.lfv.hasChannel:
       ascertain: fv.lfv.isReady
-      parentResult = cast[ptr T](fv.lfv.lazy.buf.addr)[]
     else:
       ascertain: not fv.lfv.lazy.chan.isNil
       recycleChannel(fv)
+
+# Reductions
+# ----------------------------------------------------
 
 proc newFlowvarNode*(itemSize: uint8): FlowvarNode =
   ## Create a linked list of flowvars
@@ -195,11 +197,8 @@ proc recycleFVN*(fvNode: sink FlowvarNode) {.inline.} =
 # TODO destructors for automatic management
 #      of the user-visible flowvars
 
-# ###################################################### #
-#                                                        #
-#                     "Pending"                          #
-#                                                        #
-# ###################################################### #
+# Foreign threads interop
+# ----------------------------------------------------
 
 type Pending*[T] = object
   ## A Pending[T] is a placeholder for the
@@ -234,6 +233,8 @@ proc waitFor*[T](p: Pending[T]): T {.inline.} =
   ## Wait for a pending value
   ## This blocks the thread until the value is ready
   ## and then returns it.
+  preCondition: onSubmitterThread
+
   var backoff = 1
   while not p.isReady:
     sleep(backoff)

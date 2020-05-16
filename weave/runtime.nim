@@ -119,6 +119,7 @@ proc loadBalance*(_: type Weave) {.gcsafe.} =
   #      - or a 4 sockets 100+ cores server grade CPU
   #      - are you doing addition
   #      - or exponentiation
+  preCondition: onWeaveThread()
 
   shareWork()
 
@@ -134,6 +135,7 @@ proc getThreadId*(_: type Weave): int {.inline.} =
   ## Returns the Weave ID of the current executing thread
   ## ID is in the range 0 ..< WEAVE_NUM_THREADS
   ## With 0 being the lead thread and WEAVE_NUM_THREADS = min(countProcessors, getEnv"WEAVE_NUM_THREADS")
+  preCondition: onWeaveThread()
   myID().int
 
 proc getNumThreads*(_: type Weave): int {.inline.} =

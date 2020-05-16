@@ -172,6 +172,9 @@ proc sync*[T](fv: FlowVar[T]): T {.inline.} =
   ## The thread is not idle and will complete pending tasks.
   forceFuture(fv, result)
   cleanup(fv)
+  LazyFV:
+    if not fv.lfv.hasChannel:
+      result = cast[ptr T](fv.lfv.lazy.buf.addr)[]
 
 # Dump the graph
 # -------------------------------------------

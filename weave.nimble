@@ -45,11 +45,13 @@ task test, "Run Weave tests":
   test "", "weave/parallel_for.nim"
   test "", "weave/parallel_for_staged.nim"
   test "", "weave/parallel_reduce.nim"
+  test "", "weave/parallel_jobs.nim"
 
   test "-d:WV_LazyFlowvar", "weave/parallel_tasks.nim"
   test "-d:WV_LazyFlowvar", "weave/parallel_for.nim"
   test "-d:WV_LazyFlowvar", "weave/parallel_for_staged.nim"
   test "-d:WV_LazyFlowvar", "weave/parallel_reduce.nim"
+  test "-d:WV_LazyFlowvar", "weave/parallel_jobs.nim"
 
   test "", "benchmarks/dfs/weave_dfs.nim"
   test "", "benchmarks/fibonacci/weave_fib.nim"
@@ -70,7 +72,7 @@ task test, "Run Weave tests":
   test "-d:WV_LazyFlowvar", "benchmarks/heat/weave_heat.nim"
   test "-d:WV_LazyFlowvar", "benchmarks/matrix_transposition/weave_transposes.nim"
   test "-d:WV_LazyFlowvar", "benchmarks/nqueens/weave_nqueens.nim"
-  when not defined(windows):
+  when not defined(windows): # Timer impl missing
     test "-d:WV_LazyFlowvar", "benchmarks/single_task_producer/weave_spc.nim"
     test "-d:WV_LazyFlowvar", "benchmarks/bouncing_producer_consumer/weave_bpc.nim"
   when defined(i386) or defined(amd64):
@@ -107,11 +109,13 @@ task test_gc_arc, "Run Weave tests with --gc:arc":
   test "--gc:arc", "weave/parallel_for.nim"
   test "--gc:arc", "weave/parallel_for_staged.nim"
   test "--gc:arc", "weave/parallel_reduce.nim"
+  test "--gc:arc", "weave/parallel_jobs.nim"
 
   test "--gc:arc -d:WV_LazyFlowvar", "weave/parallel_tasks.nim"
   test "--gc:arc -d:WV_LazyFlowvar", "weave/parallel_for.nim"
   test "--gc:arc -d:WV_LazyFlowvar", "weave/parallel_for_staged.nim"
   test "--gc:arc -d:WV_LazyFlowvar", "weave/parallel_reduce.nim"
+  test "--gc:arc -d:WV_LazyFlowvar", "weave/parallel_jobs.nim"
 
   test "--gc:arc", "benchmarks/dfs/weave_dfs.nim"
   test "--gc:arc", "benchmarks/fibonacci/weave_fib.nim"
@@ -132,7 +136,7 @@ task test_gc_arc, "Run Weave tests with --gc:arc":
   test "--gc:arc -d:WV_LazyFlowvar", "benchmarks/heat/weave_heat.nim"
   test "--gc:arc -d:WV_LazyFlowvar", "benchmarks/matrix_transposition/weave_transposes.nim"
   test "--gc:arc -d:WV_LazyFlowvar", "benchmarks/nqueens/weave_nqueens.nim"
-  when not defined(windows):
+  when not defined(windows): # Timer impl missing
     test "--gc:arc -d:WV_LazyFlowvar", "benchmarks/single_task_producer/weave_spc.nim"
     test "--gc:arc -d:WV_LazyFlowvar", "benchmarks/bouncing_producer_consumer/weave_bpc.nim"
   when defined(i386) or defined(amd64):

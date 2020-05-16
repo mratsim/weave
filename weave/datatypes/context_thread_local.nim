@@ -104,6 +104,11 @@ type
     ## to allow them to submit jobs to Weave.
     mempool*: ptr TLPoolAllocator # TODO: have the main thread takeover the mempool on thread destruction
 
+  ThreadKind* = enum
+    Unknown
+    WorkerThread
+    SubmitterThread
+
 # Worker proc
 # ----------------------------------------------------------------------------------
 

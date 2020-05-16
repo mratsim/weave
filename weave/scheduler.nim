@@ -68,6 +68,8 @@ import
 # as the main thread needs it for the root task
 proc setupWorker*() {.gcsafe.} =
   ## Initialize the thread-local context of a worker (including the lead worker)
+  preCondition: localThreadKind == Unknown
+
   template ctx: untyped = workerContext
   metrics:
     zeroMem(ctx.counters.addr, sizeof(ctx.counters))
@@ -77,6 +79,8 @@ proc setupWorker*() {.gcsafe.} =
 
   ctx.taskCache.initialize(freeFn = memory_pools.recycle)
   myMemPool.hook.setCacheMaintenanceEx(ctx.taskCache)
+
+  localThreadKind = WorkerThread
 
   # Worker
   # -----------------------------------------------------------
@@ -93,7 +97,7 @@ proc setupWorker*() {.gcsafe.} =
     myTodoBoxes().access(i).initialize()
 
   ascertain: myTodoBoxes().len == WV_MaxConcurrentStealPerWorker
-  
+
   # Thieves
   # -----------------------------------------------------------
   myThieves().initialize()
@@ -152,11 +156,14 @@ proc teardownWorker*() {.gcsafe.} =
   delete(workerContext.stealCache)
   discard myMemPool().teardown()
 
+  localThreadKind = Unknown
+
 proc worker_entry_fn*(id: WorkerID) {.gcsafe.} =
   ## On the start of the threadpool workers will execute this
   ## until they receive a termination signal
   # We assume that thread_local variables start all at their binary zero value
   preCondition: workerContext == default(WorkerContext)
+  preCondition: localThreadKind == Unknown
 
   myID() = id # If this crashes, you need --tlsemulation:off
   myMemPool().initialize()
@@ -172,6 +179,7 @@ proc worker_entry_fn*(id: WorkerID) {.gcsafe.} =
   workerMetrics()
 
   teardownWorker()
+  postCondition: localThreadKind == Unknown
 
 proc schedule*(task: sink Task) =
   ## Add a new task to be scheduled in parallel

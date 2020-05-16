@@ -49,8 +49,8 @@ import
   macros, typetraits, atomics, os,
   # Internal
   ./memory/[allocs, memory_pools],
-  ./contexts, ./config,
-  ./datatypes/[sync_types],
+  ./contexts, ./config, ./runtime,
+  ./datatypes/[sync_types, context_thread_local],
   ./instrumentation/[contracts, loggers],
   ./cross_thread_com/[scoped_barriers, pledges, channels_mpsc_unbounded_batch, event_notifiers],
   ./state_machines/sync_root
@@ -68,7 +68,7 @@ proc waitUntilReady*(_: typedesc[Weave]) =
     if backoff > 16:
       backoff = 16
 
-proc setupJobProvider*(_: typedesc[Weave]) =
+proc setupSubmitterThread*(_: typedesc[Weave]) =
   ## Configure a thread so that it can submit jobs to the Weave runtime.
   ## This is useful if we want Weave to work
   ## as an independent "service" or "execution engine"
@@ -77,14 +77,19 @@ proc setupJobProvider*(_: typedesc[Weave]) =
   ## logic or IO and Weave on the main thread.
   ##
   ## This will block until Weave is ready to accet jobs
+  preCondition: localThreadKind == Unknown
+
   jobProviderContext.mempool = wv_alloc(TLPoolAllocator)
   jobProviderContext.mempool[].initialize()
 
-proc teardownJobProvider*(_: typedesc[Weave]) =
-  ## Maintenance before exiting a JobProvider thread
+  localThreadKind = SubmitterThread
+
+proc teardownSubmitterThread*(_: typedesc[Weave]) =
+  ## Maintenance before exiting a job submitter thread
 
   # TODO: Have the main thread takeover the mempool if it couldn't be fully released
   let fullyReleased {.used.} = jobProviderContext.mempool.teardown()
+  localThreadKind = Unknown
 
 proc processAllandTryPark*(_: typedesc[Weave]) =
   ## Process all tasks and then try parking the weave runtime
@@ -118,7 +123,8 @@ proc runForever*(_: typedesc[Weave]) =
   while true:
     processAllandTryPark(Weave)
 
-proc runUntil*(_: typedesc[Weave], signal: ptr Atomic[bool] not nil) =
+# TODO: "not nil"
+proc runUntil*(_: typedesc[Weave], signal: ptr Atomic[bool]) =
   ## Start a Weave event loop until signal is true on the current thread.
   ## It wakes-up on job submission, handles multithreaded load balancing,
   ## help process tasks
@@ -130,7 +136,7 @@ proc runUntil*(_: typedesc[Weave], signal: ptr Atomic[bool] not nil) =
 
 proc runInBackground*(
        _: typedesc[Weave],
-       signalShutdown: ptr Atomic[bool] not nil
+       signalShutdown: ptr Atomic[bool]
      ): Thread[ptr Atomic[bool]] =
   ## Start the Weave runtime on a background thread.
   ## It wakes-up on job submissions, handles multithreaded load balancing,
@@ -147,7 +153,7 @@ proc runInBackground*(_: typedesc[Weave]): Thread[void] =
   ## It wakes-up on job submissions, handles multithreaded load balancing,
   ## help process tasks
   ## and spin down when there is no work anymore.
-  proc eventLoop(shutdown: ptr Atomic[bool]) {.thread.} =
+  proc eventLoop() {.thread.} =
     init(Weave)
     Weave.runForever()
   result.createThread(eventLoop)
