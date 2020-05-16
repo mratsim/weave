@@ -37,8 +37,8 @@ type
     #   per channel and a known max number of workers
 
     # Theft channels are bounded to "NumWorkers * WV_MaxConcurrentStealPerWorker"
-    thefts*: ptr UncheckedArray[ChannelMpscUnboundedBatch[StealRequest]]
     tasksStolen*: ptr UncheckedArray[Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]]]
+    thefts*: ptr UncheckedArray[ChannelMpscUnboundedBatch[StealRequest, keepCount = true]]
     when static(WV_Backoff):
       parking*: ptr UncheckedArray[EventNotifier]
 
@@ -63,7 +63,7 @@ type
     #
     # It may become a thread dedicated to supervision, synchronization
     # and job handling.
-    jobsIncoming*: ptr ChannelMpscUnboundedBatch[Job]
+    jobsIncoming*: ptr ChannelMpscUnboundedBatch[Job, keepCount = false]
     when static(WV_Backoff):
       jobNotifier*: ptr EventNotifier
         ## When Weave works as a dedicated execution engine

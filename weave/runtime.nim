@@ -45,8 +45,8 @@ proc init*(_: type Weave) =
   ## Allocation of the global context.
   globalCtx.mempools = wv_alloc(TLPoolAllocator, workforce())
   globalCtx.threadpool = wv_alloc(Thread[WorkerID], workforce())
-  globalCtx.com.thefts = wv_alloc(ChannelMpscUnboundedBatch[StealRequest], workforce())
   globalCtx.com.tasksStolen = wv_alloc(Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]], workforce())
+  globalCtx.com.thefts = wv_alloc(ChannelMpscUnboundedBatch[StealRequest, true], workforce())
   Backoff:
     globalCtx.com.parking = wv_alloc(EventNotifier, workforce())
   globalCtx.barrier.init(workforce())
@@ -84,7 +84,7 @@ proc init*(_: type Weave) =
 
   # Manager
   manager.jobNotifier = globalCtx.com.parking[0].addr
-  manager.jobsIncoming = wv_alloc(ChannelMpscUnboundedBatch[Job])
+  manager.jobsIncoming = wv_alloc(ChannelMpscUnboundedBatch[Job, false])
   manager.jobsIncoming[].initialize()
 
   # Wait for the child threads

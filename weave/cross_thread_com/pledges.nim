@@ -171,7 +171,7 @@ type
     # The MPSC Channel is intrusive to the PledgeImpl.
     # The end fields in the channel should be the consumer
     # to avoid cache-line conflicts with producer threads.
-    chan: ChannelMpscUnboundedBatch[TaskNode]
+    chan: ChannelMpscUnboundedBatch[TaskNode, keepCount = false]
     deferredIn: Atomic[int32]
     deferredOut: Atomic[int32]
     fulfilled: Atomic[bool]
@@ -535,8 +535,8 @@ debugSizeAsserts:
   doAssert sizeof(default(TaskNode)[]) == expectedSize,
     "TaskNode size was " & $sizeof(default(TaskNode)[])
 
-  doAssert sizeof(ChannelMpscUnboundedBatch[TaskNode]) == 128,
-    "MPSC channel size was " & $sizeof(ChannelMpscUnboundedBatch[TaskNode])
+  doAssert sizeof(ChannelMpscUnboundedBatch[TaskNode, false]) == 128,
+    "MPSC channel size was " & $sizeof(ChannelMpscUnboundedBatch[TaskNode, false])
 
   doAssert sizeof(PledgeImpl) == 192,
     "PledgeImpl size was " & $sizeof(PledgeImpl)
