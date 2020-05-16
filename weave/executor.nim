@@ -113,7 +113,8 @@ proc processAllandTryPark*(_: typedesc[Weave]) =
 
 proc wakeup(_: typedesc[Weave]) =
   ## Wakeup the runtime manager if asleep
-  manager.jobNotifier[].notify()
+  Backoff:
+    manager.jobNotifier[].notify()
 
 proc runForever*(_: typedesc[Weave]) =
   ## Start a never-ending event loop on the current thread

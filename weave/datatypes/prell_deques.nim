@@ -109,7 +109,7 @@ proc flush*[T: StealableTask](dq: var PrellDeque[T]): T {.inline.} =
 # Batch routines
 # ---------------------------------------------------------------
 
-func addListFirst[T](dq: var PrellDeque[T], head, tail: sink T, len: int32) {.inline.} =
+func addListFirst*[T](dq: var PrellDeque[T], head, tail: sink T, len: int32) {.inline.} =
   # Add a list of tasks [head ... tail] of length len to the front of the deque
   preCondition: not head.isNil and not tail.isNil
   preCondition: len > 0

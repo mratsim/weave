@@ -83,7 +83,8 @@ proc init*(_: type Weave) =
   setupWorker()
 
   # Manager
-  manager.jobNotifier = globalCtx.com.parking[0].addr
+  Backoff:
+    manager.jobNotifier = globalCtx.com.parking[0].addr
   manager.jobsIncoming = wv_alloc(ChannelMpscUnboundedBatch[Job, false])
   manager.jobsIncoming[].initialize()
 

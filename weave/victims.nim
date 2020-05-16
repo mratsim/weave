@@ -143,6 +143,13 @@ template receivedOwn(req: sink StealRequest) =
 proc takeTasks(req: StealRequest): tuple[task: Task, loot: int32] =
   ## Take tasks in the worker deque to send them
   ## to others
+
+  if req.state == Waiting:
+    # Always steal-half for child thread to
+    # try to wakeup the whole tree.
+    myWorker().deque.stealHalf(result.task, result.loot)
+    return
+
   when StealStrategy == StealKind.adaptative:
     if req.stealHalf:
       myWorker().deque.stealHalf(result.task, result.loot)
@@ -302,11 +309,15 @@ proc distributeWork*(req: sink StealRequest, workSharing: bool): bool =
     #        and would logically return true
 
   Manager:
-    # Introduce a pending job otherwise
-    var job: Job
-    if managerJobQueue.tryRecv(job):
-      # TODO: not pretty to enqueue, to dequeue just after in dispatchElseDecline
-      myWorker().deque.addFirst cast[Task](job)
+    # Drain all the jobs otherwise
+    var firstJob, lastJob: Job
+    let count = managerJobQueue.tryRecvBatch(firstJob, lastJob)
+    if count != 0:
+      myWorker().deque.addListFirst(
+        cast[Task](firstJob),
+        cast[Task](lastJob),
+        count
+      )
       req.dispatchElseDecline()
       return true
 
