@@ -6,7 +6,7 @@ digraph workerEventLoop{
     node [shape = octagon, fontcolor=black, fillcolor=lightsteelblue, style="rounded,filled"]; WEL_CheckTask_EV_FoundTask WEL_OutOfTasks_EV_StoleTask WEL_CheckTermination_EV_SignaledTerminate ;
     WEL_CheckTask_EV_FoundTask [label="EV_FoundTask\nnot isNil(task)"];
     WEL_OutOfTasks_EV_StoleTask [label="EV_StoleTask\nstoleTask"];
-    WEL_CheckTermination_EV_SignaledTerminate [label="EV_SignaledTerminate\nlocalCtx.signaledTerminate"];
+    WEL_CheckTermination_EV_SignaledTerminate [label="EV_SignaledTerminate\nworkerContext.signaledTerminate"];
     WEL_CheckTask -> WEL_CheckTask_EV_FoundTask[style=bold, xlabel="always"];
     WEL_CheckTask_EV_FoundTask -> WEL_CheckTask [style=dashed, xlabel="true"];
     WEL_CheckTask_EV_FoundTask -> WEL_OutOfTasks [xlabel="default"];

@@ -5,6 +5,12 @@
 #   * Apache v2 license (license terms in the root directory or at http://www.apache.org/licenses/LICENSE-2.0).
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
+# A task is a processing request emitted from a Weave worker thread.
+# They are scheduled in LIFO order and maximize throughput of the runtime.
+# In particular, it is optimized for fork-join parallelism
+# where the oldest tasks spawned the recent ones and cannot complete
+# without the recent tasks being complete.
+
 # Async/await spawn/sync for compute bound tasks
 # ----------------------------------------------------------
 
@@ -23,6 +29,8 @@ proc spawnImpl(pledges: NimNode, funcCall: NimNode): NimNode =
   # is already done and arguments are semchecked
   funcCall.expectKind(nnkCall)
   result = newStmtList()
+  result.add quote do:
+    preCondition: onWeaveThread()
 
   # Get the return type if any
   let retType = funcCall[0].getImpl[3][0]
@@ -153,7 +161,10 @@ proc spawnImpl(pledges: NimNode, funcCall: NimNode): NimNode =
 
         let `data` = cast[ptr `futArgsTy`](param) # TODO - restrict
         let res = `fnCall`
-        readyWith(`data`[0], res)
+        when typeof(`data`[]) is Flowvar:
+          readyWith(`data`[], res)
+        else:
+          readyWith(`data`[0], res)
 
     # Create the task
     let freshIdent = ident($retType)
@@ -183,9 +194,17 @@ proc spawnImpl(pledges: NimNode, funcCall: NimNode): NimNode =
 
 macro spawn*(fnCall: typed): untyped =
   ## Spawns the input function call asynchronously, potentially on another thread of execution.
+  ##
+  ## To offload computation from a thread started with `createdThread`
+  ## (i.e. foreign to the Weave runtime)
+  ## use `setupSubmitterThread` + `submit` instead.
+  ##
   ## If the function calls returns a result, spawn will wrap it in a Flowvar.
-  ## You can use sync to block the current thread and extract the asynchronous result from the flowvar.
-  ## Spawn returns immediately.
+  ## You can use `sync` to block the current thread and extract the asynchronous result from the flowvar.
+  ## You can use `isReady` to check if result is available and if subsequent
+  ## `spawn` returns immediately.
+  ##
+  ## Tasks are processed approximately in Last-In-First-Out (LIFO) order
   result = spawnImpl(nil, fnCall)
 
 macro spawnDelayed*(pledges: varargs[typed], fnCall: typed): untyped =
@@ -312,18 +331,20 @@ when isMainModule:
     proc echoB2() =
       echo "Display B2, exit stream"
 
-    proc echoC1() =
+    proc echoC1(): bool =
       echo "Display C1, exit stream"
+      return true
 
     proc main() =
       echo "Sanity check 3: Dataflow parallelism"
       init(Weave)
       let pA = newPledge()
       let pB1 = newPledge()
-      spawnDelayed pB1, echoC1()
+      let done = spawnDelayed(pB1, echoC1())
       spawnDelayed pA, echoB2()
       spawnDelayed pA, echoB1(pB1)
       spawn echoA(pA)
+      discard sync(done)
       exit(Weave)
 
     main()

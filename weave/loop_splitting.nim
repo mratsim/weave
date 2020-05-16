@@ -10,6 +10,8 @@ import
   ./datatypes/sync_types,
   ./instrumentation/[contracts, loggers]
 
+{.push gcsafe.}
+
 # Loop splitting
 # ----------------------------------------------------------------------------------
 

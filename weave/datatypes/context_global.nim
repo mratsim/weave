@@ -6,6 +6,7 @@
 # at your option. This file may not be copied, modified, or distributed except according to those terms.
 
 import
+  std/atomics,
   ../cross_thread_com/channels_mpsc_unbounded_batch,
   ../cross_thread_com/channels_spsc_single_ptr,
   ../memory/[persistacks, memory_pools],
@@ -37,7 +38,7 @@ type
 
     # Theft channels are bounded to "NumWorkers * WV_MaxConcurrentStealPerWorker"
     thefts*: ptr UncheckedArray[ChannelMpscUnboundedBatch[StealRequest]]
-    tasks*: ptr UncheckedArray[Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]]]
+    tasksStolen*: ptr UncheckedArray[Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]]]
     when static(WV_Backoff):
       parking*: ptr UncheckedArray[EventNotifier]
 
@@ -45,7 +46,26 @@ type
     com*: ComChannels
     threadpool*: ptr UncheckedArray[Thread[WorkerID]]
     numWorkers*: int32
-    barrier*: SyncBarrier
     mempools*: ptr UncheckedArray[TlPoolAllocator]
+    barrier*: SyncBarrier
+      ## Barrier for initialization and teardown
+    manager*: ManagerContext
 
-    # TODO track workers per socket / NUMA domain
+  ManagerContext* = object
+    ## Manager context
+    ## in charge of distributing incoming jobs.
+    ## The root thread is the Manager.
+    #
+    # In the future the Manager will also handle
+    # synchronization across machines in a distributed setting.
+    #
+    # We may also have a manager per socket/NUMA domain.
+    #
+    # It may become a thread dedicated to supervision, synchronization
+    # and job handling.
+    jobsIncoming*: ptr ChannelMpscUnboundedBatch[Job]
+    when static(WV_Backoff):
+      jobNotifier*: ptr EventNotifier
+        ## When Weave works as a dedicated execution engine
+        ## we need to park it when there is no CPU tasks.
+    acceptsJobs*: Atomic[bool]

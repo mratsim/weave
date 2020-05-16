@@ -7,7 +7,7 @@
 
 import
   # Standard library
-  os, cpuinfo, strutils,
+  os, cpuinfo, strutils, atomics,
   # Internal
   ./instrumentation/[contracts, loggers],
   ./contexts, ./config,
@@ -24,11 +24,14 @@ when defined(windows):
 else:
   import ./primitives/affinity_posix
 
+{.push gcsafe.}
+
 # Runtime public routines
 # ----------------------------------------------------------------------------------
 
 proc init*(_: type Weave) =
   # TODO detect Hyper-Threading and NUMA domain
+  manager.acceptsJobs.store(false, moRelaxed)
 
   if existsEnv"WEAVE_NUM_THREADS":
     workforce() = getEnv"WEAVE_NUM_THREADS".parseInt.int32
@@ -43,12 +46,13 @@ proc init*(_: type Weave) =
   globalCtx.mempools = wv_alloc(TLPoolAllocator, workforce())
   globalCtx.threadpool = wv_alloc(Thread[WorkerID], workforce())
   globalCtx.com.thefts = wv_alloc(ChannelMpscUnboundedBatch[StealRequest], workforce())
-  globalCtx.com.tasks = wv_alloc(Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]], workforce())
+  globalCtx.com.tasksStolen = wv_alloc(Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]], workforce())
   Backoff:
     globalCtx.com.parking = wv_alloc(EventNotifier, workforce())
   globalCtx.barrier.init(workforce())
 
-  # Lead thread - pinned to CPU 0
+
+  # Root thread - pinned to CPU 0
   myID() = 0
   when not(defined(cpp) and defined(vcc)):
     # TODO: Nim casts between Windows Handles but that requires reinterpret cast for C++
@@ -56,7 +60,8 @@ proc init*(_: type Weave) =
 
   # Create workforce() - 1 worker threads
   for i in 1 ..< workforce():
-    createThread(globalCtx.threadpool[i], worker_entry_fn, WorkerID(i))
+    {.gcsafe.}: # Workaround regression - https://github.com/nim-lang/Nim/issues/14370
+      createThread(globalCtx.threadpool[i], worker_entry_fn, WorkerID(i))
     # TODO: we might want to take into account Hyper-Threading (HT)
     #       and allow spawning tasks and pinning to cores that are not HT-siblings.
     #       This is important for memory-bound workloads (like copy, addition, ...)
@@ -75,9 +80,16 @@ proc init*(_: type Weave) =
   myTask().fn = cast[type myTask().fn](0xEFFACED)
   myTask().scopedBarrier = nil
 
-  init(localCtx)
+  setupWorker()
+
+  # Manager
+  manager.jobNotifier = globalCtx.com.parking[0].addr
+  manager.jobsIncoming = wv_alloc(ChannelMpscUnboundedBatch[Job])
+  manager.jobsIncoming[].initialize()
+
   # Wait for the child threads
   discard globalCtx.barrier.wait()
+  manager.acceptsJobs.store(true, moRelaxed)
 
 proc loadBalance*(_: type Weave) {.gcsafe.} =
   ## This makes the current thread ensures it shares work with other threads.
@@ -110,6 +122,7 @@ proc loadBalance*(_: type Weave) {.gcsafe.} =
   #      - or a 4 sockets 100+ cores server grade CPU
   #      - are you doing addition
   #      - or exponentiation
+  preCondition: onWeaveThread()
 
   shareWork()
 
@@ -125,6 +138,7 @@ proc getThreadId*(_: type Weave): int {.inline.} =
   ## Returns the Weave ID of the current executing thread
   ## ID is in the range 0 ..< WEAVE_NUM_THREADS
   ## With 0 being the lead thread and WEAVE_NUM_THREADS = min(countProcessors, getEnv"WEAVE_NUM_THREADS")
+  preCondition: onWeaveThread()
   myID().int
 
 proc getNumThreads*(_: type Weave): int {.inline.} =
@@ -141,7 +155,7 @@ proc globalCleanup() =
   # Channels, each thread cleaned its channels
   # We just need to reclaim the memory
   wv_free(globalCtx.com.thefts)
-  wv_free(globalCtx.com.tasks)
+  wv_free(globalCtx.com.tasksStolen)
 
   # The root task has no parent
   ascertain: myTask().isRootTask()
@@ -155,7 +169,7 @@ proc globalCleanup() =
 proc exit*(_: type Weave) =
   syncRoot(_)
   signalTerminate(nil)
-  localCtx.signaledTerminate = true
+  workerContext.signaledTerminate = true
 
   # 1 matching barrier in worker_entry_fn
   discard globalCtx.barrier.wait()
@@ -163,5 +177,5 @@ proc exit*(_: type Weave) =
   # 1 matching barrier in metrics
   workerMetrics()
 
-  threadLocalCleanup()
+  teardownWorker()
   globalCleanup()

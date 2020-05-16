@@ -7,6 +7,8 @@
 
 import strutils
 
+{.push gcsafe.}
+
 # Platform support
 # ----------------------------------------------------------------------------------
 
@@ -98,6 +100,10 @@ template metrics*(body: untyped): untyped =
 
 template debugTermination*(body: untyped): untyped =
   when defined(WV_DebugTermination) or defined(WV_Debug):
+    block: {.noSideEffect, gcsafe.}: body
+
+template debugExecutor*(body: untyped): untyped =
+  when defined(WV_DebugExecutor) or defined(WV_Debug):
     block: {.noSideEffect, gcsafe.}: body
 
 template debug*(body: untyped): untyped =

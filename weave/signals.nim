@@ -12,18 +12,20 @@ import
   ./memory/persistacks,
   ./cross_thread_com/[channels_spsc_single_ptr, scoped_barriers]
 
+{.push gcsafe.}
+
 # Signals
 # ----------------------------------------------------------------------------------
 
 proc detectTermination*() {.inline.} =
-  preCondition: myID() == LeaderID
+  preCondition: myID() == RootID
   preCondition: myWorker().leftIsWaiting and myWorker().rightIsWaiting
-  preCondition: not localCtx.runtimeIsQuiescent
+  preCondition: not workerContext.runtimeIsQuiescent
 
   debugTermination:
     log(">>> Worker %2d detects termination <<<\n", myID())
 
-  localCtx.runtimeIsQuiescent = true
+  workerContext.runtimeIsQuiescent = true
 
 proc asyncSignal(fn: proc (_: pointer) {.nimcall, gcsafe.}, chan: var ChannelSpscSinglePtr[Task]) =
   ## Send an asynchronous signal `fn` to channel `chan`
@@ -42,8 +44,8 @@ proc asyncSignal(fn: proc (_: pointer) {.nimcall, gcsafe.}, chan: var ChannelSps
     debugTermination: log("Worker %2d: sending asyncSignal\n", myID())
     postCondition: signalSent
 
-proc signalTerminate*(_: pointer) {.gcsafe.} =
-  preCondition: not localCtx.signaledTerminate
+proc signalTerminate*(_: pointer) =
+  preCondition: not workerContext.signaledTerminate
 
   # 1. Terminating means everyone ran out of tasks
   #    so their cache for task channels should be full
@@ -51,11 +53,11 @@ proc signalTerminate*(_: pointer) {.gcsafe.} =
   # 2. Since they have an unique parent, no one else sent them a signal (checked in asyncSignal)
   if myWorker().left != Not_a_worker:
     # Send the terminate signal
-    asyncSignal(signalTerminate, globalCtx.com.tasks[myWorker().left].access(0))
+    asyncSignal(signalTerminate, globalCtx.com.tasksStolen[myWorker().left].access(0))
     Backoff: # Wake the worker up so that it can process the terminate signal
       wakeup(myWorker().left)
   if myWorker().right != Not_a_worker:
-    asyncSignal(signalTerminate, globalCtx.com.tasks[myWorker().right].access(0))
+    asyncSignal(signalTerminate, globalCtx.com.tasksStolen[myWorker().right].access(0))
     Backoff:
       wakeup(myWorker().right)
 
@@ -64,4 +66,4 @@ proc signalTerminate*(_: pointer) {.gcsafe.} =
     # as a normal task
     decCounter(tasksExec)
 
-  localCtx.signaledTerminate = true
+  workerContext.signaledTerminate = true

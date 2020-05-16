@@ -8,7 +8,7 @@
 import
   ./bounded_queues, ./sync_types, ./prell_deques, ./binary_worker_trees,
   ../config,
-  ../memory/[lookaside_lists, persistacks, allocs],
+  ../memory/[lookaside_lists, persistacks, allocs, memory_pools],
   ../instrumentation/contracts,
   ../random/rng,
   ../cross_thread_com/scoped_barriers
@@ -69,13 +69,13 @@ type
     recentTasks*: int32
     recentThefts*: int32
 
-  TLContext* = object
-    ## Thread-Local context
+  WorkerContext* = object
+    ## Thread-Local context for Weave workers
     worker*: Worker
     thefts*: Thefts
     taskCache*: LookAsideList[Task]
     stealCache*: Persistack[WV_MaxConcurrentStealPerWorker, deref(StealRequest)]
-    # Leader thread only - Whole runtime is quiescent
+    # Root thread only - Whole runtime is quiescent
     runtimeIsQuiescent*: bool
     signaledTerminate*: bool
     when defined(WV_Metrics):
@@ -98,6 +98,16 @@ type
       shareHalf*: int
     when defined(WV_LazyFlowvar):
       futuresConverted*: int
+
+  JobProviderContext* = object
+    ## Thread-local context for non-Weave threads
+    ## to allow them to submit jobs to Weave.
+    mempool*: ptr TLPoolAllocator # TODO: have the main thread takeover the mempool on thread destruction
+
+  ThreadKind* = enum
+    Unknown
+    WorkerThread
+    SubmitterThread
 
 # Worker proc
 # ----------------------------------------------------------------------------------

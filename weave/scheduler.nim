@@ -12,12 +12,13 @@ import
   ./cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch],
   ./memory/[persistacks, lookaside_lists, allocs, memory_pools],
   ./contexts, ./config,
-  ./victims,
   ./random/rng,
   ./state_machines/[event_loop, dispatch_events]
 
 # Local context
 # ----------------------------------------------------------------------------------
+
+{.push gcsafe.}
 
 # Caching description:
 #
@@ -67,8 +68,11 @@ import
 
 # The mempool is initialized in worker_entry_fn
 # as the main thread needs it for the root task
-proc init*(ctx: var TLContext) {.gcsafe.} =
+proc setupWorker*() =
   ## Initialize the thread-local context of a worker (including the lead worker)
+  preCondition: localThreadKind == Unknown
+
+  template ctx: untyped = workerContext
   metrics:
     zeroMem(ctx.counters.addr, sizeof(ctx.counters))
   zeroMem(ctx.thefts.addr, sizeof(ctx.thefts))
@@ -77,6 +81,8 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
 
   ctx.taskCache.initialize(freeFn = memory_pools.recycle)
   myMemPool.hook.setCacheMaintenanceEx(ctx.taskCache)
+
+  localThreadKind = WorkerThread
 
   # Worker
   # -----------------------------------------------------------
@@ -97,9 +103,9 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
   # Thieves
   # -----------------------------------------------------------
   myThieves().initialize()
-  localCtx.stealCache.initialize()
-  for i in 0 ..< localCtx.stealCache.len:
-    localCtx.stealCache.access(i).victims.allocate(capacity = workforce())
+  ctx.stealCache.initialize()
+  for i in 0 ..< ctx.stealCache.len:
+    ctx.stealCache.access(i).victims.allocate(capacity = workforce())
 
   myThefts().rng.seed(myID())
   TargetLastVictim:
@@ -116,7 +122,7 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
     )
     log("Worker %2d: steal requests channel is  0x%.08x\n",
       myID(), myThieves().addr)
-    let (sStart, sStop) = localCtx.stealCache.reservedMemRange()
+    let (sStart, sStop) = ctx.stealCache.reservedMemRange()
     log("Worker %2d: steal requests cache range 0x%.08x-0x%.08x\n",
       myID(), sStart, sStop)
 
@@ -135,32 +141,35 @@ proc init*(ctx: var TLContext) {.gcsafe.} =
 # Scheduler
 # ----------------------------------------------------------------------------------
 
-proc threadLocalCleanup*() {.gcsafe.} =
+proc teardownWorker*() =
   myWorker().deque.flushAndDispose()
 
   for i in 0 ..< WV_MaxConcurrentStealPerWorker:
     # No tasks left
     ascertain: myTodoBoxes().access(i).isEmpty()
-    localCtx.stealCache.access(i).victims.delete()
+    workerContext.stealCache.access(i).victims.delete()
   myTodoBoxes().delete()
   Backoff:
     `=destroy`(myParking())
 
   # The task cache is full of tasks
-  delete(localCtx.taskCache)
+  delete(workerContext.taskCache)
   # This also deletes steal requests already sent to other workers
-  delete(localCtx.stealCache)
+  delete(workerContext.stealCache)
   discard myMemPool().teardown()
 
-proc worker_entry_fn*(id: WorkerID) {.gcsafe.} =
+  localThreadKind = Unknown
+
+proc worker_entry_fn*(id: WorkerID) =
   ## On the start of the threadpool workers will execute this
   ## until they receive a termination signal
   # We assume that thread_local variables start all at their binary zero value
-  preCondition: localCtx == default(TLContext)
+  preCondition: workerContext == default(WorkerContext)
+  preCondition: localThreadKind == Unknown
 
   myID() = id # If this crashes, you need --tlsemulation:off
   myMemPool().initialize()
-  localCtx.init()
+  setupWorker()
   discard globalCtx.barrier.wait()
 
   eventLoop()
@@ -171,7 +180,8 @@ proc worker_entry_fn*(id: WorkerID) {.gcsafe.} =
   # 1 matching barrier in init(Runtime) for lead thread
   workerMetrics()
 
-  threadLocalCleanup()
+  teardownWorker()
+  postCondition: localThreadKind == Unknown
 
 proc schedule*(task: sink Task) =
   ## Add a new task to be scheduled in parallel
@@ -182,12 +192,12 @@ proc schedule*(task: sink Task) =
 
   profile_stop(enq_deq_task)
 
-  # Lead thread
-  if localCtx.runtimeIsQuiescent:
-    ascertain: myID() == LeaderID
+  # Root thread
+  if workerContext.runtimeIsQuiescent:
+    ascertain: myID() == RootID
     debugTermination:
       log(">>> Worker %2d resumes execution after barrier <<<\n", myID())
-    localCtx.runtimeIsQuiescent = false
+    workerContext.runtimeIsQuiescent = false
 
   dispatchToChildrenAndThieves()
 

@@ -152,14 +152,28 @@ exit(Weave)
 
 ### Complete list
 
-- `init(Weave)`, `exit(Weave)` to start and stop the runtime. Forgetting this will give you nil pointer exceptions on spawn.
-- `spawn fnCall(args)` which spawns a function that may run on another thread and gives you an awaitable Flowvar handle.
+We separate the list depending on the threading context
+
+#### Root thread
+
+The root thread is the thread that started the Weave runtime. It has special privileges.
+
+- `init(Weave)`, `exit(Weave)` to start and stop the runtime. Forgetting this will give you nil pointer exceptions on spawn.\
+  The thread that calls `init` will become the root thread.
+- `syncRoot(Weave)` is a global barrier. The root thread will not continue beyond
+  until all tasks in the runtime are finished.
+
+#### Weave worker thread
+
+A worker thread is automatically created per (logical) core on the machine.
+The root thread is also a worker thread.
+Worker threads are tuned to maximize throughput of computational **tasks**.
+
+- `spawn fnCall(args)` which spawns a function that may run on another thread and gives you an awaitable `Flowvar` handle.
 - `newPledge`, `fulfill` and `spawnDelayed` (experimental) to delay a task until some dependencies are met. This allows expressing precise data dependencies and producer-consumer relationships.
 - `sync(Flowvar)` will await a Flowvar and block until you receive a result.
 - `isReady(Flowvar)` will check if `sync` will actually block or return the result immediately.
-- `syncRoot(Weave)` is a global barrier for the main thread on the main task.
-  Using syncRoot in a proc means that the can only be called from the main thread.
-  `syncRoot(Weave)` is implicitly called by `exit(Weave)`
+
 - `syncScope` is a scope barrier. The thread will not move beyond the scope until
   all tasks and parallel loops spawned and their descendants are finished.
   `syncScope` is composable, it can be called by any thread, it can be nested.
@@ -177,12 +191,82 @@ exit(Weave)
   may be created by the current tasks.
 - `parallelFor`, `parallelForStrided`, `parallelForStaged`, `parallelForStagedStrided` are described above and in the experimental section.
 - `loadBalance(Weave)` gives the runtime the opportunity to distribute work. Insert this within long computation as due to Weave design, it's the busy workers that are also in charge of load balancing. This is done automatically when using `parallelFor`.
-- `isSpawned` allows you to build speculative algorithm where a thread is spawned only if certain conditions are valid. See the `nqueens` benchmark for an example.
-- `getThreadId` returns a unique thread ID. The thread ID is in the range 0 ..< number of threads.
+- `isSpawned(Flowvar)` allows you to build speculative algorithm where a thread is spawned only if certain conditions are valid. See the `nqueens` benchmark for an example.
+- `getThreadId(Weave)` returns a unique thread ID. The thread ID is in the range 0 ..< number of threads.
 
-The max number of threads can be configured by the environment variable WEAVE_NUM_THREADS
+The max number of worker threads can be configured by the environment variable WEAVE_NUM_THREADS
 and default to your number of logical cores (including HyperThreading).
 Weave uses Nim's `countProcessors()` in `std/cpuinfo`
+
+#### Foreign thread & Background service (experimental)
+
+Weave can also be run as a background service and process `jobs` similar to the `Executor` concept in C++.
+Jobs will be processed in FIFO order.
+
+> **Experimental**:
+>   The distinction between spawn/sync on a Weave thread
+>   and submit/waitFor on a foreign thread may be removed in the future.
+
+A background service can be started with either:
+- `thr.runInBackground(Weave)`
+- or `thr.runInBackground(Weave, signalShutdown: ptr Atomic[bool])`
+
+with `thr` an uninitialized `Thread[void]` or `Thread[ptr Atomic[bool]]`
+
+Then the foreign thread should call:
+- `setupSubmitterThread(Weave)`: Configure a thread so that it can send jobs to a background Weave service
+and on shutdown
+- `waitUntilReady(Weave)`: Block the foreign thread until the Weave runtime is ready to accept jobs.
+
+and for shutdown
+- `teardownSubmitterThread(Weave)`: Cleanup Weave resources allocated on the thread.
+
+Once setup, a foreign thread can submit jobs via:
+
+- `submit fnCall(args)` which submits a function to the Weave runtime and gives you an awaitable `Pending` handle.
+- `newPledge`, `fulfill` and `submitDelayed` (experimental) to delay a task until some dependencies are met. This allows expressing precise data dependencies and producer-consumer relationships.
+- `waitFor(Pending)` which await a Pending job result and blocks the current thread
+- `isReady(Pending)` will check if `waitFor` will actually block or return the result immediately.
+- `isSubmitted(job)` allows you to build speculative algorithm where a job is submitted only if certain conditions are valid.
+
+Within a job, tasks can be spawned and parallel for constructs can be used.
+
+If `runInBackground()` does not provide fine enough control, a Weave background event loop
+can be customized using the following primitive:
+- at a very low-level:
+  - The root thread primitives: `init(Weave)` and `exit(Weave)`
+  - `processAllandTryPark(Weave)`: Process all pending jobs and try sleeping. The sleep may fail to avoid deadlocks
+      if a job is submitted concurrently. This should be used in a `while true` event loop.
+- at a medium level:
+  - `runForever(Weave)`: Start a never-ending event loop that processes all pending jobs and sleep until new work arrives.
+  - `runUntil(Weave, signalShutdown: ptr Atomic[bool])`: Start an event-loop that quits on signal.
+
+For example:
+```Nim
+proc runUntil*(_: typedesc[Weave], signal: ptr Atomic[bool]) =
+  ## Start a Weave event loop until signal is true on the current thread.
+  ## It wakes-up on job submission, handles multithreaded load balancing,
+  ## help process tasks
+  ## and spin down when there is no work anymore.
+  preCondition: not signal.isNil
+  while not signal[].load(moRelaxed):
+    processAllandTryPark(Weave)
+  syncRoot(Weave)
+
+proc runInBackground*(
+       _: typedesc[Weave],
+       signalShutdown: ptr Atomic[bool]
+     ): Thread[ptr Atomic[bool]] =
+  ## Start the Weave runtime on a background thread.
+  ## It wakes-up on job submissions, handles multithreaded load balancing,
+  ## help process tasks
+  ## and spin down when there is no work anymore.
+  proc eventLoop(shutdown: ptr Atomic[bool]) {.thread.} =
+    init(Weave)
+    Weave.runUntil(shutdown)
+    exit(Weave)
+  result.createThread(eventLoop, signalShutdown)
+```
 
 ## Table of Contents
 
@@ -194,6 +278,9 @@ Weave uses Nim's `countProcessors()` in `std/cpuinfo`
     - [Data parallelism](#data-parallelism)
       - [Strided loops](#strided-loops)
     - [Complete list](#complete-list)
+      - [Root thread](#root-thread)
+      - [Weave worker thread](#weave-worker-thread)
+      - [Foreign thread & Background service (experimental)](#foreign-thread--background-service-experimental)
   - [Table of Contents](#table-of-contents)
   - [Platforms supported](#platforms-supported)
     - [C++ compilation](#c-compilation)

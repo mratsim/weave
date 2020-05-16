@@ -9,7 +9,10 @@ import
   ../cross_thread_com/channels_spsc_single,
   ../memory/[allocs, memory_pools],
   ../instrumentation/contracts,
-  ../config, ../contexts
+  ../config, ../contexts,
+  std/os
+
+{.push gcsafe.}
 
 type
   LazyChannel* {.union.} = object
@@ -25,7 +28,7 @@ type
     lazy*: LazyChannel
 
   Flowvar*[T] = object
-    ## A Flowvar is a simple channel
+    ## A Flowvar is a placeholder for a future result that may be computed in parallel
     # Flowvar are optimized when containing a ptr type.
     # They take less size in memory by testing isNil
     # instead of having an extra atomic bool
@@ -59,10 +62,10 @@ type
     else:
       chan*: ptr ChannelSPSCSingle
 
-func isSpawned*(fv: Flowvar): bool {.inline.}=
-  ## Returns true if a future is spawned
+func isSpawned*(fv: Flowvar): bool {.inline.} =
+  ## Returns true if a flowvar is spawned
   ## This may be useful for recursive algorithms that
-  ## may or may not spawn a future depending on a condition.
+  ## may or may not spawn a flowvar depending on a condition.
   ## This is similar to Option or Maybe types
   when defined(WV_LazyFlowVar):
     return not fv.lfv.isNil
@@ -92,6 +95,10 @@ EagerFV:
     ## Otherwise the current will block to help on all the pending tasks
     ## until the Flowvar is ready.
     not fv.chan[].isEmpty()
+
+  proc cleanup*(fv: Flowvar) {.inline.} =
+    ## Cleanup  after forcing a future
+    recycleChannel(fv)
 
 LazyFV:
   proc recycleChannel*(fv: Flowvar) {.inline.} =
@@ -153,6 +160,17 @@ LazyFV:
         convertLazyFlowvar(task)
       task = task.next
 
+  proc cleanup*[T](fv: Flowvar[T]) {.inline.} =
+    ## Cleanup  after forcing a future
+    if not fv.lfv.hasChannel:
+      ascertain: fv.lfv.isReady
+    else:
+      ascertain: not fv.lfv.lazy.chan.isNil
+      recycleChannel(fv)
+
+# Reductions
+# ----------------------------------------------------
+
 proc newFlowvarNode*(itemSize: uint8): FlowvarNode =
   ## Create a linked list of flowvars
   # Lazy flowvars unfortunately are allocated on the heap
@@ -178,6 +196,54 @@ proc recycleFVN*(fvNode: sink FlowvarNode) {.inline.} =
     recycle(fvNode.lfv)
   recycle(fvNode)
 
-
 # TODO destructors for automatic management
 #      of the user-visible flowvars
+
+# Foreign threads interop
+# ----------------------------------------------------
+
+type Pending*[T] = object
+  ## A Pending[T] is a placeholder for the
+  ## future result of type T for a job
+  ## submitted to Weave for parallel execution.
+  # For implementation this is just a distinct type
+  # from Flowvars to ensure proper usage
+  fv: Flowvar[T]
+
+func isSubmitted*[T](p: Pending[T]): bool {.inline.} =
+  ## Returns true if a job has been submitted and we have a result pending
+  ## This may be useful for recursive algorithms that
+  ## may or may not submit a job depending on a condition.
+  ## This is similar to Option or Maybe types
+  p.fv.isSpawned
+
+template newPending*(pool: var TLPoolAllocator, T: typedesc): Pending[T] =
+  Pending[T](fv: newFlowVar(pool, T))
+
+func isReady*[T](p: Pending[T]): bool {.inline.} =
+  ## Returns true if the pending result is ready.
+  ## In that case `settle` will not block.
+  ## Otherwise the current thread will block.
+  p.fv.isReady
+
+func readyWith*[T](p: Pending[T], childResult: T) {.inline.} =
+  ## Sends the Pending result from the child thread processing the task
+  ## to its parent thread.
+  p.fv.readyWith(childResult)
+
+proc waitFor*[T](p: Pending[T]): T {.inline.} =
+  ## Wait for a pending value
+  ## This blocks the thread until the value is ready
+  ## and then returns it.
+  preCondition: onSubmitterThread
+
+  var backoff = 1
+  while not p.isReady:
+    sleep(backoff)
+    backoff *= 2
+    if backoff > 16:
+      backoff = 16
+
+  let ok = p.fv.tryComplete(result)
+  ascertain: ok
+  cleanup(p.fv)

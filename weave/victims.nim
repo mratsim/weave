@@ -14,6 +14,8 @@ import
   ./thieves, ./loop_splitting,
   ./state_machines/decline_thief
 
+{.push gcsafe.}
+
 # Victims - Proxy handling on behalf of idle child workers
 # ----------------------------------------------------------------------------------
 
@@ -165,7 +167,7 @@ proc send(req: sink StealRequest, task: sink Task, numStolen: int32 = 1) {.inlin
   incCounter(stealHandled)
   incCounter(tasksSent, numStolen)
 
-proc dispatchElseDecline*(req: sink StealRequest) {.gcsafe.}=
+proc dispatchElseDecline*(req: sink StealRequest) =
   ## Send tasks in return of a steal request
   ## or decline and relay the steal request to another thread
 
@@ -299,7 +301,16 @@ proc distributeWork*(req: sink StealRequest, workSharing: bool): bool =
     #        the branch that leads to termination
     #        and would logically return true
 
-  # Otherwise try to split the current one
+  Manager:
+    # Introduce a pending job otherwise
+    var job: Job
+    if managerJobQueue.tryRecv(job):
+      # TODO: not pretty to enqueue, to dequeue just after in dispatchElseDecline
+      myWorker().deque.addFirst cast[Task](job)
+      req.dispatchElseDecline()
+      return true
+
+  # Otherwise try to split the current task
   if myTask().isSplittable():
     if req.thiefID != myID():
       myTask().splitAndSend(req, workSharing)

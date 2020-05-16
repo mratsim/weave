@@ -35,7 +35,7 @@ type DS_Event = enum
   DSE_IamNewVictim
   DSE_MyTreeIsIdle
   DSE_ItWasTheLastReq
-  DSE_IamLeader
+  DSE_IamRoot
 
 declareAutomaton(declineReqFSA, DeclineState, DS_Event)
 
@@ -164,12 +164,12 @@ behavior(declineReqFSA):
 # Last steal attempt is a failure
 # -------------------------------------------
 
-implEvent(declineReqFSA, DSE_IamLeader):
-  myID() == LeaderID
+implEvent(declineReqFSA, DSE_IamRoot):
+  myID() == RootID
 
 behavior(declineReqFSA):
   ini: DS_ParkOrTerminate
-  event: DSE_IamLeader
+  event: DSE_IamRoot
   transition:
     detectTermination()
     forget(req)
@@ -193,7 +193,7 @@ behavior(declineReqFSA):
 # -------------------------------------------
 
 synthesize(declineReqFSA):
-  proc decline*(req: sink StealRequest) {.gcsafe.}
+  proc decline*(req: sink StealRequest) {.gcsafe, raises: [].}
 
 # Dump the graph
 # -------------------------------------------

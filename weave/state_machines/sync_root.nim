@@ -57,7 +57,7 @@ setPrologue(syncRootFSA):
 setEpilogue(syncRootFSA):
   # Execution continues but the runtime is quiescent until new tasks
   # are created
-  postCondition: localCtx.runtimeIsQuiescent
+  postCondition: workerContext.runtimeIsQuiescent
   debugTermination:
     log(">>> Worker %2d leaves barrier <<<\n", myID())
 
@@ -70,7 +70,7 @@ implEvent(syncRootFSA, SYE_HasTask):
   not task.isNil
 
 implEvent(syncRootFSA, SYE_Quiescent):
-  localCtx.runtimeIsQuiescent
+  workerContext.runtimeIsQuiescent
 
 implEvent(syncRootFSA, SYE_SoleWorker):
   workforce() == 1
@@ -87,7 +87,7 @@ behavior(syncRootFSA):
     profile(run_task):
       execute(task)
     profile(enq_deq_task):
-      localCtx.taskCache.add(task)
+      workerContext.taskCache.add(task)
   fin: SY_CheckTask
 
 behavior(syncRootFSA):
@@ -100,7 +100,7 @@ behavior(syncRootFSA):
 behavior(syncRootFSA):
   ini: SY_OutOfTasks
   event: SYE_SoleWorker
-  transition: localCtx.runtimeIsQuiescent = true
+  transition: workerContext.runtimeIsQuiescent = true
   fin: SY_Exit
 
 behavior(syncRootFSA):
@@ -180,7 +180,7 @@ behavior(syncRootFSA):
       execute(task)
     profile(enq_deq_task):
       # The memory is reused but not zero-ed
-      localCtx.taskCache.add(task)
+      workerContext.taskCache.add(task)
   fin: SY_CheckTask
 
 # -------------------------------------------

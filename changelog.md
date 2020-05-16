@@ -5,6 +5,18 @@
 #### Features
 
 - Added `isReady(Flowvar)` which will return true is `sync` would block on that Flowvar or if the result is actually immediately available.
+- `syncScope:` to block until all tasks and their (recursive)
+  descendants are completed.
+- Dataflow parallelism can now be used with the C++ target.
+- Weave as a background service (experimental).
+  Weave can now be started on a dedicated thread
+  and handle **jobs** from any thread.
+  To do this, Weave can be started with `thr.runInBackground(Weave)`.
+  Job providing threads should call `setupSubmitterThread(Weave)`,
+  and can now use `submit function(args...)` and `waitFor(PendingResult)`
+  to have Weave work as a job system.
+  Jobs are handled in FIFO order.
+  Within a job, tasks can be spawned.
 
 ### v0.4.0 - April 2020 - "Bespoke"
 

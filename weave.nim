@@ -12,7 +12,8 @@ import
   weave/state_machines/[sync_root, sync, sync_scope],
   weave/datatypes/flowvars,
   weave/cross_thread_com/pledges,
-  weave/contexts
+  weave/contexts,
+  weave/[executor, parallel_jobs]
 
 export
   Flowvar, Weave,
@@ -28,4 +29,12 @@ export
   syncScope,
   # Experimental dataflow parallelism
   spawnDelayed, Pledge,
-  fulfill, newPledge
+  fulfill, newPledge,
+  # Experimental background service
+  Pending,
+  submit, submitDelayed,
+  runInBackground, waitUntilReady,
+  setupSubmitterThread, teardownSubmitterThread,
+  waitFor, isSubmitted,
+  processAllandTryPark,
+  runForever, runUntil
