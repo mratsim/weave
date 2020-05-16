@@ -102,7 +102,9 @@ proc trySend*[T](chan: var ChannelMpscUnboundedBatch[T], src: sink T): bool {.in
   ## Send an item to the back of the channel
   ## As the channel has unbounded capacity, this should never fail
 
-  discard chan.count.fetchAdd(1, moRelaxed)
+  let oldCount {.used.} = chan.count.fetchAdd(1, moRelease)
+  postCondition: oldCount >= 0
+
   src.next.store(nil, moRelease)
   let oldBack = chan.back.exchange(src, moAcquireRelease)
   # Consumer can be blocked here, it doesn't see the (potentially growing) end of the queue
@@ -116,7 +118,9 @@ proc trySendBatch*[T](chan: var ChannelMpscUnboundedBatch[T], first, last: sink 
   ## They should be linked together by their next field
   ## As the channel has unbounded capacity this should never fail
 
-  discard chan.count.fetchAdd(int(count), moRelaxed)
+  let oldCount {.used.} = chan.count.fetchAdd(1, moRelease)
+  postCondition: oldCount >= 0
+
   last.next.store(nil, moRelease)
   let oldBack = chan.back.exchange(last, moAcquireRelease)
   # Consumer can be blocked here, it doesn't see the (potentially growing) end of the queue
@@ -144,10 +148,13 @@ proc tryRecv*[T](chan: var ChannelMpscUnboundedBatch[T], dst: var T): bool =
     if not next.isNil:
       # Not competing with producers
       prefetch(first)
-      discard chan.count.fetchSub(1, moRelaxed)
+
       chan.front.next.store(next, moRelaxed)
       # fence(moAcquire) # Sync "first.next.load(moRelaxed)"
       dst = first
+
+      let oldCount {.used.} = chan.count.fetchSub(1, moRelaxed)
+      ascertain: oldCount >= 1 # The producers may overestimate the count
       return true
   # End fast-path
 
@@ -162,8 +169,10 @@ proc tryRecv*[T](chan: var ChannelMpscUnboundedBatch[T], dst: var T): bool =
   if compareExchange(chan.back, last, chan.front.addr, moAcquireRelease):
     # We won and replaced the last node with the channel front
     prefetch(first)
-    discard chan.count.fetchSub(1, moRelaxed)
     dst = first
+
+    let oldCount {.used.} = chan.count.fetchSub(1, moRelaxed)
+    ascertain: oldCount >= 1 # The producers may overestimate the count
     return true
 
   # We lost but now we know that there is an extra node coming very soon
@@ -179,10 +188,12 @@ proc tryRecv*[T](chan: var ChannelMpscUnboundedBatch[T], dst: var T): bool =
     next = first.next.load(moAcquire)
 
   prefetch(first)
-  discard chan.count.fetchSub(1, moRelaxed)
   chan.front.next.store(next, moRelaxed)
   # fence(moAcquire) # sync first.next.load(moRelaxed)
   dst = first
+
+  let oldCount {.used.} = chan.count.fetchSub(1, moRelaxed)
+  ascertain: oldCount >= 1 # The producers may overestimate the count
   return true
 
   # # Alternative implementation
@@ -235,8 +246,9 @@ proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var
   if front != last:
     # We lose the competition, bail out
     chan.front.next.store(front, moRelease)
-    discard chan.count.fetchSub(result, moRelaxed)
-    postCondition: chan.count.load(moRelaxed) >= 0 # TODO: somehow it can be negative
+
+    let oldCount {.used.} = chan.count.fetchSub(result, moRelaxed)
+    postCondition: oldCount >= result # TODO: somehow it can be negative
     return
 
   # front == last
@@ -245,9 +257,10 @@ proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var
     # We won and replaced the last node with the channel front
     prefetch(front)
     result += 1
-    discard chan.count.fetchSub(result, moRelaxed)
     bLast = front
-    postCondition: chan.count.load(moRelaxed) >= 0
+
+    let oldCount {.used.} = chan.count.fetchSub(result, moRelaxed)
+    postCondition: oldCount >= result # TODO: somehow it can be negative
     return
 
   # We lost but now we know that there is an extra node
@@ -267,11 +280,12 @@ proc tryRecvBatch*[T](chan: var ChannelMpscUnboundedBatch[T], bFirst, bLast: var
 
   prefetch(front)
   result += 1
-  discard chan.count.fetchSub(result, moRelaxed)
   chan.front.next.store(next, moRelaxed)
   # fence(moAcquire)  # sync front.next.load(moRelaxed)
   bLast = front
-  postCondition: chan.count.load(moRelaxed) >= 0
+
+  let oldCount {.used.} = chan.count.fetchSub(result, moRelaxed)
+  postCondition: oldCount >= result # TODO: somehow it can be negative
 
 func peek*(chan: var ChannelMpscUnboundedBatch): int32 {.inline.} =
   ## Estimates the number of items pending in the channel
