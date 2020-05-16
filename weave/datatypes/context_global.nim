@@ -63,7 +63,7 @@ type
     #
     # It may become a thread dedicated to supervision, synchronization
     # and job handling.
-    jobsIncoming*: ptr ChannelMpscUnboundedBatch[Job]
+    jobsIncoming*: ptr ChannelMpscUnboundedBatch[Job, keepCount = false]
     when static(WV_Backoff):
       jobNotifier*: ptr EventNotifier
         ## When Weave works as a dedicated execution engine

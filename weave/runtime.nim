@@ -84,7 +84,7 @@ proc init*(_: type Weave) =
 
   # Manager
   manager.jobNotifier = globalCtx.com.parking[0].addr
-  manager.jobsIncoming = wv_alloc(ChannelMpscUnboundedBatch[Job])
+  manager.jobsIncoming = wv_alloc(ChannelMpscUnboundedBatch[Job, false])
   manager.jobsIncoming[].initialize()
 
   # Wait for the child threads

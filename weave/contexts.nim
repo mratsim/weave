@@ -58,7 +58,7 @@ template isRootTask*(task: Task): bool =
 template myTodoBoxes*: Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]] =
   globalCtx.com.tasksStolen[workerContext.worker.ID]
 
-template managerJobQueue*: ChannelMpscUnboundedBatch[Job] =
+template managerJobQueue*: ChannelMpscUnboundedBatch[Job, keepCount = false] =
   globalCtx.manager.jobsIncoming[]
 
 template myThieves*: ChannelMpscUnboundedBatch[StealRequest, keepCount = true] =
