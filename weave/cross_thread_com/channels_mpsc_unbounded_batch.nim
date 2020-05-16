@@ -141,7 +141,7 @@ proc tryRecv*[T, keepCount](chan: var ChannelMpscUnboundedBatch[T, keepCount], d
 
       when keepCount:
         let oldCount {.used.} = chan.count.fetchSub(1, moRelaxed)
-        ascertain: oldCount >= 1 # The producers may overestimate the count
+        postCondition: oldCount >= 1 # The producers may overestimate the count
       return true
   # End fast-path
 
@@ -160,7 +160,7 @@ proc tryRecv*[T, keepCount](chan: var ChannelMpscUnboundedBatch[T, keepCount], d
 
     when keepCount:
       let oldCount {.used.} = chan.count.fetchSub(1, moRelaxed)
-      ascertain: oldCount >= 1 # The producers may overestimate the count
+      postCondition: oldCount >= 1 # The producers may overestimate the count
     return true
 
   # We lost but now we know that there is an extra node coming very soon
@@ -182,7 +182,7 @@ proc tryRecv*[T, keepCount](chan: var ChannelMpscUnboundedBatch[T, keepCount], d
 
   when keepCount:
     let oldCount {.used.} = chan.count.fetchSub(1, moRelaxed)
-    ascertain: oldCount >= 1 # The producers may overestimate the count
+    postCondition: oldCount >= 1 # The producers may overestimate the count
   return true
 
   # # Alternative implementation
