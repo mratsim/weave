@@ -14,6 +14,8 @@ import
   ./config,
   std/atomics
 
+{.push gcsafe.}
+
 # Thief
 # ----------------------------------------------------------------------------------
 
@@ -135,7 +137,7 @@ proc trySteal*(isOutOfTasks: bool) =
         req.state = Working
       req.findVictimAndSteal()
 
-proc forget*(req: sink StealRequest) {.gcsafe.} =
+proc forget*(req: sink StealRequest) =
   ## Removes a steal request from circulation
   ## Re-increment the worker quota
 

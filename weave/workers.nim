@@ -12,6 +12,8 @@ import
   ./cross_thread_com/scoped_barriers,
   ./config
 
+{.push gcsafe.}
+
 # Worker - Tasks handling
 # ----------------------------------------------------------------------------------
 
@@ -28,7 +30,7 @@ proc restartWork*() =
   myWorker().isWaiting = false
   myThefts().dropped = 0
 
-proc execute*(task: Task) {.inline, gcsafe.} =
+proc execute*(task: Task) {.inline.} =
   preCondition: not task.fn.isNil
 
   let suspendedTask = myTask()

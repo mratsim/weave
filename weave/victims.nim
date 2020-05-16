@@ -14,6 +14,8 @@ import
   ./thieves, ./loop_splitting,
   ./state_machines/decline_thief
 
+{.push gcsafe.}
+
 # Victims - Proxy handling on behalf of idle child workers
 # ----------------------------------------------------------------------------------
 
@@ -165,7 +167,7 @@ proc send(req: sink StealRequest, task: sink Task, numStolen: int32 = 1) {.inlin
   incCounter(stealHandled)
   incCounter(tasksSent, numStolen)
 
-proc dispatchElseDecline*(req: sink StealRequest) {.gcsafe.}=
+proc dispatchElseDecline*(req: sink StealRequest) =
   ## Send tasks in return of a steal request
   ## or decline and relay the steal request to another thread
 

@@ -14,6 +14,8 @@ import
   ./decline_thief, ./handle_thieves,
   ../cross_thread_com/channels_mpsc_unbounded_batch
 
+{.push gcsafe.}
+
 proc nextTask*(childTask: static bool): Task {.inline.} =
   # Note:
   # We distinguish jobs and tasks.

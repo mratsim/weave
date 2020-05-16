@@ -18,6 +18,8 @@ when defined(WV_metrics):
 Backoff:
   import ./cross_thread_com/event_notifiers
 
+{.push gcsafe.}
+
 # Contexts
 # ----------------------------------------------------------------------------------
 
@@ -33,8 +35,6 @@ var localThreadKind* {.threadvar.}: ThreadKind
 
 const RootID*: WorkerID = 0
 const ManagerID*: WorkerID = 0
-
-{.push gcsafe.}
 
 # Profilers
 # ----------------------------------------------------------------------------------

@@ -11,6 +11,8 @@ import
   ./instrumentation/[contracts, loggers],
   ./config
 
+{.push gcsafe.}
+
 # Victim selection
 # ----------------------------------------------------------------------------------
 

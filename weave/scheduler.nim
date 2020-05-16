@@ -18,6 +18,8 @@ import
 # Local context
 # ----------------------------------------------------------------------------------
 
+{.push gcsafe.}
+
 # Caching description:
 #
 # Thread-local objects, with a lifetime equal to the thread lifetime
@@ -66,7 +68,7 @@ import
 
 # The mempool is initialized in worker_entry_fn
 # as the main thread needs it for the root task
-proc setupWorker*() {.gcsafe.} =
+proc setupWorker*() =
   ## Initialize the thread-local context of a worker (including the lead worker)
   preCondition: localThreadKind == Unknown
 
@@ -139,7 +141,7 @@ proc setupWorker*() {.gcsafe.} =
 # Scheduler
 # ----------------------------------------------------------------------------------
 
-proc teardownWorker*() {.gcsafe.} =
+proc teardownWorker*() =
   myWorker().deque.flushAndDispose()
 
   for i in 0 ..< WV_MaxConcurrentStealPerWorker:
@@ -158,7 +160,7 @@ proc teardownWorker*() {.gcsafe.} =
 
   localThreadKind = Unknown
 
-proc worker_entry_fn*(id: WorkerID) {.gcsafe.} =
+proc worker_entry_fn*(id: WorkerID) =
   ## On the start of the threadpool workers will execute this
   ## until they receive a termination signal
   # We assume that thread_local variables start all at their binary zero value

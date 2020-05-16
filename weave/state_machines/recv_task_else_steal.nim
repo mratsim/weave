@@ -117,7 +117,7 @@ behavior(recvTaskFSA):
 # -------------------------------------------
 
 synthesize(recvTaskFSA):
-  proc recvElseSteal*(task: var Task, isOutOfTasks: bool): bool
+  proc recvElseSteal*(task: var Task, isOutOfTasks: bool): bool {.gcsafe.}
 
 # Dump the graph
 # -------------------------------------------

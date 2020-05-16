@@ -146,7 +146,8 @@ proc runInBackground*(
     init(Weave)
     Weave.runUntil(shutdown)
     exit(Weave)
-  result.createThread(eventLoop, signalShutdown)
+  {.gcsafe.}: # Workaround regression - https://github.com/nim-lang/Nim/issues/14370
+    result.createThread(eventLoop, signalShutdown)
 
 proc runInBackground*(_: typedesc[Weave]): Thread[void] =
   ## Start the Weave runtime on a background thread.
@@ -156,7 +157,8 @@ proc runInBackground*(_: typedesc[Weave]): Thread[void] =
   proc eventLoop() {.thread.} =
     init(Weave)
     Weave.runForever()
-  result.createThread(eventLoop)
+  {.gcsafe.}: # Workaround regression - https://github.com/nim-lang/Nim/issues/14370
+    result.createThread(eventLoop)
 
 proc submitJob*(job: sink Job) =
   ## Submit a serialized job to a worker at random

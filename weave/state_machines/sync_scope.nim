@@ -168,7 +168,7 @@ behavior(syncScopeFSA):
 # -------------------------------------------
 
 synthesize(syncScopeFSA):
-  proc wait(scopedBarrier: var ScopedBarrier)
+  proc wait(scopedBarrier: var ScopedBarrier) {.gcsafe.}
 
 # Public
 # -------------------------------------------

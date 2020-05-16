@@ -24,6 +24,8 @@ when defined(windows):
 else:
   import ./primitives/affinity_posix
 
+{.push gcsafe.}
+
 # Runtime public routines
 # ----------------------------------------------------------------------------------
 
@@ -58,7 +60,8 @@ proc init*(_: type Weave) =
 
   # Create workforce() - 1 worker threads
   for i in 1 ..< workforce():
-    createThread(globalCtx.threadpool[i], worker_entry_fn, WorkerID(i))
+    {.gcsafe.}: # Workaround regression - https://github.com/nim-lang/Nim/issues/14370
+      createThread(globalCtx.threadpool[i], worker_entry_fn, WorkerID(i))
     # TODO: we might want to take into account Hyper-Threading (HT)
     #       and allow spawning tasks and pinning to cores that are not HT-siblings.
     #       This is important for memory-bound workloads (like copy, addition, ...)

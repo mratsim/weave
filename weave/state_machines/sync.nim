@@ -161,12 +161,12 @@ behavior(awaitFSA):
 # -------------------------------------------
 
 synthesize(awaitFSA):
-  proc forceFuture[T](fv: Flowvar[T], parentResult: var T)
+  proc forceFuture[T](fv: Flowvar[T], parentResult: var T) {.gcsafe.}
 
 # Public
 # -------------------------------------------
 
-proc sync*[T](fv: FlowVar[T]): T {.inline.} =
+proc sync*[T](fv: FlowVar[T]): T {.inline, gcsafe.} =
   ## Blocks the current thread until the flowvar is available
   ## and returned.
   ## The thread is not idle and will complete pending tasks.

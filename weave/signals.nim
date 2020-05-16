@@ -12,6 +12,8 @@ import
   ./memory/persistacks,
   ./cross_thread_com/[channels_spsc_single_ptr, scoped_barriers]
 
+{.push gcsafe.}
+
 # Signals
 # ----------------------------------------------------------------------------------
 
@@ -42,7 +44,7 @@ proc asyncSignal(fn: proc (_: pointer) {.nimcall, gcsafe.}, chan: var ChannelSps
     debugTermination: log("Worker %2d: sending asyncSignal\n", myID())
     postCondition: signalSent
 
-proc signalTerminate*(_: pointer) {.gcsafe.} =
+proc signalTerminate*(_: pointer) =
   preCondition: not workerContext.signaledTerminate
 
   # 1. Terminating means everyone ran out of tasks
