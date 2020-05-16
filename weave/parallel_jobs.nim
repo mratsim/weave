@@ -24,6 +24,12 @@ import
   ./state_machines/sync_root,
   ./executor
 
+proc newJob(): Job {.inline.} =
+  jobProviderContext.mempool[].borrow(deref(Job))
+
+proc notifyJob() {.inline.} =
+  manager.jobNotifier[].notify()
+
 proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
   # We take typed argument so that overloading resolution
   # is already done and arguments are semchecked
@@ -127,7 +133,7 @@ proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
         # TODO - add timers for jobs
         discard timer_start(timer_enq_deq_job)
       block enq_deq_job:
-        let `job` = jobProviderContext.mempool[].borrow(deref(Job))
+        let `job` = newJob()
         `job`.parent = jobProviderContext.addr # By convention, we set the parent to the JobProvider address
         `job`.fn = `async_fn`
         # registerDescendant(mySyncScope()) # TODO: does it make sense?
@@ -136,7 +142,7 @@ proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
           cast[ptr `argsTy`](`job`.data.addr)[] = `args`
         `submitBlock`
 
-        manager.jobNotifier[].notify() # Wake up the runtime
+        notifyJob() # Wake up the runtime
       when defined(WV_profile):
         timer_stop(timer_enq_deq_job)
 
@@ -181,7 +187,7 @@ proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
         # TODO profiling templates visibility issue
         discard timer_start(timer_enq_deq_job)
       block enq_deq_task:
-        let `job` = jobProviderContext.mempool[].borrow(deref(Job))
+        let `job` = newJob()
         `job`.parent = jobProviderContext.addr # By convention, we set the parent to the JobProvider address
         `job`.fn = `async_fn`
         # registerDescendant(mySyncScope()) # TODO: does it make sense?
@@ -192,7 +198,7 @@ proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
         cast[ptr `futArgsTy`](`job`.data.addr)[] = `futArgs`
         `submitBlock`
 
-        manager.jobNotifier[].notify() # Wake up the runtime
+        notifyJob() # Wake up the runtime
         when defined(WV_profile):
           discard timer_stop(timer_enq_deq_job)
         # Return the future
@@ -242,159 +248,3 @@ macro submitDelayed*(pledges: varargs[typed], fnCall: typed): untyped =
   ##
   ## Ensure that before settling on the Pending[T] of a delayed submit, its pledge can be fulfilled or you will deadlock.
   result = submitImpl(pledges, fnCall)
-
-# Sanity checks
-# --------------------------------------------------------
-
-when isMainModule:
-  import
-    ./runtime, ./state_machines/[sync, sync_root],
-    ./parallel_tasks,
-    std/os
-
-  var shutdownWeave, serviceDone: Atomic[bool]
-  shutdownWeave.store(false, moRelaxed)
-  serviceDone.store(false, moRelaxed)
-
-  var executorThread: Thread[ptr Atomic[bool]]
-  executorThread.runInBackground(Weave, shutdownWeave.addr)
-
-  block: # Have an independant display service submit jobs to Weave
-    serviceDone.store(false, moRelaxed)
-
-    proc display_int(x: int): bool =
-      stdout.write(x)
-      stdout.write(" - SUCCESS\n")
-
-      return true
-
-    proc displayService(serviceDone: ptr Atomic[bool]) =
-      setupSubmitterThread(Weave)
-      waitUntilReady(Weave)
-
-      echo "Sanity check 1: Printing 123456 654321 in parallel"
-      discard submit display_int(123456)
-      let ok = submit display_int(654321)
-
-      discard waitFor(ok)
-      serviceDone[].store(true, moRelaxed)
-
-    var t: Thread[ptr Atomic[bool]]
-    t.createThread(displayService, serviceDone.addr)
-    joinThread(t)
-
-  block: # Job that spawns tasks
-    serviceDone.store(false, moRelaxed)
-
-    proc async_fib(n: int): int =
-
-      if n < 2:
-        return n
-
-      let x = spawn async_fib(n-1)
-      let y = async_fib(n-2)
-
-      result = sync(x) + y
-
-    proc fibonacciService(serviceDone: ptr Atomic[bool]) =
-      setupSubmitterThread(Weave)
-      waitUntilReady(Weave)
-
-      echo "Sanity check 2: fib(20)"
-      let f = submit async_fib(20)
-
-      echo waitFor(f)
-      serviceDone[].store(true, moRelaxed)
-
-    var t: Thread[ptr Atomic[bool]]
-    t.createThread(fibonacciService, serviceDone.addr)
-    joinThread(t)
-
-  block: # Delayed computation
-    serviceDone.store(false, moRelaxed)
-
-    proc echoA(pA: Pledge) =
-      echo "Display A, sleep 1s, create parallel streams 1 and 2"
-      sleep(1000)
-      pA.fulfill()
-
-    proc echoB1(pB1: Pledge) =
-      echo "Display B1, sleep 1s"
-      sleep(1000)
-      pB1.fulfill()
-
-    proc echoB2() =
-      echo "Display B2, exit stream"
-
-    proc echoC1(): bool =
-      echo "Display C1, exit stream"
-
-    proc echoService(serviceDone: ptr Atomic[bool]) =
-      setupSubmitterThread(Weave)
-      waitUntilReady(Weave)
-
-      echo "Sanity check 3: Dataflow parallelism"
-      let pA = newPledge()
-      let pB1 = newPledge()
-      let done = submitDelayed(pB1, echoC1())
-      submitDelayed pA, echoB2()
-      submitDelayed pA, echoB1(pB1)
-      submit echoA(pA)
-
-      discard waitFor(done)
-      serviceDone[].store(true, moRelaxed)
-
-    var t: Thread[ptr Atomic[bool]]
-    t.createThread(echoService, serviceDone.addr)
-    joinThread(t)
-
-  block: # Delayed computation with multiple dependencies
-    serviceDone.store(false, moRelaxed)
-
-    proc echoA(pA: Pledge) =
-      echo "Display A, sleep 1s, create parallel streams 1 and 2"
-      sleep(1000)
-      pA.fulfill()
-
-    proc echoB1(pB1: Pledge) =
-      echo "Display B1, sleep 1s"
-      sleep(1000)
-      pB1.fulfill()
-
-    proc echoB2(pB2: Pledge) =
-      echo "Display B2, no sleep"
-      pB2.fulfill()
-
-    proc echoC12(): bool =
-      echo "Display C12, exit stream"
-      return true
-
-    proc echoService(serviceDone: ptr Atomic[bool]) =
-      setupSubmitterThread(Weave)
-      waitUntilReady(Weave)
-
-      echo "Sanity check 4: Dataflow parallelism with multiple dependencies"
-      let pA = newPledge()
-      let pB1 = newPledge()
-      let pB2 = newPledge()
-      let done = submitDelayed(pB1, pB2, echoC12())
-      submitDelayed pA, echoB2(pB2)
-      submitDelayed pA, echoB1(pB1)
-      submit echoA(pA)
-
-      discard waitFor(done)
-      serviceDone[].store(true, moRelaxed)
-
-    var t: Thread[ptr Atomic[bool]]
-    t.createThread(echoService, serviceDone.addr)
-    joinThread(t)
-
-  # Wait until all tests are done
-  var backoff = 1
-  while not serviceDone.load(moRelaxed):
-    sleep(backoff)
-    backoff *= 2
-    if backoff > 16:
-      backoff = 16
-
-  shutdownWeave.store(true)

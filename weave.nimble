@@ -45,13 +45,15 @@ task test, "Run Weave tests":
   test "", "weave/parallel_for.nim"
   test "", "weave/parallel_for_staged.nim"
   test "", "weave/parallel_reduce.nim"
-  test "", "weave/parallel_jobs.nim"
+
+  test "--debugger:native", "tests/test_background_jobs.nim"
 
   test "-d:WV_LazyFlowvar", "weave/parallel_tasks.nim"
   test "-d:WV_LazyFlowvar", "weave/parallel_for.nim"
   test "-d:WV_LazyFlowvar", "weave/parallel_for_staged.nim"
   test "-d:WV_LazyFlowvar", "weave/parallel_reduce.nim"
-  test "-d:WV_LazyFlowvar", "weave/parallel_jobs.nim"
+
+  test "-d:WV_LazyFlowvar", "tests/test_background_jobs.nim"
 
   test "", "benchmarks/dfs/weave_dfs.nim"
   test "", "benchmarks/fibonacci/weave_fib.nim"
@@ -109,13 +111,15 @@ task test_gc_arc, "Run Weave tests with --gc:arc":
   test "--gc:arc", "weave/parallel_for.nim"
   test "--gc:arc", "weave/parallel_for_staged.nim"
   test "--gc:arc", "weave/parallel_reduce.nim"
-  test "--gc:arc", "weave/parallel_jobs.nim"
+
+  test "--gc:arc", "tests/test_background_jobs.nim"
 
   test "--gc:arc -d:WV_LazyFlowvar", "weave/parallel_tasks.nim"
   test "--gc:arc -d:WV_LazyFlowvar", "weave/parallel_for.nim"
   test "--gc:arc -d:WV_LazyFlowvar", "weave/parallel_for_staged.nim"
   test "--gc:arc -d:WV_LazyFlowvar", "weave/parallel_reduce.nim"
-  test "--gc:arc -d:WV_LazyFlowvar", "weave/parallel_jobs.nim"
+
+  test "--gc:arc -d:WV_LazyFlowvar", "tests/test_background_jobs.nim"
 
   test "--gc:arc", "benchmarks/dfs/weave_dfs.nim"
   test "--gc:arc", "benchmarks/fibonacci/weave_fib.nim"
