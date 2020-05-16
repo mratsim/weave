@@ -256,7 +256,8 @@ when isMainModule:
   shutdownWeave.store(false, moRelaxed)
   serviceDone.store(false, moRelaxed)
 
-  let executorThread = runInBackground(Weave, shutdownWeave.addr)
+  var executorThread: Thread[ptr Atomic[bool]]
+  executorThread.runInBackground(Weave, shutdownWeave.addr)
 
   block: # Have an independant display service submit jobs to Weave
     serviceDone.store(false, moRelaxed)

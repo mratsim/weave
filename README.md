@@ -208,8 +208,10 @@ Jobs will be processed in FIFO order.
 >   and submit/waitFor on a foreign thread may be removed in the future.
 
 A background service can be started with either:
-- `runInBackground(Weave)`
-- or `runInBackground(Weave, signalShutdown: ptr Atomic[bool])`
+- `thr.runInBackground(Weave)`
+- or `thr.runInBackground(Weave, signalShutdown: ptr Atomic[bool])`
+
+with `thr` an uninitialized `Thread[void]` or `Thread[ptr Atomic[bool]]`
 
 Then the foreign thread should call:
 - `setupSubmitterThread(Weave)`: Configure a thread so that it can send jobs to a background Weave service

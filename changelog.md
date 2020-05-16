@@ -11,7 +11,7 @@
 - Weave as a background service (experimental).
   Weave can now be started on a dedicated thread
   and handle **jobs** from any thread.
-  To do this, Weave can be started with `runInBackground(Weave)`.
+  To do this, Weave can be started with `thr.runInBackground(Weave)`.
   Job providing threads should call `setupSubmitterThread(Weave)`,
   and can now use `submit function(args...)` and `waitFor(PendingResult)`
   to have Weave work as a job system.
