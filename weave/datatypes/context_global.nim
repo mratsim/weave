@@ -69,3 +69,5 @@ type
         ## When Weave works as a dedicated execution engine
         ## we need to park it when there is no CPU tasks.
     acceptsJobs*: Atomic[bool]
+      # Global variables are guaranteed initialized to 0 statically
+      # in C

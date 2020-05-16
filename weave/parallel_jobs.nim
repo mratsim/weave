@@ -187,12 +187,12 @@ proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
       when defined(WV_profile):
         # TODO profiling templates visibility issue
         discard timer_start(timer_enq_deq_job)
-      block enq_deq_task:
+      block enq_deq_job:
         let `job` = newJob()
         `job`.parent = jobProviderContext.addr # By convention, we set the parent to the JobProvider address
         `job`.fn = `async_fn`
         # registerDescendant(mySyncScope()) # TODO: does it make sense?
-        # `task`.scopedBarrier = mySyncScope()
+        # `job`.scopedBarrier = mySyncScope()
         `job`.has_future = true
         `job`.futureSize = uint8(sizeof(`retType`))
         let `fut` = newPending(jobProviderContext.mempool[], `freshIdent`)
