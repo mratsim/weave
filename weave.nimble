@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.4.0"
+version       = "0.4.9"
 author        = "Mamy André-Ratsimbazafy"
 description   = "a state-of-the-art ùultithreading runtime"
 license       = "MIT or Apache License 2.0"

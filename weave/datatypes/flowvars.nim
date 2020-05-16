@@ -12,6 +12,8 @@ import
   ../config, ../contexts,
   std/os
 
+{.push gcsafe.}
+
 type
   LazyChannel* {.union.} = object
     chan*: ptr ChannelSPSCSingle
@@ -94,7 +96,7 @@ EagerFV:
     ## until the Flowvar is ready.
     not fv.chan[].isEmpty()
 
-  func cleanup*(fv: Flowvar) {.inline.} =
+  proc cleanup*(fv: Flowvar) {.inline.} =
     ## Cleanup  after forcing a future
     recycleChannel(fv)
 
