@@ -119,7 +119,7 @@ proc trySendImpl[T, keepCount](chan: var ChannelMpscUnboundedBatch[T, keepCount]
 
   return true
 
-proc trySend[T, keepCount](chan: var ChannelMpscUnboundedBatch[T, keepCount], src: sink T): bool =
+proc trySend*[T, keepCount](chan: var ChannelMpscUnboundedBatch[T, keepCount], src: sink T): bool =
   ## Send an item to the back of the channel
   ## As the channel has unbounded capacity, this should never fail
   trySendImpl(chan, src, dummy = false)
