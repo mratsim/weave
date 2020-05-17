@@ -30,7 +30,7 @@ task test, "Run Weave tests":
   test "", "weave/cross_thread_com/channels_spsc_single.nim"
   test "", "weave/cross_thread_com/channels_spsc_single_ptr.nim"
   test "", "weave/cross_thread_com/channels_mpsc_unbounded_batch.nim"
-  test "", "weave/cross_thread_com/pledges.nim"
+  test "", "weave/cross_thread_com/flow_events.nim"
 
   test "", "weave/datatypes/binary_worker_trees.nim"
   test "", "weave/datatypes/bounded_queues.nim"
@@ -96,7 +96,7 @@ task test_gc_arc, "Run Weave tests with --gc:arc":
   test "--gc:arc", "weave/cross_thread_com/channels_spsc_single.nim"
   test "--gc:arc", "weave/cross_thread_com/channels_spsc_single_ptr.nim"
   test "--gc:arc", "weave/cross_thread_com/channels_mpsc_unbounded_batch.nim"
-  test "--gc:arc", "weave/cross_thread_com/pledges.nim"
+  test "--gc:arc", "weave/cross_thread_com/flow_events.nim"
 
   test "--gc:arc", "weave/datatypes/binary_worker_trees.nim"
   test "--gc:arc", "weave/datatypes/bounded_queues.nim"

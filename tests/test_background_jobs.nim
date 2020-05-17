@@ -71,15 +71,15 @@ proc main() =
   block: # Delayed computation
     serviceDone.store(false, moRelaxed)
 
-    proc echoA(pA: Pledge) =
+    proc echoA(pA: FlowEvent) =
       echo "Display A, sleep 1s, create parallel streams 1 and 2"
       sleep(1000)
-      pA.fulfill()
+      pA.trigger()
 
-    proc echoB1(pB1: Pledge) =
+    proc echoB1(pB1: FlowEvent) =
       echo "Display B1, sleep 1s"
       sleep(1000)
-      pB1.fulfill()
+      pB1.trigger()
 
     proc echoB2() =
       echo "Display B2, exit stream"
@@ -92,11 +92,11 @@ proc main() =
       waitUntilReady(Weave)
 
       echo "Sanity check 3: Dataflow parallelism"
-      let pA = newPledge()
-      let pB1 = newPledge()
-      let done = submitDelayed(pB1, echoC1())
-      submitDelayed pA, echoB2()
-      submitDelayed pA, echoB1(pB1)
+      let pA = newFlowEvent()
+      let pB1 = newFlowEvent()
+      let done = submitOnEvents(pB1, echoC1())
+      submitOnEvents pA, echoB2()
+      submitOnEvents pA, echoB1(pB1)
       submit echoA(pA)
 
       discard waitFor(done)
@@ -109,19 +109,19 @@ proc main() =
   block: # Delayed computation with multiple dependencies
     serviceDone.store(false, moRelaxed)
 
-    proc echoA(pA: Pledge) =
+    proc echoA(pA: FlowEvent) =
       echo "Display A, sleep 1s, create parallel streams 1 and 2"
       sleep(1000)
-      pA.fulfill()
+      pA.trigger()
 
-    proc echoB1(pB1: Pledge) =
+    proc echoB1(pB1: FlowEvent) =
       echo "Display B1, sleep 1s"
       sleep(1000)
-      pB1.fulfill()
+      pB1.trigger()
 
-    proc echoB2(pB2: Pledge) =
+    proc echoB2(pB2: FlowEvent) =
       echo "Display B2, no sleep"
-      pB2.fulfill()
+      pB2.trigger()
 
     proc echoC12(): bool =
       echo "Display C12, exit stream"
@@ -132,12 +132,12 @@ proc main() =
       waitUntilReady(Weave)
 
       echo "Sanity check 4: Dataflow parallelism with multiple dependencies"
-      let pA = newPledge()
-      let pB1 = newPledge()
-      let pB2 = newPledge()
-      let done = submitDelayed(pB1, pB2, echoC12())
-      submitDelayed pA, echoB2(pB2)
-      submitDelayed pA, echoB1(pB1)
+      let pA = newFlowEvent()
+      let pB1 = newFlowEvent()
+      let pB2 = newFlowEvent()
+      let done = submitOnEvents(pB1, pB2, echoC12())
+      submitOnEvents pA, echoB2(pB2)
+      submitOnEvents pA, echoB1(pB1)
       submit echoA(pA)
 
       discard waitFor(done)

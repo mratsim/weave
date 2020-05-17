@@ -176,13 +176,13 @@ proc newFlowEvent*(start, stop, stride: SomeInteger): FlowEvent =
 proc trigger*(event: FlowEvent) =
   ## Triggers an event
   ## All ready tasks that depended on that event will be scheduled immediately.
-  ## A ready task is a task that has all its event dependencies fulfilled.
+  ## A ready task is a task that has all its event dependencies triggered.
   triggerImpl(event, myWorker().deque, addFirst)
 
 proc trigger*(event: FlowEvent, index: SomeInteger) =
   ## Triggers an iteration event
   ## All ready tasks that depended on that event will be scheduled immediately.
-  ## A ready task is a task that has all its event dependencies fulfilled.
+  ## A ready task is a task that has all its event dependencies triggered.
   triggerIterImpl(event, int32(index), myWorker().deque, addFirst)
 
 # Dynamic Scopes

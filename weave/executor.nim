@@ -52,7 +52,7 @@ import
   ./contexts, ./config, ./runtime,
   ./datatypes/[sync_types, context_thread_local],
   ./instrumentation/[contracts, loggers],
-  ./cross_thread_com/[scoped_barriers, pledges, channels_mpsc_unbounded_batch, event_notifiers],
+  ./cross_thread_com/[event_notifiers, channels_mpsc_unbounded_batch],
   ./state_machines/sync_root
 
 {.push gcsafe, inline.} # TODO raises: []

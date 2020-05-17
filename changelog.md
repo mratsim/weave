@@ -2,6 +2,20 @@
 
 ### v0.x.x - Unreleased
 
+#### Breaking
+
+- The experimental `Pledge` for dataflow parallelism have been renamed
+  `FlowEvent` to be in line with:
+  - `AsyncEvent` in Nim async frameworks
+  - `cudaEvent_t` in CUDA
+  - `cl_event` in OpenCL
+
+  Renaming changes:
+  - `newPledge()` becomes `newFlowEvent()`
+  - `fulfill()` becomes `trigger()`
+  - `spawnDelayed()` becomes `spawnOnEvents()`
+  - The `dependsOn` clause in `parallelFor` becomes `dependsOnEvent`
+
 #### Features
 
 - Added `isReady(Flowvar)` which will return true is `sync` would block on that Flowvar or if the result is actually immediately available.

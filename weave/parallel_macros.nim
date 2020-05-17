@@ -11,7 +11,7 @@ import
   # Internal
   ./datatypes/[sync_types, flowvars], ./contexts,
   ./scheduler,
-  ./cross_thread_com/[scoped_barriers, pledges]
+  ./cross_thread_com/[scoped_barriers, flow_events]
 
 # Parallel for utilities
 # ----------------------------------------------------------
@@ -147,18 +147,18 @@ proc extractFutureAndCaptures*(body: NimNode): tuple[future, captured, capturedT
     if body[i].kind == nnkCall:
       findCapturesAwaitable(i)
 
-proc extractPledges*(body: NimNode): NimNode =
-  ## Extract the dependencies in/out (pledges) if any
-  template findPledges(idx: int) =
-    if body[idx][0].eqIdent"dependsOn":
-      assert result.isNil, "The dependsOn section can only be set once for a loop."
+proc extractEvents*(body: NimNode): NimNode =
+  ## Extract the dependencies in/out (events) if any
+  template findEvents(idx: int) =
+    if body[idx][0].eqIdent"dependsOnEvent": # TODO, support multiple events
+      assert result.isNil, "The dependsOnEvent section can only be set once for a loop."
       result = body[idx][1][0]
-      # Remove the dependsOn section
+      # Remove the dependsOnEvent section
       body[idx] = nnkDiscardStmt.newTree(body[idx].toStrLit)
 
   for i in 0 ..< body.len-1:
     if body[i].kind == nnkCall:
-      findPledges(i)
+      findEvents(i)
 
 proc addSanityChecks*(statement, capturedTypes, capturedTypesSym: NimNode) =
   if capturedTypes.len > 0:
@@ -272,16 +272,16 @@ proc addLoopTask*(
       if not delayedUntil(`task`, `dependsOn`, myMemPool()):
         schedule(`task`)
   else:
-    let (pledge, pledgeIndex) = (dependsOn[0], dependsOn[1])
-    if pledgeIndex.kind == nnkIntLit and pledgeIndex.intVal == NoIter:
+    let (event, eventIndex) = (dependsOn[0], dependsOn[1])
+    if eventIndex.kind == nnkIntLit and eventIndex.intVal == NoIter:
       scheduleBlock = quote do:
-        if not delayedUntil(`task`, `pledge`, myMemPool()):
+        if not delayedUntil(`task`, `event`, myMemPool()):
           schedule(`task`)
     else:
       # This is a dependency on a loop index from ANOTHER loop
       # not the loop that is currently scheduled.
       scheduleBlock = quote do:
-        if not delayedUntil(`task`, `pledge`, int32(`pledgeIndex`), myMemPool()):
+        if not delayedUntil(`task`, `event`, int32(`eventIndex`), myMemPool()):
           schedule(`task`)
 
   # ---------------------------------------------------

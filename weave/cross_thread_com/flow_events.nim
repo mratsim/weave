@@ -192,7 +192,7 @@ proc `=destroy`*(event: var FlowEvent) =
 
 proc `=sink`*(dst: var FlowEvent, src: FlowEvent) {.inline.} =
   # Don't pay for atomic refcounting when compiler can prove there is no ref change
-  `=destroy`(dst)
+  # `=destroy`(dst) - # TODO, for some reason we can't assume zero-init or always valid event.e here
   system.`=sink`(dst.e, src.e)
 
 proc `=`*(dst: var FlowEvent, src: FlowEvent) {.inline.} =

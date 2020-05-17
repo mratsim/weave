@@ -153,7 +153,7 @@ proc gemm_impl[T; ukernel: static MicroKernel](
   for pc in countup(0, K-1, tiles.kc):
     # Explanation of the control flow:
     # 1. syncScope       -> only trigger the next `pc` iteration once the current one is finished
-    # 2. kcncTileReady   -> packing B is asynchronously spawned, kcNcTileReady is a pledge, once fulfilled
+    # 2. kcncTileReady   -> packing B is asynchronously spawned, kcNcTileReady is a FlowEvent, once triggered
     #                       computation dependent on packing B can proceed
     # 3. parallelFor icb -> is an async parallel for loop that may or may not be split in multiple thread
     # 4. spawnDelayed    -> the packing of A is done synchronously in the current thread
@@ -162,7 +162,7 @@ proc gemm_impl[T; ukernel: static MicroKernel](
       prefetch(tiles.b, Write, LowTemporalLocality)
       let kc = min(K - pc, tiles.kc) # Deal with edges  # A[0:M, pc:pc+kc]
 
-      let kcncTileReady = newPledge()
+      let kcncTileReady = newFlowEvent()
       let kcncB = vB.stride(pc, 0)                      # B[pc:pc+kc, jc:jc+nc]
       spawn pack_B_kc_nc[T, ukernel](                   # PackB panel [kc, nc] (nc is large or unknown)
         tiles.b, kc, nc, kcncB, kcncTileReady)
@@ -183,7 +183,7 @@ proc gemm_impl[T; ukernel: static MicroKernel](
         let mckcA = vA.stride(ic, pc)                   # A[ic:ic+mc, pc:pc+kc]
         pack_A_mc_kc[T, ukernel](packA, mc, kc, mckcA)  # PackA block [mc, kc]
 
-        spawnDelayed(
+        spawnOnEvents(
           kcncTileReady,
           gebp_mkernel[T, ukernel](                     # GEBP macrokernel:
             mc, nc, kc,                                 #   C[ic:ic+mc, jc:jc+nc] =

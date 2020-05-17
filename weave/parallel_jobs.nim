@@ -20,7 +20,7 @@ import
   ./scheduler, ./contexts, ./config,
   ./datatypes/[flowvars, sync_types],
   ./instrumentation/contracts,
-  ./cross_thread_com/[pledges, channels_mpsc_unbounded_batch, event_notifiers],
+  ./cross_thread_com/[flow_events, channels_mpsc_unbounded_batch, event_notifiers],
   ./state_machines/sync_root,
   ./executor
 
@@ -43,7 +43,7 @@ proc notifyJob() {.inline.} =
   Backoff:
     manager.jobNotifier[].notify()
 
-proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
+proc submitImpl(events: NimNode, funcCall: NimNode): NimNode =
   # We take typed argument so that overloading resolution
   # is already done and arguments are semchecked
   funcCall.expectKind(nnkCall)
@@ -91,20 +91,20 @@ proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
   # Submit immediately or delay on dependencies
   var submitBlock: NimNode
   let job = ident"job"
-  if pledges.isNil:
+  if events.isNil:
     submitBlock = newCall(bindSym"submitJob", job)
-  elif pledges.len == 1:
-    let pledgeDesc = pledges[0]
-    if pledgeDesc.kind in {nnkIdent, nnkSym}:
+  elif events.len == 1:
+    let eventDesc = events[0]
+    if eventDesc.kind in {nnkIdent, nnkSym}:
       submitBlock = quote do:
-        if not delayedUntil(cast[Task](`job`), `pledgeDesc`, jobProviderContext.mempool[]):
+        if not delayedUntil(cast[Task](`job`), `eventDesc`, jobProviderContext.mempool[]):
           submitJob(`job`)
     else:
-      pledgeDesc.expectKind({nnkPar, nnkTupleConstr})
-      let pledge = pledgeDesc[0]
-      let pledgeIndex = pledgeDesc[1]
+      eventDesc.expectKind({nnkPar, nnkTupleConstr})
+      let event = eventDesc[0]
+      let eventIndex = eventDesc[1]
       submitBlock = quote do:
-        if not delayedUntil(cast[Task](`job`), `pledge`, int32(`pledgeIndex`), myMemPool()):
+        if not delayedUntil(cast[Task](`job`), `event`, int32(`eventIndex`), myMemPool()):
           submitJob(`job`)
   else:
     let delayedMulti = getAst(
@@ -113,7 +113,7 @@ proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
         nnkDerefExpr.newTree(
           nnkDotExpr.newTree(bindSym"jobProviderContext", ident"mempool")
         ),
-        pledges
+        events
       )
     )
     submitBlock = quote do:
@@ -242,9 +242,9 @@ macro submit*(fnCall: typed): untyped =
   ## Jobs are processed approximately in First-In-First-Out (FIFO) order.
   result = submitImpl(nil, fnCall)
 
-macro submitDelayed*(pledges: varargs[typed], fnCall: typed): untyped =
+macro submitOnEvents*(events: varargs[typed], fnCall: typed): untyped =
   ## Submit the input function call asynchronously to the Weave runtime.
-  ## The function call will only be scheduled when the pledge is fulfilled.
+  ## The function call will only be scheduled when the event is triggered.
   ##
   ## This is a compatibility routine for foreign threads.
   ## `setupSubmitterThread` MUST be called on the submitter thread beforehand
@@ -259,5 +259,5 @@ macro submitDelayed*(pledges: varargs[typed], fnCall: typed): untyped =
   ## You can use `isReady` to check if result is available and if subsequent
   ## `settle` calls would block or return immediately.
   ##
-  ## Ensure that before settling on the Pending[T] of a delayed submit, its pledge can be fulfilled or you will deadlock.
-  result = submitImpl(pledges, fnCall)
+  ## Ensure that before settling on the Pending[T] of a delayed submit, its event can be triggered or you will deadlock.
+  result = submitImpl(events, fnCall)

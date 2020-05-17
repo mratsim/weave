@@ -56,7 +56,7 @@ type
     front{.align: MpscPadding.}: typeof(default(T)[])
     # back and front order is chosen so that the data structure can be
     # made intrusive to consumer data-structures
-    # like the memory-pool and the pledges so that
+    # like the memory-pool and the events so that
     # producer accesses don't invalidate consumer cache-lines
     #
     # The padding is a compromise to keep back and front 1 cache line apart
