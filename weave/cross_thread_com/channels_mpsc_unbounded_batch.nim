@@ -56,7 +56,7 @@ type
     # Accessed by all
     count: Atomic[int]
     # Channel invariant, never really empty so that producer can "exchange"
-    dummy: typeof(default(T)[])
+    dummy{.align: MpscPadding.}: typeof(default(T)[])
     # Consumer only
     front: T
     # back and front order is chosen so that the data structure can be

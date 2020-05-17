@@ -66,7 +66,7 @@ template debugMem*(body: untyped) =
 
 const SizeofMetadata: int = (block:
     var size: int
-    size += 320                               # ChannelMpscUnboundedBatch
+    size += 384                               # ChannelMpscUnboundedBatch
     size += sizeof(pointer)                   # localFree
     size += sizeof(pointer)                   # free
     size += sizeof(int32)                     # used
@@ -636,7 +636,7 @@ proc takeover*(pool: var TLPoolAllocator, target: sink TLPoolAllocator) =
 #       the size here will likely be wrong
 
 debugSizeAsserts:
-  doAssert sizeof(ChannelMpscUnboundedBatch[ptr MemBlock, keepCount = true]) == 320,
+  doAssert sizeof(ChannelMpscUnboundedBatch[ptr MemBlock, keepCount = true]) == 384,
     "MPSC channel size was " & $sizeof(ChannelMpscUnboundedBatch[ptr MemBlock, keepCount = true])
 
   doAssert sizeof(Arena) == WV_MemArenaSize,

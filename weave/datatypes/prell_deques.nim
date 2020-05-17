@@ -113,7 +113,8 @@ func addListFirst*[T](dq: var PrellDeque[T], head, tail: sink T, len: int32) {.i
   # Add a list of tasks [head ... tail] of length len to the front of the deque
   preCondition: not head.isNil and not tail.isNil
   preCondition: len > 0
-  preCondition: tail.next.isNil
+
+  # preCondition: tail.next.isNil - not true if coming from another intrusive data structure
 
   # Link tail with deque head
   tail.next = dq.head
