@@ -507,6 +507,18 @@ proc borrow*(pool: var TLPoolAllocator, T: typedesc): ptr T =
     # Fast-path
     return cast[ptr T](pool.last[].allocBlock())
 
+proc borrow0*(pool: var TLPoolAllocator, T: typedesc): ptr T {.inline.} =
+  ## Provides an unused memory block of size
+  ## WV_MemBlockSize (256 bytes)
+  ##
+  ## The object is zero-initialized.
+  ## As this is inline, the compiler can elide the zero-initialization
+  ## when it makes sense.
+  ##
+  ## If the underlying pool runs out-of-memory, it will reserve more from the OS.
+  result = pool.borrow(T)
+  zeroMem(result, sizeof(T))
+
 proc recycle*[T](p: ptr T) {.gcsafe.} =
   ## Returns a memory block to its memory pool.
   ##
@@ -654,7 +666,7 @@ when isMainModule:
 
     for i in 0 ..< Iters:
       for j in 0 ..< NumAllocs:
-        pointers[j] = pool.borrow(MyObject)
+        pointers[j] = pool.borrow0(MyObject)
       # Deallocate in mixed order - note that the mempool
       # is optimized for LIFO dealloc.
       for j in countup(0, NumAllocs-1, 2):
@@ -766,7 +778,7 @@ when isMainModule:
         else:
           # workaround sizeof atomics
           assert sizeof(ValObj) == 16
-          cast[Val](pool[].borrow(array[16, byte]))
+          cast[Val](pool[].borrow0(array[16, byte]))
 
       template valFree(kind: static AllocKind, val: Val) =
         when kind == System:

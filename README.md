@@ -35,7 +35,7 @@ instead of being based on traditional work-stealing with shared-memory deques.
 > to be deadlock-free. They were not submitted to an additional data race
 > detection tool to ensure proper implementation.
 >
-> Furthermore worker threads are basically actors or state-machines and
+> Furthermore worker threads are state-machines and
 > were not formally verified either.
 >
 > Weave does limit synchronization to only simple SPSC and MPSC channels which greatly reduces
@@ -170,7 +170,7 @@ The root thread is also a worker thread.
 Worker threads are tuned to maximize throughput of computational **tasks**.
 
 - `spawn fnCall(args)` which spawns a function that may run on another thread and gives you an awaitable `Flowvar` handle.
-- `newPledge`, `fulfill` and `spawnDelayed` (experimental) to delay a task until some dependencies are met. This allows expressing precise data dependencies and producer-consumer relationships.
+- `newFlowEvent`, `trigger`, `spawnOnEvent` and `spawnOnEvents` (experimental) to delay a task until some dependencies are met. This allows expressing precise data dependencies and producer-consumer relationships.
 - `sync(Flowvar)` will await a Flowvar and block until you receive a result.
 - `isReady(Flowvar)` will check if `sync` will actually block or return the result immediately.
 
@@ -224,7 +224,7 @@ and for shutdown
 Once setup, a foreign thread can submit jobs via:
 
 - `submit fnCall(args)` which submits a function to the Weave runtime and gives you an awaitable `Pending` handle.
-- `newPledge`, `fulfill` and `submitDelayed` (experimental) to delay a task until some dependencies are met. This allows expressing precise data dependencies and producer-consumer relationships.
+- `newFlowEvent`, `trigger` and `submitDelayed` (experimental) to delay a task until some dependencies are met. This allows expressing precise data dependencies and producer-consumer relationships.
 - `waitFor(Pending)` which await a Pending job result and blocks the current thread
 - `isReady(Pending)` will check if `waitFor` will actually block or return the result immediately.
 - `isSubmitted(job)` allows you to build speculative algorithm where a job is submitted only if certain conditions are valid.
@@ -473,31 +473,38 @@ In the literature, it is also called:
 Tagged experimental as the API and its implementation are unique
 compared to other libraries/language-extensions. Feedback welcome.
 
-No specific ordering is required between calling the pledge producer and its consumer(s).
+No specific ordering is required between calling the event producer and its consumer(s).
 
-Dependencies are expressed by a handle called `Pledge`.
-A pledge can express either a single dependency, initialized with `newPledge()`
-or a dependencies on parallel for loop iterations, initialized with `newPledge(start, exclusiveStop, stride)`
+Dependencies are expressed by a handle called `FlowEvent`.
+An flow event can express either a single dependency, initialized with `newFlowEvent()`
+or a dependencies on parallel for loop iterations, initialized with `newFlowEvent(start, exclusiveStop, stride)`
 
-To await on a single pledge `singlePledge` pass it to `spawnDelayed` or the `parallelFor` invocation.
-To await on an iteration `iterPledge`, pass a tuple:
-- `(iterPledge, 0)` to await precisely and only for iteration 0. This works with both `spawnDelayed` or `parallelFor`
-- `(iterPledge, myIndex)` to await on a whole iteration range. This only works with `parallelFor`. The `Pledge` iteration domain and the `parallelFor` domain must be the same. As soon as a subset of the pledge is ready, the corresponding `parallelFor` tasks will be scheduled.
+To await on a single event pass it to `spawnOnEvent` or the `parallelFor` invocation.
+To await on an iteration, pass a tuple:
+- `(FlowEvent, 0)` to await precisely and only for iteration 0. This works with both `spawnOnEvent` or `parallelFor` (via a dependsOnEvent statement)
+- `(FlowEvent, loop_index_variable)` to await on a whole iteration range.
+  For example
+  ```Nim
+  parallelFor i in 0 ..< n:
+    dependsOnEvent: (e, i) # Each "i" will independently depends on their matching event
+    body
+  ```
+  This only works with `parallelFor`. The `FlowEvent` iteration domain and the `parallelFor` domain must be the same. As soon as a subset of the pledge is ready, the corresponding `parallelFor` tasks will be scheduled.
 
 #### Delayed computation with single dependencies
 
 ```Nim
 import weave
 
-proc echoA(pA: Pledge) =
+proc echoA(eA: FlowEvent) =
   echo "Display A, sleep 1s, create parallel streams 1 and 2"
   sleep(1000)
-  pA.fulfill()
+  eA.trigger()
 
-proc echoB1(pB1: Pledge) =
+proc echoB1(eB1: FlowEvent) =
   echo "Display B1, sleep 1s"
   sleep(1000)
-  pB1.fulfill()
+  eB1.trigger()
 
 proc echoB2() =
   echo "Display B2, exit stream"
@@ -508,12 +515,12 @@ proc echoC1() =
 proc main() =
   echo "Dataflow parallelism with single dependency"
   init(Weave)
-  let pA = newPledge()
-  let pB1 = newPledge()
-  spawnDelayed pB1, echoC1()
-  spawnDelayed pA, echoB2()
-  spawnDelayed pA, echoB1(pB1)
-  spawn echoA(pA)
+  let eA = newFlowEvent()
+  let eB1 = newFlowEvent()
+  spawnOnEvent eB1, echoC1()
+  spawnOnEvent eA, echoB2()
+  spawnOnEvent eA, echoB1(eB1)
+  spawn echoA(eA)
   exit(Weave)
 
 main()
@@ -524,19 +531,19 @@ main()
 ```Nim
 import weave
 
-proc echoA(pA: Pledge) =
+proc echoA(eA: FlowEvent) =
   echo "Display A, sleep 1s, create parallel streams 1 and 2"
   sleep(1000)
-  pA.fulfill()
+  eA.trigger()
 
-proc echoB1(pB1: Pledge) =
+proc echoB1(eB1: FlowEvent) =
   echo "Display B1, sleep 1s"
   sleep(1000)
-  pB1.fulfill()
+  eB1.trigger()
 
-proc echoB2(pB2: Pledge) =
+proc echoB2(eB2: FlowEvent) =
   echo "Display B2, no sleep"
-  pB2.fulfill()
+  eB2.trigger()
 
 proc echoC12() =
   echo "Display C12, exit stream"
@@ -544,13 +551,13 @@ proc echoC12() =
 proc main() =
   echo "Dataflow parallelism with multiple dependencies"
   init(Weave)
-  let pA = newPledge()
-  let pB1 = newPledge()
-  let pB2 = newPledge()
-  spawnDelayed pB1, pB2, echoC12()
-  spawnDelayed pA, echoB2(pB2)
-  spawnDelayed pA, echoB1(pB1)
-  spawn echoA(pA)
+  let eA = newFlowEvent()
+  let eB1 = newFlowEvent()
+  let eB2 = newFlowEvent()
+  spawnOnEvents eB1, eB2, echoC12()
+  spawnOnEvent eA, echoB2(eB2)
+  spawnOnEvent eA, echoB1(eB1)
+  spawn echoA(eA)
   exit(Weave)
 
 main()
@@ -570,20 +577,20 @@ import weave
 proc main() =
   init(Weave)
 
-  let pA = newPledge(0, 10, 1)
-  let pB = newPledge(0, 10, 1)
+  let eA = newFlowEvent(0, 10, 1)
+  let pB = newFlowEvent(0, 10, 1)
 
   parallelFor i in 0 ..< 10:
-    captures: {pA}
+    captures: {eA}
     sleep(i * 10)
-    pA.fulfill(i)
+    eA.trigger(i)
     echo "Step A - stream ", i, " at ", i * 10, " ms"
 
   parallelFor i in 0 ..< 10:
-    dependsOn: (pA, i)
+    dependsOn: (eA, i)
     captures: {pB}
     sleep(i * 10)
-    pB.fulfill(i)
+    pB.trigger(i)
     echo "Step B - stream ", i, " at ", 2 * i * 10, " ms"
 
   parallelFor i in 0 ..< 10:

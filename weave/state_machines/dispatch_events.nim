@@ -20,7 +20,7 @@ proc nextTask*(childTask: static bool): Task {.inline.} =
   # Note:
   # We distinguish jobs and tasks.
   # - Jobs are submitted to Weave by external threads.
-  #   Jobs enqueued have all their pledges resolved and so are independent.
+  #   Jobs enqueued have all their events resolved and so are independent.
   #   To ensure fairness in worst-case scenario, we execute them in FIFO order.
   #   Jobs may be split into multiple tasks.
   # - Tasks are spawned on Weave runtime, we want to process them as fast as possible.

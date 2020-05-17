@@ -92,6 +92,14 @@ func pop*[T](lal: var LookAsideList[T]): T {.inline.} =
 
   result = lal.popImpl()
 
+func pop0*[T](lal: var LookAsideList[T]): T {.inline.} =
+  ## Pop a node and zero-initialize it
+  ## As this is inline, the compiler can elide the zero-initialization
+  ## when it makes sense.
+  result = lal.pop()
+  if not result.isNil:
+    zeroMem(result, sizeof(deref(T)))
+
 proc delete*[T](lal: var LookAsideList[T]) {.gcsafe.} =
   if not lal.registeredAt.isNil:
     lal.registeredAt.onHeartBeat = nil

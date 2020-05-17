@@ -21,10 +21,10 @@ import
   ./scheduler, ./contexts,
   ./datatypes/[flowvars, sync_types],
   ./instrumentation/contracts,
-  ./cross_thread_com/[scoped_barriers, pledges]
+  ./cross_thread_com/[scoped_barriers, flow_events]
 
 
-proc spawnImpl(pledges: NimNode, funcCall: NimNode): NimNode =
+proc spawnImpl(events: NimNode, funcCall: NimNode): NimNode =
   # We take typed argument so that overloading resolution
   # is already done and arguments are semchecked
   funcCall.expectKind(nnkCall)
@@ -72,24 +72,24 @@ proc spawnImpl(pledges: NimNode, funcCall: NimNode): NimNode =
   # Schedule immediately or delay on dependencies
   var scheduleBlock: NimNode
   let task = ident"task"
-  if pledges.isNil:
+  if events.isNil:
     scheduleBlock = newCall(bindSym"schedule", task)
-  elif pledges.len == 1:
-    let pledgeDesc = pledges[0]
-    if pledgeDesc.kind in {nnkIdent, nnkSym}:
+  elif events.len == 1:
+    let eventDesc = events[0]
+    if eventDesc.kind in {nnkIdent, nnkSym}:
       scheduleBlock = quote do:
-        if not delayedUntil(`task`, `pledgeDesc`, myMemPool()):
+        if not delayedUntil(`task`, `eventDesc`, myMemPool()):
           schedule(`task`)
     else:
-      pledgeDesc.expectKind({nnkPar, nnkTupleConstr})
-      let pledge = pledgeDesc[0]
-      let pledgeIndex = pledgeDesc[1]
+      eventDesc.expectKind({nnkPar, nnkTupleConstr})
+      let event = eventDesc[0]
+      let eventIndex = eventDesc[1]
       scheduleBlock = quote do:
-        if not delayedUntil(`task`, `pledge`, int32(`pledgeIndex`), myMemPool()):
+        if not delayedUntil(`task`, `event`, int32(`eventIndex`), myMemPool()):
           schedule(`task`)
   else:
     let delayedMulti = getAst(delayedUntilMulti(
-      task, newCall(bindSym"myMemPool"), pledges)
+      task, newCall(bindSym"myMemPool"), events)
     )
     scheduleBlock = quote do:
       if not `delayedMulti`:
@@ -207,16 +207,31 @@ macro spawn*(fnCall: typed): untyped =
   ## Tasks are processed approximately in Last-In-First-Out (LIFO) order
   result = spawnImpl(nil, fnCall)
 
-macro spawnDelayed*(pledges: varargs[typed], fnCall: typed): untyped =
+macro spawnOnEvents*(events: varargs[typed], fnCall: typed): untyped =
   ## Spawns the input function call asynchronously, potentially on another thread of execution.
-  ## The function call will only be scheduled when the pledge is fulfilled.
+  ## The function call will only be scheduled when the events are triggered.
   ##
   ## If the function calls returns a result, spawn will wrap it in a Flowvar.
   ## You can use sync to block the current thread and extract the asynchronous result from the flowvar.
-  ## spawnDelayed returns immediately.
   ##
-  ## Ensure that before syncing on the flowvar of a delayed spawn, its pledge can be fulfilled or you will deadlock.
-  result = spawnImpl(pledges, fnCall)
+  ## spawnOnEvents returns immediately.
+  ##
+  ## Ensure that before syncing on the flowvar of a triggered spawn,
+  ## its events can be triggered or you will deadlock.
+  result = spawnImpl(events, fnCall)
+
+macro spawnOnEvent*(event: FlowEvent, fnCall: typed): untyped =
+  ## Spawns the input function call asynchronously, potentially on another thread of execution.
+  ## The function call will only be scheduled when the event is triggered.
+  ##
+  ## If the function calls returns a result, spawn will wrap it in a Flowvar.
+  ## You can use sync to block the current thread and extract the asynchronous result from the flowvar.
+  ##
+  ## spawnOnEvent returns immediately.
+  ##
+  ## Ensure that before syncing on the flowvar of a triggered spawn,
+  ## its event can be triggered or you will deadlock.
+  result = spawnImpl(nnkArgList.newTree(event), fnCall)
 
 # Sanity checks
 # --------------------------------------------------------
@@ -318,15 +333,15 @@ when isMainModule:
 
   block: # Delayed computation
 
-    proc echoA(pA: Pledge) =
+    proc echoA(eA: FlowEvent) =
       echo "Display A, sleep 1s, create parallel streams 1 and 2"
       sleep(1000)
-      pA.fulfill()
+      eA.trigger()
 
-    proc echoB1(pB1: Pledge) =
+    proc echoB1(eB1: FlowEvent) =
       echo "Display B1, sleep 1s"
       sleep(1000)
-      pB1.fulfill()
+      eB1.trigger()
 
     proc echoB2() =
       echo "Display B2, exit stream"
@@ -338,12 +353,12 @@ when isMainModule:
     proc main() =
       echo "Sanity check 3: Dataflow parallelism"
       init(Weave)
-      let pA = newPledge()
-      let pB1 = newPledge()
-      let done = spawnDelayed(pB1, echoC1())
-      spawnDelayed pA, echoB2()
-      spawnDelayed pA, echoB1(pB1)
-      spawn echoA(pA)
+      let eA = newFlowEvent()
+      let eB1 = newFlowEvent()
+      let done = spawnOnEvent(eB1, echoC1())
+      spawnOnEvent eA, echoB2()
+      spawnOnEvent eA, echoB1(eB1)
+      spawn echoA(eA)
       discard sync(done)
       exit(Weave)
 
@@ -351,19 +366,19 @@ when isMainModule:
 
   block: # Delayed computation with multiple dependencies
 
-    proc echoA(pA: Pledge) =
+    proc echoA(eA: FlowEvent) =
       echo "Display A, sleep 1s, create parallel streams 1 and 2"
       sleep(1000)
-      pA.fulfill()
+      eA.trigger()
 
-    proc echoB1(pB1: Pledge) =
+    proc echoB1(eB1: FlowEvent) =
       echo "Display B1, sleep 1s"
       sleep(1000)
-      pB1.fulfill()
+      eB1.trigger()
 
-    proc echoB2(pB2: Pledge) =
+    proc echoB2(eB2: FlowEvent) =
       echo "Display B2, no sleep"
-      pB2.fulfill()
+      eB2.trigger()
 
     proc echoC12() =
       echo "Display C12, exit stream"
@@ -371,13 +386,13 @@ when isMainModule:
     proc main() =
       echo "Sanity check 4: Dataflow parallelism with multiple dependencies"
       init(Weave)
-      let pA = newPledge()
-      let pB1 = newPledge()
-      let pB2 = newPledge()
-      spawnDelayed pB1, pB2, echoC12()
-      spawnDelayed pA, echoB2(pB2)
-      spawnDelayed pA, echoB1(pB1)
-      spawn echoA(pA)
+      let eA = newFlowEvent()
+      let eB1 = newFlowEvent()
+      let eB2 = newFlowEvent()
+      spawnOnEvents eB1, eB2, echoC12()
+      spawnOnEvent eA, echoB2(eB2)
+      spawnOnEvent eA, echoB1(eB1)
+      spawn echoA(eA)
       exit(Weave)
       echo "Weave runtime exited"
 
