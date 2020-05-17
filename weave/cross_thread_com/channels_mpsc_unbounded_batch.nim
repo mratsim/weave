@@ -1,5 +1,6 @@
 import
   std/atomics, std/macros,
+  synthesis,
   ../config,
   ../primitives/compiler_optimization_hints, # for prefetch
   ../instrumentation/[contracts, loggers]
@@ -13,6 +14,8 @@ import
 
 # MPSC channel
 # ------------------------------------------------
+
+{.push gcsafe, raises: [].}
 
 const MpscPadding = WV_CacheLinePadding div 2
   ## The padding is chosen so that:
@@ -52,8 +55,10 @@ type
     back{.align: MpscPadding.}: Atomic[pointer] # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
     # Accessed by all
     count: Atomic[int]
-    # Consumer only - front is a dummy node
-    front{.align: MpscPadding.}: typeof(default(T)[])
+    # Channel invariant, never really empty so that producer can "exchange"
+    dummy: typeof(default(T)[])
+    # Consumer only
+    front: T
     # back and front order is chosen so that the data structure can be
     # made intrusive to consumer data-structures
     # like the memory-pool and the events so that
@@ -77,207 +82,249 @@ type
 # --------------------------------------------------------------
 
 proc initialize*[T, keepCount](chan: var ChannelMpscUnboundedBatch[T, keepCount]) {.inline.}=
-  chan.front.next.store(nil, moRelaxed)
-  chan.back.store(chan.front.addr, moRelaxed)
+  chan.dummy.next.store(nil, moRelaxed)
+  chan.front = chan.dummy.addr
+  chan.back.store(chan.dummy.addr, moRelaxed)
   when keepCount:
     chan.count.store(0, moRelaxed)
 
-proc trySend*[T, keepCount](chan: var ChannelMpscUnboundedBatch[T, keepCount], src: sink T): bool {.inline.}=
+proc trySendImpl[T, keepCount](chan: var ChannelMpscUnboundedBatch[T, keepCount], src: sink T, dummy: static bool): bool {.inline.}=
   ## Send an item to the back of the channel
   ## As the channel has unbounded capacity, this should never fail
-
-  when keepCount:
-    let oldCount {.used.} = chan.count.fetchAdd(1, moRelease)
+  when keepCount and not dummy:
+    let oldCount {.used.} = chan.count.fetchAdd(1, moRelaxed)
     ascertain: oldCount >= 0
 
-  src.next.store(nil, moRelease)
-  let oldBack = chan.back.exchange(src, moAcquireRelease)
+  src.next.store(nil, moRelaxed)
+  fence(moRelease)
+  let oldBack = chan.back.exchange(src, moRelaxed)
   # Consumer can be blocked here, it doesn't see the (potentially growing) end of the queue
   # until the next instruction.
   cast[T](oldBack).next.store(src, moRelease) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
 
   return true
 
+proc trySend[T, keepCount](chan: var ChannelMpscUnboundedBatch[T, keepCount], src: sink T): bool =
+  ## Send an item to the back of the channel
+  ## As the channel has unbounded capacity, this should never fail
+  trySendImpl(chan, src, dummy = false)
+
+proc reenqueueDummy(chan: var ChannelMpscUnboundedBatch) =
+  discard trySendImpl(chan, chan.dummy.addr, dummy = true)
+
 proc trySendBatch*[T, keepCount](chan: var ChannelMpscUnboundedBatch[T, keepCount], first, last: sink T, count: SomeInteger): bool {.inline.}=
   ## Send a list of items to the back of the channel
   ## They should be linked together by their next field
   ## As the channel has unbounded capacity this should never fail
-
   when keepCount:
     let oldCount {.used.} = chan.count.fetchAdd(int(count), moRelease)
     ascertain: oldCount >= 0
 
-  last.next.store(nil, moRelease)
-  let oldBack = chan.back.exchange(last, moAcquireRelease)
+  last.next.store(nil, moRelaxed)
+  fence(moRelease)
+  let oldBack = chan.back.exchange(last, moRelaxed)
   # Consumer can be blocked here, it doesn't see the (potentially growing) end of the queue
   # until the next instruction.
-  cast[T](oldBack).next.store(first, moRelease) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
+  cast[T](oldBack).next.store(first, moRelaxed) # Workaround generic atomics bug: https://github.com/nim-lang/Nim/issues/12695
 
   return true
 
-proc tryRecv*[T, keepCount](chan: var ChannelMpscUnboundedBatch[T, keepCount], dst: var T): bool =
+##############################################
+# We implement the consumer side
+# as an explicit state-machine, especially the batching
+# since the dummy node makes it very tricky.
+# Base algorithm is Vyukov intrusive MPSC queue
+# http://www.1024cores.net/home/lock-free-algorithms/queues/intrusive-mpsc-node-based-queue
+# which are atomics-free in the fast path,
+# and only contians an atomic exchange to reenqueue the dummy node
+
+type
+  TryRecv = enum
+    ## State Machine for the channel receiver
+    TR_ChanEntry
+    TR_HandleDummy
+    TR_CheckFastPath
+    TR_ExitWithNode
+    TR_OneLastNodeLeft
+    TR_PreFinish
+
+  TryRecvEvent = enum
+    TRE_FoundDummy
+    TRE_DummyIsLastNode
+    TRE_NodeIsNotLast
+    TRE_ProducerAhead
+
+declareAutomaton(tryRecvFSA, TryRecv, TryRecvEvent)
+setInitialState(tryRecvFSA, TR_ChanEntry)
+setTerminalState(tryRecvFSA, TR_Exit)
+
+setPrologue(tryRecvFSA):
   ## Try receiving the next item buffered in the channel
   ## Returns true if successful (channel was not empty)
   ## This can fail spuriously on the last element if producer
   ## enqueues a new element while the consumer was dequeing it
+  preCondition: not chan.front.isNil
+  preCondition: not chan.back.load(moRelaxed).isNil
 
-  let first = cast[T](chan.front.next.load(moAcquire))
-  if first.isNil:
-    # According to the model checker, we can't put "fence(moAcquire)"
-    # here and use relaxed semantics for "first" as it may read from initialized load
-    # (due to compiler reordering?)
-    return false
+  var first = chan.front
+  var next = cast[T](first.next.load(moRelaxed))
 
-  # fast path
-  block:
-    let next = first.next.load(moAcquire)
-    if not next.isNil:
-      # Not competing with producers
-      prefetch(first)
+##############################################
+# Get first node, skipping dummy if needed
 
-      chan.front.next.store(next, moRelaxed)
-      # fence(moAcquire) # Sync "first.next.load(moRelaxed)"
-      dst = first
+implEvent(tryRecvFSA, TRE_FoundDummy):
+  first == chan.dummy.addr
 
-      when keepCount:
-        let oldCount {.used.} = chan.count.fetchSub(1, moRelaxed)
-        postCondition: oldCount >= 1 # The producers may overestimate the count
-      return true
-  # End fast-path
+behavior(tryRecvFSA):
+  ini: TR_ChanEntry
+  event: TRE_FoundDummy
+  transition: discard
+  fin: TR_HandleDummy
 
-  # Competing with producers at the back
-  var last = chan.back.load(moAcquire)
-  if first != last:
-    # We lose the competition before even trying
-    # fence(moAcquire) # Sync "chan.back.load(moRelaxed)"
-    return false
+implEvent(tryRecvFSA, TRE_DummyIsLastNode):
+  next.isNil
 
-  chan.front.next.store(nil, moAcquire)
-  if compareExchange(chan.back, last, chan.front.addr, moAcquireRelease):
-    # We won and replaced the last node with the channel front
-    prefetch(first)
+behavior(tryRecvFSA):
+  ini: TR_HandleDummy
+  event: TRE_DummyIsLastNode
+  transition:
+    result = false
+  fin: TR_Exit
+
+behavior(tryRecvFSA):
+  ini: TR_ChanEntry
+  transition: discard
+  fin: TR_CheckFastPath
+
+behavior(tryRecvFSA):
+  ini: TR_HandleDummy
+  transition:
+    # Overwrite the dummy, with the real first element
+    chan.front = next
+    first = next
+    next = cast[T](next.next.load(moRelaxed))
+  fin: TR_CheckFastPath
+
+##############################################
+# Fast-path
+
+implEvent(tryRecvFSA, TRE_NodeIsNotLast):
+  not next.isNil
+
+behavior(tryRecvFSA):
+  ini: TR_CheckFastPath
+  event: TRE_NodeIsNotLast
+  transition: discard
+  fin: TR_ExitWithNode
+
+behavior(tryRecvFSA):
+  ini: TR_ExitWithNode
+  transition:
+    # second element exist, setup the queue, only consumer touches the front
+    chan.front = next # switch the front
     dst = first
-
     when keepCount:
       let oldCount {.used.} = chan.count.fetchSub(1, moRelaxed)
       postCondition: oldCount >= 1 # The producers may overestimate the count
-    return true
+    result = true
+  fin: TR_Exit
 
-  # We lost but now we know that there is an extra node coming very soon
-  var next = first.next.load(moAcquire)
-  while next.isNil:
-    # We spinlock, unfortunately there seems to be a livelock potential
-    # or contention issue if we don't use cpuRelax
-    # at least twice or just bail out if next is nil.
-    # Replace this spinlock by "if not next.isNil" and run the "memory pool" bench
-    # or fibonacci and the program will get stuck.
-    # The queue should probably be model checked and/or run through Relacy
-    cpuRelax()
-    next = first.next.load(moAcquire)
+behavior(tryRecvFSA):
+  ini: TR_CheckFastPath
+  transition: discard
+  fin: TR_OneLastNodeLeft
 
-  prefetch(first)
-  chan.front.next.store(next, moRelaxed)
-  # fence(moAcquire) # sync first.next.load(moRelaxed)
-  dst = first
+##############################################
+# Front == Back
+# Only one node is left, it's not the dummy
+# we need to recv it and for that need to reenqueue the dummy node
+# to take it's place (the channel can't be "empty")
 
-  when keepCount:
-    let oldCount {.used.} = chan.count.fetchSub(1, moRelaxed)
-    postCondition: oldCount >= 1 # The producers may overestimate the count
-  return true
+onEntry(tryRecvFSA, TR_OneLastNodeLeft):
+  let last = chan.back.load(moRelaxed)
 
-  # # Alternative implementation
-  # #
-  # # We lost but now we know that there is an extra node coming very soon
-  # cpuRelax()
-  # let next = first.next.load(moAcquire)
-  # if not next.isNil:
-  #   # Extra nodes after this one, no more competition with producers
-  #   prefetch(first)
-  #   discard chan.count.fetchSub(1, moRelaxed)
-  #   chan.front.next.store(next, moRelease)
-  #   dst = first
-  #   return true
+implEvent(tryRecvFSA, TRE_ProducerAhead):
+  first != last
 
-  # # The last item wasn't linked to the list yet, bail out
-  # return false
+behavior(tryRecvFSA):
+  # A producer got ahead of us, spurious failure
+  ini: TR_OneLastNodeLeft
+  event: TRE_ProducerAhead
+  transition:
+    result = false
+  fin: TR_Exit
 
-proc tryRecvBatch*[T, keepCount](chan: var ChannelMpscUnboundedBatch[T, keepCount], bFirst, bLast: var T): int32 =
-  ## Try receiving all items buffered in the channel
-  ## Returns true if at least some items are dequeued.
-  ## There might be competition with producers for the last item
-  ##
-  ## Items are returned as a linked list
-  ## Returns the number of items received
-  ##
-  ## If no items are returned bFirst and bLast are undefined
-  ## and should not be used.
-  ##
-  ## ⚠️ This leaks the next item
-  ##   nil or overwrite it for further use in linked lists
+behavior(tryRecvFSA):
+  ini: TR_OneLastNodeLeft
+  transition:
+    # Reenqueue dummy, it is now in the second slot or later
+    chan.reenqueueDummy()
+  fin: TR_PreFinish
 
-  result = 0
+onEntry(tryRecvFSA, TR_PreFinish):
+  # Reload the second item
+  next = cast[T](first.next.load(moRelaxed))
 
-  var front = cast[T](chan.front.next.load(moAcquire))
-  bFirst = front
-  if front.isNil:
-    return
+behavior(tryRecvFSA):
+  ini: TR_PreFinish
+  event: TRE_NodeIsNotLast
+  transition: discard
+  fin: TR_ExitWithNode
 
-  # Fast-forward to the end of the channel
-  var next = cast[T](front.next.load(moAcquire))
-  while not next.isNil:
-    result += 1
-    bLast = front
-    front = next
-    next = cast[T](next.next.load(moAcquire))
+behavior(tryRecvFSA):
+  # No second element?! There was a race
+  # in enqueueing a new dummy
+  # and the new "next" still isn't published
+  # spurious failure
+  ini: TR_PreFinish
+  transition: discard
+  fin: TR_Exit
 
-  # Competing with producers at the back
-  var last = chan.back.load(moAcquire)
-  if front != last:
-    # We lose the competition, bail out
-    chan.front.next.store(front, moRelease)
+synthesize(tryRecvFSA):
+  proc tryRecv*[T, keepCount](chan: var ChannelMpscUnboundedBatch[T, keepCount], dst: var T): bool
 
-    when keepCount:
-      let oldCount {.used.} = chan.count.fetchSub(result, moRelaxed)
-      postCondition: oldCount >= result # TODO: somehow it can be negative
-    return
+# proc tryRecvBatch*[T, keepCount](chan: var ChannelMpscUnboundedBatch[T, keepCount], bFirst, bLast: var T): int32 =
+#   ## Try receiving all items buffered in the channel
+#   ## Returns true if at least some items are dequeued.
+#   ## There might be competition with producers for the last item
+#   ##
+#   ## Items are returned as a linked list
+#   ## Returns the number of items received
+#   ##
+#   ## If no items are returned bFirst and bLast are undefined
+#   ## and should not be used.
+#   ##
+#   ## ⚠️ This leaks the next item
+#   ##   nil or overwrite it for fu
+#     bLast = bFirst
 
-  # front == last
-  chan.front.next.store(nil, moRelaxed)
-  if compareExchange(chan.back, last, chan.front.addr, moAcquireRelease):
-    # We won and replaced the last node with the channel front
-    prefetch(front)
-    result += 1
-    bLast = front
+#     var front = chan.front
+#     var next = front.next.load(moRelaxed)
+#     while not next.isNil:
+#       # Not competing with producers
+#       chan.front.next.store(next, moRelaxed)
+#       prefetch(chan.front.next.addr)
+#       fence(moAcquire) # Sync "first.next.load(moRelaxed)"
 
-    when keepCount:
-      let oldCount {.used.} = chan.count.fetchSub(result, moRelaxed)
-      postCondition: oldCount >= result # TODO: somehow it can be negative
-    return
+#       front = chan.front                               # Save the front position
+#       chan.front = cast[T](next)                       # Advance the channel front
+#       ascertain: not chan.front.isNil
+#       next = cast[T](chan.front.next.load(moRelaxed))  # Prepare next iteration
+#       fence(moAcquire)
 
-  # We lost but now we know that there is an extra node
-  # We don't spinlock unlike the single receive case
-  # we assume that consumer has plenty of work to do with the
-  # already retrived batch
-  next = cast[T](front.next.load(moAcquire))
-  while next.isNil:
-    # We spinlock, unfortunately there seems to be a livelock potential
-    # or contention issue if we don't use cpuRelax
-    # at least twice or just bail out if next is nil.
-    # Replace this spinlock by "if not next.isNil" and run the "memory pool" bench
-    # or fibonacci and the program will get stuck.
-    # The queue should probably be model checked and/or run through Relacy
-    cpuRelax()
-    next = cast[T](front.next.load(moAcquire))
+#       bLast.next.store(cast[pointer](front), moRelaxed) # Link the batchLast to the previous front
+#       bLast = front                                     # Update the batchLast
+#       inc result                                        # increment the count
 
-  prefetch(front)
-  result += 1
-  chan.front.next.store(next, moRelaxed)
-  # fence(moAcquire)  # sync front.next.load(moRelaxed)
-  bLast = front
+#     when keepCount:
+#       let oldCount {.used.} = chan.count.fetchSub(int(result), moRelaxed)
+#       postCondition: oldCount >= 1 # The producers may overestimate the count
 
-  when keepCount:
-    let oldCount {.used.} = chan.count.fetchSub(result, moRelaxed)
-    postCondition: oldCount >= result # TODO: somehow it can be negative
+#     postCondition: bLast != chan.stub.addr
+#     return
+
+#   # next is nil, we are at the end at the stub node
+#   return 0
 
 func peek*(chan: var ChannelMpscUnboundedBatch): int32 {.inline.} =
   ## Estimates the number of items pending in the channel
@@ -292,6 +339,8 @@ func peek*(chan: var ChannelMpscUnboundedBatch): int32 {.inline.} =
 
   # For the consumer it's always positive or zero
   postCondition: result >= 0 # TODO somehow it can be -1
+
+{.pop.}
 
 # Sanity checks
 # ------------------------------------------------------------------------------
@@ -419,58 +468,58 @@ when isMainModule:
     echo "------------------------------------------------------------------------"
     echo "Success"
 
-  proc thread_func_receiver_batch(args: ThreadArgs) =
-    var counts: array[Sender1..Sender15, int]
-    var received = 0
-    var batchID = 0
-    while received < 15 * NumVals:
-      var first, last: Val
-      let batchSize = args.chan[].tryRecvBatch(first, last)
-      batchID += 1
-      if batchSize == 0:
-        continue
+  # proc thread_func_receiver_batch(args: ThreadArgs) =
+  #   var counts: array[Sender1..Sender15, int]
+  #   var received = 0
+  #   var batchID = 0
+  #   while received < 15 * NumVals:
+  #     var first, last: Val
+  #     let batchSize = args.chan[].tryRecvBatch(first, last)
+  #     batchID += 1
+  #     if batchSize == 0:
+  #       continue
 
-      var cur = first
-      var idx = 0
-      while idx < batchSize:
-        # log("Receiver got: %d at address 0x%.08x\n", cur.val, cur)
-        let sender = WorkerKind(cur.val div Padding)
-        doAssert cur.val == counts[sender] + ord(sender) * Padding, "Incorrect value: " & $cur.val
-        counts[sender] += 1
-        received += 1
+  #     var cur = first
+  #     var idx = 0
+  #     while idx < batchSize:
+  #       # log("Receiver got: %d at address 0x%.08x\n", cur.val, cur)
+  #       let sender = WorkerKind(cur.val div Padding)
+  #       doAssert cur.val == counts[sender] + ord(sender) * Padding, "Incorrect value: " & $cur.val
+  #       counts[sender] += 1
+  #       received += 1
 
-        idx += 1
-        if idx == batchSize:
-          doAssert cur == last
+  #       idx += 1
+  #       if idx == batchSize:
+  #         doAssert cur == last
 
-        let old = cur
-        cur = cast[Val](cur.next.load(moRelaxed))
-        valFree(old)
-      # log("Receiver processed batch id %d of size %d (received total %d) \n", batchID, batchSize, received)
+  #       let old = cur
+  #       cur = cast[Val](cur.next.load(moRelaxed))
+  #       valFree(old)
+  #     # log("Receiver processed batch id %d of size %d (received total %d) \n", batchID, batchSize, received)
 
-    doAssert received == 15 * NumVals, "Received more than expected"
-    for count in counts:
-      doAssert count == NumVals
+  #   doAssert received == 15 * NumVals, "Received more than expected"
+  #   for count in counts:
+  #     doAssert count == NumVals
 
-  proc mainBatch() =
-    echo "Testing if 15 threads can send data to 1 consumer with batch receive"
-    echo "------------------------------------------------------------------------"
-    var threads: array[WorkerKind, Thread[ThreadArgs]]
-    let chan = createSharedU(ChannelMpscUnboundedBatch[Val, true]) # CreateU is not zero-init
-    chan[].initialize()
+  # proc mainBatch() =
+  #   echo "Testing if 15 threads can send data to 1 consumer with batch receive"
+  #   echo "------------------------------------------------------------------------"
+  #   var threads: array[WorkerKind, Thread[ThreadArgs]]
+  #   let chan = createSharedU(ChannelMpscUnboundedBatch[Val, true]) # CreateU is not zero-init
+  #   chan[].initialize()
 
-    # log("Channel address 0x%.08x (dummy 0x%.08x)\n", chan, chan.front.addr)
+  #   # log("Channel address 0x%.08x (dummy 0x%.08x)\n", chan, chan.front.addr)
 
-    createThread(threads[Receiver], thread_func_receiver_batch, ThreadArgs(ID: Receiver, chan: chan))
-    for sender in Sender1..Sender15:
-      createThread(threads[sender], thread_func_sender, ThreadArgs(ID: sender, chan: chan))
+  #   createThread(threads[Receiver], thread_func_receiver_batch, ThreadArgs(ID: Receiver, chan: chan))
+  #   for sender in Sender1..Sender15:
+  #     createThread(threads[sender], thread_func_sender, ThreadArgs(ID: sender, chan: chan))
 
-    for worker in WorkerKind:
-      joinThread(threads[worker])
+  #   for worker in WorkerKind:
+  #     joinThread(threads[worker])
 
-    deallocShared(chan)
-    echo "------------------------------------------------------------------------"
-    echo "Success"
+  #   deallocShared(chan)
+  #   echo "------------------------------------------------------------------------"
+  #   echo "Success"
 
   let startSingle = getMonoTime()
   main()

@@ -30,21 +30,42 @@ Initially StealRequests were fully copied (32 bytes) into a lock-based channel. 
 
 As the producers have nothing to do anyway, a lock-based solution only on the producer side also work. Furthermore each producer is only allowed a limited number of steal requests, assigned randomly, so potential contention is very low even for lock-based solution.
 
-## Requirements notes
+## History and requirement notes
 
 There are a lot of litterature regarding linked-list based MPSC channels.
 
-Initially the MPSC channels were implemented following Microsoft's message-passing allocator [Snmalloc](https://github.com/microsoft/snmalloc) implementation which is itself heavily inspired by Pony language's actor message queue.
+### v0
+
+https://github.com/mratsim/weave/blob/083300965984283a860623caeae6448c6ab3158b/weave/channels/channels_mpsc_bounded_lock.nim
+
+The first MPSC channels were lock-based (but high performance) bounded channels
+
+### v0.5
+
+https://github.com/mratsim/weave/blob/630f2d908b8cd1f4e4a8fb0871fbec95389ab093/weave/channels/channels_mpsc_unbounded.nim
+
+Then for the memory-pool I tried to use lock-free MPSC channel similar to those used in [Snmalloc](https://github.com/microsoft/snmalloc) a message-passing based memory allocator from Microsoft.
+
+The queue is heavily inspired by Pony language's actor message queue.
 
 Unfortunately both Snmalloc/Pony implementations have the following issues, they:
 - Hold on the last item of the queue: unsuitable for steal requests
-- Require memory management of a stub node: snmalloc overwrites it and never seem to reclaim its memory
+- Require memory management of a stub node and/or the node.
+- For snmalloc it seems like the stub node can be returned from the queue (it's an unnamed memory block so it is "fungible")
 - They never update the "back" pointer of the queue when dequeueing so the back pointer
   still points to an unowned item, requiring the caller to do an emptiness check
 - There is no way of estimating the number of enqueued items for the consumers which is necessary for both
   steal requests (adaptative stealing) and memory pool (estimating free memory blocks)
 
-So queue has been modified with Dmitry Vyukov design + an additional count variable.
+### v1
+
+https://github.com/mratsim/weave/blob/b796d1a0efb15cad68e2b06ddaa305b08cf5f722/weave/channels/channels_mpsc_unbounded.nim
+
+So the channel has been modified with Dmitry Vyukov intrusive design + an additional count variable.
+
+### v2
+
+https://github.com/mratsim/weave/blob/a8f42d302e3d68f397374e9b14e964f647cb9afa/weave/channels/channels_mpsc_unbounded_batch.nim
 
 Also while trying to fit the queue for memory management
 a new need for batching arised. Snmalloc paper mentionned that batching contributed significantly to performance. Each thread-local arena also manages a temporal radix tree to pass back memory blocks that were not they own.
@@ -57,6 +78,14 @@ However this required a new queue design as the original queues only supported b
 So the queue has been retired from the codebase for an another MPSC intrusive lockless queue with batching support for both the producers and the consumer.
 The dummy node is instead fixed in the front of the queue.
 In naive testing, consumer batching can improve performance by 50%.
+
+### v3
+
+The v2 channel main issue is the need for a spinlock after a failed compare-and-swap of the consumer. This compare-and-swap is costly but the spinlock is worse as in case of high producer contention, the consumer
+  might be deprioritized due to the `cpuRelax()`.
+
+With Weave now featuring being an beackground executor service, this is problematic when interfacing with foreign threads if several of them
+keep hammering the queue with jobs.
 
 ## References
 
