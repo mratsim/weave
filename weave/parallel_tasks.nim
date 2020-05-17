@@ -333,15 +333,15 @@ when isMainModule:
 
   block: # Delayed computation
 
-    proc echoA(pA: FlowEvent) =
+    proc echoA(eA: FlowEvent) =
       echo "Display A, sleep 1s, create parallel streams 1 and 2"
       sleep(1000)
-      pA.trigger()
+      eA.trigger()
 
-    proc echoB1(pB1: FlowEvent) =
+    proc echoB1(eB1: FlowEvent) =
       echo "Display B1, sleep 1s"
       sleep(1000)
-      pB1.trigger()
+      eB1.trigger()
 
     proc echoB2() =
       echo "Display B2, exit stream"
@@ -353,12 +353,12 @@ when isMainModule:
     proc main() =
       echo "Sanity check 3: Dataflow parallelism"
       init(Weave)
-      let pA = newFlowEvent()
-      let pB1 = newFlowEvent()
-      let done = spawnOnEvent(pB1, echoC1())
-      spawnOnEvent pA, echoB2()
-      spawnOnEvent pA, echoB1(pB1)
-      spawn echoA(pA)
+      let eA = newFlowEvent()
+      let eB1 = newFlowEvent()
+      let done = spawnOnEvent(eB1, echoC1())
+      spawnOnEvent eA, echoB2()
+      spawnOnEvent eA, echoB1(eB1)
+      spawn echoA(eA)
       discard sync(done)
       exit(Weave)
 
@@ -366,19 +366,19 @@ when isMainModule:
 
   block: # Delayed computation with multiple dependencies
 
-    proc echoA(pA: FlowEvent) =
+    proc echoA(eA: FlowEvent) =
       echo "Display A, sleep 1s, create parallel streams 1 and 2"
       sleep(1000)
-      pA.trigger()
+      eA.trigger()
 
-    proc echoB1(pB1: FlowEvent) =
+    proc echoB1(eB1: FlowEvent) =
       echo "Display B1, sleep 1s"
       sleep(1000)
-      pB1.trigger()
+      eB1.trigger()
 
-    proc echoB2(pB2: FlowEvent) =
+    proc echoB2(eB2: FlowEvent) =
       echo "Display B2, no sleep"
-      pB2.trigger()
+      eB2.trigger()
 
     proc echoC12() =
       echo "Display C12, exit stream"
@@ -386,13 +386,13 @@ when isMainModule:
     proc main() =
       echo "Sanity check 4: Dataflow parallelism with multiple dependencies"
       init(Weave)
-      let pA = newFlowEvent()
-      let pB1 = newFlowEvent()
-      let pB2 = newFlowEvent()
-      spawnOnEvents pB1, pB2, echoC12()
-      spawnOnEvent pA, echoB2(pB2)
-      spawnOnEvent pA, echoB1(pB1)
-      spawn echoA(pA)
+      let eA = newFlowEvent()
+      let eB1 = newFlowEvent()
+      let eB2 = newFlowEvent()
+      spawnOnEvents eB1, eB2, echoC12()
+      spawnOnEvent eA, echoB2(eB2)
+      spawnOnEvent eA, echoB1(eB1)
+      spawn echoA(eA)
       exit(Weave)
       echo "Weave runtime exited"
 

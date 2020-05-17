@@ -405,24 +405,24 @@ when isMainModule:
     proc main6() =
       init(Weave)
 
-      let pA = newFlowEvent(0, 10, 1)
-      let pB = newFlowEvent(0, 10, 1)
+      let eA = newFlowEvent(0, 10, 1)
+      let eB = newFlowEvent(0, 10, 1)
 
       parallelFor i in 0 ..< 10:
-        captures: {pA}
+        captures: {eA}
         sleep(i * 10)
-        pA.trigger(i)
+        eA.trigger(i)
         echo "Step A - stream ", i, " at ", i * 10, " ms"
 
       parallelFor i in 0 ..< 10:
-        dependsOnEvent: (pA, i)
-        captures: {pB}
+        dependsOnEvent: (eA, i)
+        captures: {eB}
         sleep(i * 10)
-        pB.trigger(i)
+        eB.trigger(i)
         echo "Step B - stream ", i, " at ", 2 * i * 10, " ms"
 
       parallelFor i in 0 ..< 10:
-        dependsOnEvent: (pB, i)
+        dependsOnEvent: (eB, i)
         sleep(i * 10)
         echo "Step C - stream ", i, " at ", 3 * i * 10, " ms"
 
