@@ -62,7 +62,7 @@ proc pack_A_mc_kc*[T; ukernel: static MicroKernel](
 proc pack_B_kc_nc*[T; ukernel: static MicroKernel](
       packedB: ptr UncheckedArray[T],
       kc, nc: int,
-      B: MatrixView[T], kcTileReady: Pledge) =
+      B: MatrixView[T], kcTileReady: FlowEvent) =
   ## Packs panel [kc, nc] for ~B (half-L1 cache)
   ## Pads if needed
   ##
@@ -97,4 +97,4 @@ proc pack_B_kc_nc*[T; ukernel: static MicroKernel](
   #       so waiting there guarantees proper data dependencies
   #       provided the "k" loop is not nested (i.e. does real work instead of enqueueing tasks)
   discard sync(kcLoop)
-  kcTileReady.fulfill()
+  kcTileReady.trigger()

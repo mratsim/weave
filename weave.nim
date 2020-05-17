@@ -11,7 +11,7 @@ import
     runtime],
   weave/state_machines/[sync_root, sync, sync_scope],
   weave/datatypes/flowvars,
-  weave/cross_thread_com/pledges,
+  weave/cross_thread_com/flow_events,
   weave/contexts,
   weave/[executor, parallel_jobs]
 
@@ -28,11 +28,11 @@ export
   # Experimental scope barrier
   syncScope,
   # Experimental dataflow parallelism
-  spawnDelayed, Pledge,
-  fulfill, newPledge,
+  spawnOnEvent, spawnOnEvents, FlowEvent,
+  trigger, newFlowEvent,
   # Experimental background service
   Pending,
-  submit, submitDelayed,
+  submit, submitOnEvent, submitOnEvents,
   runInBackground, waitUntilReady,
   setupSubmitterThread, teardownSubmitterThread,
   waitFor, isSubmitted,

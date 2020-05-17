@@ -155,7 +155,7 @@ proc gemm_impl[T; ukernel: static MicroKernel](
     prefetch(tiles.b, Write, LowTemporalLocality)
     let kc = min(K - pc, tiles.kc) # Deal with edges  # A[0:M, pc:pc+kc]
 
-    let kcncTileReady = newPledge()
+    let kcncTileReady = newFlowEvent()
     let kcncB = vB.stride(pc, 0)                      # B[pc:pc+kc, jc:jc+nc]
     spawn pack_B_kc_nc[T, ukernel](                   # PackB panel [kc, nc] (nc is large or unknown)
       tiles.b, kc, nc, kcncB, kcncTileReady)
@@ -176,7 +176,7 @@ proc gemm_impl[T; ukernel: static MicroKernel](
       let mckcA = vA.stride(ic, pc)                   # A[ic:ic+mc, pc:pc+kc]
       pack_A_mc_kc[T, ukernel](packA, mc, kc, mckcA)  # PackA block [mc, kc]
 
-      spawnDelayed(
+      spawnOnEvent(
         kcncTileReady,
         gebp_mkernel[T, ukernel](                     # GEBP macrokernel:
           mc, nc, kc,                                 #   C[ic:ic+mc, jc:jc+nc] =

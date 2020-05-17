@@ -20,30 +20,39 @@ import
   ./scheduler, ./contexts, ./config,
   ./datatypes/[flowvars, sync_types],
   ./instrumentation/contracts,
-  ./cross_thread_com/[pledges, channels_mpsc_unbounded_batch, event_notifiers],
+  ./cross_thread_com/[flow_events, channels_mpsc_unbounded_batch, event_notifiers],
   ./state_machines/sync_root,
   ./executor
 
 proc newJob(): Job {.inline.} =
-  result = jobProviderContext.mempool[].borrow(deref(Job))
-  # result.fn = nil # Always overwritten
-  # result.parent = nil # Always overwritten
-  result.scopedBarrier = nil # Always overwritten
-  result.prev = nil
-  result.next.store(nil, moRelaxed)
-  result.start = 0
-  result.cur = 0
-  result.stop = 0
-  result.stride = 0
-  result.futures = nil
-  result.isLoop = false
-  result.hasFuture = false
+  result = jobProviderContext.mempool[].borrow0(deref(Job))
+  # The job must be fully zero-ed including the data buffer
+  # otherwise datatypes that use custom destructors
+  # and that rely on "myPointer.isNil" to return early
+  # may read recycled garbage data.
+  # "FlowEvent" is such an example
+
+  # TODO: The perf cost to the following is 17% as measured on fib(40)
+
+  # # Zeroing is expensive, it's 96 bytes
+  # # result.fn = nil # Always overwritten
+  # # result.parent = nil # Always overwritten
+  # # result.scopedBarrier = nil # Always overwritten
+  # result.prev = nil
+  # result.next = nil
+  # result.start = 0
+  # result.cur = 0
+  # result.stop = 0
+  # result.stride = 0
+  # result.futures = nil
+  # result.isLoop = false
+  # result.hasFuture = false
 
 proc notifyJob() {.inline.} =
   Backoff:
     manager.jobNotifier[].notify()
 
-proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
+proc submitImpl(events: NimNode, funcCall: NimNode): NimNode =
   # We take typed argument so that overloading resolution
   # is already done and arguments are semchecked
   funcCall.expectKind(nnkCall)
@@ -91,20 +100,20 @@ proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
   # Submit immediately or delay on dependencies
   var submitBlock: NimNode
   let job = ident"job"
-  if pledges.isNil:
+  if events.isNil:
     submitBlock = newCall(bindSym"submitJob", job)
-  elif pledges.len == 1:
-    let pledgeDesc = pledges[0]
-    if pledgeDesc.kind in {nnkIdent, nnkSym}:
+  elif events.len == 1:
+    let eventDesc = events[0]
+    if eventDesc.kind in {nnkIdent, nnkSym}:
       submitBlock = quote do:
-        if not delayedUntil(cast[Task](`job`), `pledgeDesc`, jobProviderContext.mempool[]):
+        if not delayedUntil(cast[Task](`job`), `eventDesc`, jobProviderContext.mempool[]):
           submitJob(`job`)
     else:
-      pledgeDesc.expectKind({nnkPar, nnkTupleConstr})
-      let pledge = pledgeDesc[0]
-      let pledgeIndex = pledgeDesc[1]
+      eventDesc.expectKind({nnkPar, nnkTupleConstr})
+      let event = eventDesc[0]
+      let eventIndex = eventDesc[1]
       submitBlock = quote do:
-        if not delayedUntil(cast[Task](`job`), `pledge`, int32(`pledgeIndex`), myMemPool()):
+        if not delayedUntil(cast[Task](`job`), `event`, int32(`eventIndex`), myMemPool()):
           submitJob(`job`)
   else:
     let delayedMulti = getAst(
@@ -113,7 +122,7 @@ proc submitImpl(pledges: NimNode, funcCall: NimNode): NimNode =
         nnkDerefExpr.newTree(
           nnkDotExpr.newTree(bindSym"jobProviderContext", ident"mempool")
         ),
-        pledges
+        events
       )
     )
     submitBlock = quote do:
@@ -242,11 +251,11 @@ macro submit*(fnCall: typed): untyped =
   ## Jobs are processed approximately in First-In-First-Out (FIFO) order.
   result = submitImpl(nil, fnCall)
 
-macro submitDelayed*(pledges: varargs[typed], fnCall: typed): untyped =
+macro submitOnEvents*(events: varargs[typed], fnCall: typed): untyped =
   ## Submit the input function call asynchronously to the Weave runtime.
-  ## The function call will only be scheduled when the pledge is fulfilled.
+  ## The function call will only be scheduled when the event is triggered.
   ##
-  ## This is a compatibility routine for foreign threads.
+  ## This is a compatibility routine for threads foreign to Weave (i.e. neither the root thread or a worker thread).
   ## `setupSubmitterThread` MUST be called on the submitter thread beforehand
   ##
   ## This procedure is intended for interoperability with long-running threads
@@ -255,9 +264,29 @@ macro submitDelayed*(pledges: varargs[typed], fnCall: typed): untyped =
   ## use `spawn` otherwise.
   ##
   ## If the function calls returns a result, submit will wrap it in a Pending[T].
-  ## You can use `settle` to block the current thread and extract the asynchronous result from the Pending[T].
+  ## You can use `waitFor` to block the current thread and extract the asynchronous result from the Pending[T].
   ## You can use `isReady` to check if result is available and if subsequent
-  ## `settle` calls would block or return immediately.
+  ## `waitFor` calls would block or return immediately.
   ##
-  ## Ensure that before settling on the Pending[T] of a delayed submit, its pledge can be fulfilled or you will deadlock.
-  result = submitImpl(pledges, fnCall)
+  ## Ensure that before settling on the Pending[T] of a delayed submit, its event can be triggered or you will deadlock.
+  result = submitImpl(events, fnCall)
+
+macro submitOnEvent*(event: FlowEvent, fnCall: typed): untyped =
+  ## Submit the input function call asynchronously to the Weave runtime.
+  ## The function call will only be scheduled when the event is triggered.
+  ##
+  ## This is a compatibility routine for threads foreign to Weave (i.e. neither the root thread or a worker thread).
+  ## `setupSubmitterThread` MUST be called on the submitter thread beforehand
+  ##
+  ## This procedure is intended for interoperability with long-running threads
+  ## started with `createThread`
+  ## and other threadpools and/or execution engines,
+  ## use `spawn` otherwise.
+  ##
+  ## If the function calls returns a result, submit will wrap it in a Pending[T].
+  ## You can use `waitFor` to block the current thread and extract the asynchronous result from the Pending[T].
+  ## You can use `isReady` to check if result is available and if subsequent
+  ## `waitFor` calls would block or return immediately.
+  ##
+  ## Ensure that before settling on the Pending[T] of a delayed submit, its event can be triggered or you will deadlock.
+  result = submitImpl(nnkArgList.newTree(event), fnCall)

@@ -71,15 +71,15 @@ proc main() =
   block: # Delayed computation
     serviceDone.store(false, moRelaxed)
 
-    proc echoA(pA: Pledge) =
+    proc echoA(eA: FlowEvent) =
       echo "Display A, sleep 1s, create parallel streams 1 and 2"
       sleep(1000)
-      pA.fulfill()
+      eA.trigger()
 
-    proc echoB1(pB1: Pledge) =
+    proc echoB1(eB1: FlowEvent) =
       echo "Display B1, sleep 1s"
       sleep(1000)
-      pB1.fulfill()
+      eB1.trigger()
 
     proc echoB2() =
       echo "Display B2, exit stream"
@@ -92,12 +92,12 @@ proc main() =
       waitUntilReady(Weave)
 
       echo "Sanity check 3: Dataflow parallelism"
-      let pA = newPledge()
-      let pB1 = newPledge()
-      let done = submitDelayed(pB1, echoC1())
-      submitDelayed pA, echoB2()
-      submitDelayed pA, echoB1(pB1)
-      submit echoA(pA)
+      let eA = newFlowEvent()
+      let eB1 = newFlowEvent()
+      let done = submitOnEvent(eB1, echoC1())
+      submitOnEvent eA, echoB2()
+      submitOnEvent eA, echoB1(eB1)
+      submit echoA(eA)
 
       discard waitFor(done)
       serviceDone[].store(true, moRelaxed)
@@ -109,19 +109,19 @@ proc main() =
   block: # Delayed computation with multiple dependencies
     serviceDone.store(false, moRelaxed)
 
-    proc echoA(pA: Pledge) =
+    proc echoA(eA: FlowEvent) =
       echo "Display A, sleep 1s, create parallel streams 1 and 2"
       sleep(1000)
-      pA.fulfill()
+      eA.trigger()
 
-    proc echoB1(pB1: Pledge) =
+    proc echoB1(eB1: FlowEvent) =
       echo "Display B1, sleep 1s"
       sleep(1000)
-      pB1.fulfill()
+      eB1.trigger()
 
-    proc echoB2(pB2: Pledge) =
+    proc echoB2(eB2: FlowEvent) =
       echo "Display B2, no sleep"
-      pB2.fulfill()
+      eB2.trigger()
 
     proc echoC12(): bool =
       echo "Display C12, exit stream"
@@ -132,13 +132,13 @@ proc main() =
       waitUntilReady(Weave)
 
       echo "Sanity check 4: Dataflow parallelism with multiple dependencies"
-      let pA = newPledge()
-      let pB1 = newPledge()
-      let pB2 = newPledge()
-      let done = submitDelayed(pB1, pB2, echoC12())
-      submitDelayed pA, echoB2(pB2)
-      submitDelayed pA, echoB1(pB1)
-      submit echoA(pA)
+      let eA = newFlowEvent()
+      let eB1 = newFlowEvent()
+      let eB2 = newFlowEvent()
+      let done = submitOnEvents(eB1, eB2, echoC12())
+      submitOnEvent eA, echoB2(eB2)
+      submitOnEvent eA, echoB1(eB1)
+      submit echoA(eA)
 
       discard waitFor(done)
       serviceDone[].store(true, moRelaxed)

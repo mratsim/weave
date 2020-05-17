@@ -257,8 +257,7 @@ when isMainModule:
     var taskID{.global.} = 1
     result = cache.pop()
     if result.isNil:
-      result = pool.borrow(deref(Task))
-    zeroMem(result, sizeof(deref(Task)))
+      result = pool.borrow0(deref(Task))
     result.fn = cast[type result.fn](taskID)
     taskID += 1
 
