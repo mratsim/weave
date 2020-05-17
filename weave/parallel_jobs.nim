@@ -32,6 +32,22 @@ proc newJob(): Job {.inline.} =
   # may read recycled garbage data.
   # "FlowEvent" is such an example
 
+  # TODO: The perf cost to the following is 17% as measured on fib(40)
+
+  # # Zeroing is expensive, it's 96 bytes
+  # # result.fn = nil # Always overwritten
+  # # result.parent = nil # Always overwritten
+  # # result.scopedBarrier = nil # Always overwritten
+  # result.prev = nil
+  # result.next = nil
+  # result.start = 0
+  # result.cur = 0
+  # result.stop = 0
+  # result.stride = 0
+  # result.futures = nil
+  # result.isLoop = false
+  # result.hasFuture = false
+
 proc notifyJob() {.inline.} =
   Backoff:
     manager.jobNotifier[].notify()
