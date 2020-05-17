@@ -7,7 +7,7 @@
 
 import
   ./datatypes/[context_global, context_thread_local, sync_types, prell_deques, binary_worker_trees],
-  ./cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, scoped_barriers, pledges],
+  ./cross_thread_com/[channels_spsc_single_ptr, channels_mpsc_unbounded_batch, scoped_barriers, flow_events],
   ./memory/[persistacks, lookaside_lists, memory_pools, allocs],
   ./config,
   ./instrumentation/[profilers, loggers, contracts]
@@ -145,35 +145,45 @@ proc flushAndDispose*(dq: var PrellDeque) =
   for task in items(leftovers):
     recycle(task)
 
-# Pledges - Dataflow parallelism
+# FlowEvent - Dataflow parallelism
 # ----------------------------------------------------------------------------------
-proc newPledge*(): Pledge =
-  ## Creates a pledge
-  ## Tasks associated with a pledge are only scheduled when the pledge is fulfilled.
-  ## A pledge can only be fulfilled once.
-  ## Pledges enable modeling precise producer-consumer data dependencies.
+proc newFlowEvent*(): FlowEvent =
+  ## Creates a FlowEvent
+  ## Tasks associated with an event are only scheduled when the event is triggered.
+  ## An event can only be triggered once.
+  ##
+  ## FlowEvent enable modeling precise producer-consumer data dependencies
+  ## to implement dataflow parallelism and task graphs.
   result.initialize(myMemPool())
 
-proc newPledge*(start, stop, stride: SomeInteger): Pledge =
-  ## Creates a loop iteration pledge.
-  ## With a loop iteration pledge, tasks can be associated with a precise loop index.
+proc newFlowEvent*(start, stop, stride: SomeInteger): FlowEvent =
+  ## Creates a loop iteration FlowEvent.
   ##
-  ## Tasks associated with a pledge are only scheduled when the pledge is fulfilled.
-  ## A pledge can only be fulfilled once.
-  ## Pledges enable modeling precise producer-consumer data dependencies.
+  ## With a loop iteration event, tasks can be associated with a precise loop index
+  ## or loop range.
+  ## It is strongly recommended to use loop tiling (also called loop blocking)
+  ## in combination with loop FlowEvent to process them in bulk and reduce overhead.
+  ## For example you can split a loop of size 1024 into tiles/blocks of 128 items
+  ## and associate only 8 events to the range instead of 1024.
+  ##
+  ## Tasks associated with an event are only scheduled when the event is triggered.
+  ## An event can only be triggered once.
+  ##
+  ## FlowEvent enable modeling precise producer-consumer data dependencies
+  ## to implement dataflow parallelism and task graphs.
   result.initialize(myMemPool(), start.int32, stop.int32, stride.int32)
 
-proc fulfill*(pledge: Pledge) =
-  ## Fulfills a pledge
-  ## All ready tasks that depended on that pledge will be scheduled immediately.
-  ## A ready task is a task that has all its pledged dependencies fulfilled.
-  fulfillImpl(pledge, myWorker().deque, addFirst)
+proc trigger*(event: FlowEvent) =
+  ## Triggers an event
+  ## All ready tasks that depended on that event will be scheduled immediately.
+  ## A ready task is a task that has all its event dependencies fulfilled.
+  triggerImpl(event, myWorker().deque, addFirst)
 
-proc fulfill*(pledge: Pledge, index: SomeInteger) =
-  ## Fulfills an iteration pledge
-  ## All ready tasks that depended on that pledge will be scheduled immediately.
-  ## A ready task is a task that has all its pledged dependencies fulfilled.
-  fulfillIterImpl(pledge, int32(index), myWorker().deque, addFirst)
+proc trigger*(event: FlowEvent, index: SomeInteger) =
+  ## Triggers an iteration event
+  ## All ready tasks that depended on that event will be scheduled immediately.
+  ## A ready task is a task that has all its event dependencies fulfilled.
+  triggerIterImpl(event, int32(index), myWorker().deque, addFirst)
 
 # Dynamic Scopes
 # ----------------------------------------------------------------------------------
