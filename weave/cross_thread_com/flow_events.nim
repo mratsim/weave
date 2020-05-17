@@ -12,7 +12,7 @@ import
   ./channels_mpsc_unbounded_batch,
   ../datatypes/sync_types,
   ../memory/[allocs, memory_pools],
-  ../instrumentation/contracts,
+  ../instrumentation/[contracts, loggers],
   ../config
 
 # Flow Events
@@ -192,7 +192,7 @@ proc `=destroy`*(event: var FlowEvent) =
 
 proc `=sink`*(dst: var FlowEvent, src: FlowEvent) {.inline.} =
   # Don't pay for atomic refcounting when compiler can prove there is no ref change
-  # `=destroy`(dst) - # TODO, for some reason we can't assume zero-init or always valid event.e here
+  `=destroy`(dst)
   system.`=sink`(dst.e, src.e)
 
 proc `=`*(dst: var FlowEvent, src: FlowEvent) {.inline.} =
@@ -279,8 +279,7 @@ proc initialize*(event: var FlowEvent, pool: var TLPoolAllocator) =
   ## will be delayed until that event is triggered.
   ## This allows modelling precise data dependencies.
   preCondition: event.e.isNil
-  event.e = pool.borrow(deref(EventPtr))
-  zeroMem(event.e, sizeof(deref(EventPtr))) # We start the refCount at 0
+  event.e = pool.borrow0(deref(EventPtr))
   event.e.kind = Single
   event.e.union.single.chan.initialize()
 
@@ -307,12 +306,10 @@ proc delayedUntil*(task: Task, event: FlowEvent, pool: var TLPoolAllocator): boo
     return false
 
   # Send the task to the event triggerer
-  let taskNode = pool.borrow(deref(TaskNode))
+  let taskNode = pool.borrow0(deref(TaskNode))
   taskNode.task = task
-  taskNode.next.store(nil, moRelaxed)
-  taskNode.nextDep = nil
-  taskNode.event.e = nil # Don't need to store the event reference if there is only the current one
   taskNode.bucketID = NoIter
+  # Don't need to store the event reference if there is only the current one
   discard event.e.union.single.chan.trySend(taskNode)
   discard event.e.union.single.deferredOut.fetchAdd(1, moRelaxed)
   return true
@@ -371,7 +368,7 @@ proc initialize*(event: var FlowEvent, pool: var TLPoolAllocator, start, stop, s
   preCondition: stride > 0
   preCondition: event.e.isNil
 
-  event.e = pool.borrow(deref(EventPtr))
+  event.e = pool.borrow0(deref(EventPtr))
   # We start refcount at 0
   event.e.kind = Iteration
   event.e.union.iter.numBuckets = (stop - start + stride-1) div stride
@@ -417,11 +414,9 @@ proc delayedUntil*(task: Task, event: FlowEvent, index: int32, pool: var TLPoolA
     return false
 
   # Send the task to the event triggerer
-  let taskNode = pool.borrow(deref(TaskNode))
+  let taskNode = pool.borrow0(deref(TaskNode))
   taskNode.task = task
-  taskNode.next.store(nil, moRelaxed)
-  taskNode.nextDep = nil
-  taskNode.event = default(FlowEvent) # Don't need to store the event reference if there is only the current one
+  # Don't need to store the event reference if there is only the current one
   taskNode.bucketID = bucket
   discard event.e.union.iter.singles[bucket].chan.trySend(taskNode)
   discard event.e.union.iter.singles[bucket].deferredOut.fetchAdd(1, moRelaxed)
@@ -490,7 +485,7 @@ macro delayedUntilMulti*(task: Task, pool: var TLPoolAllocator, events: varargs[
       taskNode = genSym(nskLet, "taskNode_" & $event[i] & "_" & $events[i][1] & "_")
       let bucket = newCall(bindSym"getBucket", event, events[i][1])
       taskNodeInit.add quote do:
-        let `taskNode` = borrow(`pool`, deref(TaskNode))
+        let `taskNode` = borrow0(`pool`, deref(TaskNode))
         `taskNode`.task = `task`
         `taskNode`.event = `event`
         `taskNode`.bucketID = `bucket`
@@ -498,7 +493,7 @@ macro delayedUntilMulti*(task: Task, pool: var TLPoolAllocator, events: varargs[
       taskNode = genSym(nskLet, "taskNode_" & $events[i] & "_")
       let event = events[i]
       taskNodeInit.add quote do:
-        let `taskNode` = borrow(`pool`, deref(TaskNode))
+        let `taskNode` = borrow0(`pool`, deref(TaskNode))
         `taskNode`.task = `task`
         `taskNode`.event = `event`
         `taskNode`.bucketID = NoIter

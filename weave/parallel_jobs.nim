@@ -25,19 +25,12 @@ import
   ./executor
 
 proc newJob(): Job {.inline.} =
-  result = jobProviderContext.mempool[].borrow(deref(Job))
-  # result.fn = nil # Always overwritten
-  # result.parent = nil # Always overwritten
-  result.scopedBarrier = nil # Always overwritten
-  result.prev = nil
-  result.next.store(nil, moRelaxed)
-  result.start = 0
-  result.cur = 0
-  result.stop = 0
-  result.stride = 0
-  result.futures = nil
-  result.isLoop = false
-  result.hasFuture = false
+  result = jobProviderContext.mempool[].borrow0(deref(Job))
+  # The job must be fully zero-ed including the data buffer
+  # otherwise datatypes that use custom destructors
+  # and that rely on "myPointer.isNil" to return early
+  # may read recycled garbage data.
+  # "FlowEvent" is such an example
 
 proc notifyJob() {.inline.} =
   Backoff:

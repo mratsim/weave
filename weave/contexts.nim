@@ -111,23 +111,14 @@ Backoff:
 # ----------------------------------------------------------------------------------
 
 proc newTaskFromCache*(): Task =
-  result = workerContext.taskCache.pop()
+  result = workerContext.taskCache.pop0()
   if result.isNil:
-    result = myMemPool().borrow(deref(Task))
-  # Zeroing is expensive, it's 96 bytes
-
-  # result.fn = nil # Always overwritten
-  # result.parent = nil # Always overwritten
-  # result.scopedBarrier = nil # Always overwritten
-  result.prev = nil
-  result.next = nil
-  result.start = 0
-  result.cur = 0
-  result.stop = 0
-  result.stride = 0
-  result.futures = nil
-  result.isLoop = false
-  result.hasFuture = false
+    result = myMemPool().borrow0(deref(Task))
+  # The task must be fully zero-ed including the data buffer
+  # otherwise datatypes that use custom destructors
+  # and that rely on "myPointer.isNil" to return early
+  # may read recycled garbage data.
+  # "FlowEvent" is such an example
 
 proc delete*(task: Task) {.inline.} =
   preCondition: not task.isNil()
