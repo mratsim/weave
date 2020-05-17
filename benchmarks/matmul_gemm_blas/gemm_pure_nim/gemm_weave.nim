@@ -176,7 +176,7 @@ proc gemm_impl[T; ukernel: static MicroKernel](
       let mckcA = vA.stride(ic, pc)                   # A[ic:ic+mc, pc:pc+kc]
       pack_A_mc_kc[T, ukernel](packA, mc, kc, mckcA)  # PackA block [mc, kc]
 
-      spawnOnEvents(
+      spawnOnEvent(
         kcncTileReady,
         gebp_mkernel[T, ukernel](                     # GEBP macrokernel:
           mc, nc, kc,                                 #   C[ic:ic+mc, jc:jc+nc] =

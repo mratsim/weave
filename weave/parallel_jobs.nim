@@ -255,7 +255,7 @@ macro submitOnEvents*(events: varargs[typed], fnCall: typed): untyped =
   ## Submit the input function call asynchronously to the Weave runtime.
   ## The function call will only be scheduled when the event is triggered.
   ##
-  ## This is a compatibility routine for foreign threads.
+  ## This is a compatibility routine for threads foreign to Weave (i.e. neither the root thread or a worker thread).
   ## `setupSubmitterThread` MUST be called on the submitter thread beforehand
   ##
   ## This procedure is intended for interoperability with long-running threads
@@ -264,9 +264,29 @@ macro submitOnEvents*(events: varargs[typed], fnCall: typed): untyped =
   ## use `spawn` otherwise.
   ##
   ## If the function calls returns a result, submit will wrap it in a Pending[T].
-  ## You can use `settle` to block the current thread and extract the asynchronous result from the Pending[T].
+  ## You can use `waitFor` to block the current thread and extract the asynchronous result from the Pending[T].
   ## You can use `isReady` to check if result is available and if subsequent
-  ## `settle` calls would block or return immediately.
+  ## `waitFor` calls would block or return immediately.
   ##
   ## Ensure that before settling on the Pending[T] of a delayed submit, its event can be triggered or you will deadlock.
   result = submitImpl(events, fnCall)
+
+macro submitOnEvent*(event: FlowEvent, fnCall: typed): untyped =
+  ## Submit the input function call asynchronously to the Weave runtime.
+  ## The function call will only be scheduled when the event is triggered.
+  ##
+  ## This is a compatibility routine for threads foreign to Weave (i.e. neither the root thread or a worker thread).
+  ## `setupSubmitterThread` MUST be called on the submitter thread beforehand
+  ##
+  ## This procedure is intended for interoperability with long-running threads
+  ## started with `createThread`
+  ## and other threadpools and/or execution engines,
+  ## use `spawn` otherwise.
+  ##
+  ## If the function calls returns a result, submit will wrap it in a Pending[T].
+  ## You can use `waitFor` to block the current thread and extract the asynchronous result from the Pending[T].
+  ## You can use `isReady` to check if result is available and if subsequent
+  ## `waitFor` calls would block or return immediately.
+  ##
+  ## Ensure that before settling on the Pending[T] of a delayed submit, its event can be triggered or you will deadlock.
+  result = submitImpl(nnkArgList.newTree(event), fnCall)

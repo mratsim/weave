@@ -209,15 +209,29 @@ macro spawn*(fnCall: typed): untyped =
 
 macro spawnOnEvents*(events: varargs[typed], fnCall: typed): untyped =
   ## Spawns the input function call asynchronously, potentially on another thread of execution.
-  ## The function call will only be scheduled when the event is triggered.
+  ## The function call will only be scheduled when the events are triggered.
   ##
   ## If the function calls returns a result, spawn will wrap it in a Flowvar.
   ## You can use sync to block the current thread and extract the asynchronous result from the flowvar.
   ##
   ## spawnOnEvents returns immediately.
   ##
-  ## Ensure that before syncing on the flowvar of a triggered spawn, its event(s) can be triggered or you will deadlock.
+  ## Ensure that before syncing on the flowvar of a triggered spawn,
+  ## its events can be triggered or you will deadlock.
   result = spawnImpl(events, fnCall)
+
+macro spawnOnEvent*(event: FlowEvent, fnCall: typed): untyped =
+  ## Spawns the input function call asynchronously, potentially on another thread of execution.
+  ## The function call will only be scheduled when the event is triggered.
+  ##
+  ## If the function calls returns a result, spawn will wrap it in a Flowvar.
+  ## You can use sync to block the current thread and extract the asynchronous result from the flowvar.
+  ##
+  ## spawnOnEvent returns immediately.
+  ##
+  ## Ensure that before syncing on the flowvar of a triggered spawn,
+  ## its event can be triggered or you will deadlock.
+  result = spawnImpl(nnkArgList.newTree(event), fnCall)
 
 # Sanity checks
 # --------------------------------------------------------
@@ -341,9 +355,9 @@ when isMainModule:
       init(Weave)
       let pA = newFlowEvent()
       let pB1 = newFlowEvent()
-      let done = spawnOnEvents(pB1, echoC1())
-      spawnOnEvents pA, echoB2()
-      spawnOnEvents pA, echoB1(pB1)
+      let done = spawnOnEvent(pB1, echoC1())
+      spawnOnEvent pA, echoB2()
+      spawnOnEvent pA, echoB1(pB1)
       spawn echoA(pA)
       discard sync(done)
       exit(Weave)
@@ -376,8 +390,8 @@ when isMainModule:
       let pB1 = newFlowEvent()
       let pB2 = newFlowEvent()
       spawnOnEvents pB1, pB2, echoC12()
-      spawnOnEvents pA, echoB2(pB2)
-      spawnOnEvents pA, echoB1(pB1)
+      spawnOnEvent pA, echoB2(pB2)
+      spawnOnEvent pA, echoB1(pB1)
       spawn echoA(pA)
       exit(Weave)
       echo "Weave runtime exited"

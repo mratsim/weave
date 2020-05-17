@@ -28,11 +28,11 @@ export
   # Experimental scope barrier
   syncScope,
   # Experimental dataflow parallelism
-  spawnOnEvents, FlowEvent,
+  spawnOnEvent, spawnOnEvents, FlowEvent,
   trigger, newFlowEvent,
   # Experimental background service
   Pending,
-  submit, submitOnEvents,
+  submit, submitOnEvent, submitOnEvents,
   runInBackground, waitUntilReady,
   setupSubmitterThread, teardownSubmitterThread,
   waitFor, isSubmitted,

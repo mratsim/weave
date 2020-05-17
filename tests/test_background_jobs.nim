@@ -94,9 +94,9 @@ proc main() =
       echo "Sanity check 3: Dataflow parallelism"
       let pA = newFlowEvent()
       let pB1 = newFlowEvent()
-      let done = submitOnEvents(pB1, echoC1())
-      submitOnEvents pA, echoB2()
-      submitOnEvents pA, echoB1(pB1)
+      let done = submitOnEvent(pB1, echoC1())
+      submitOnEvent pA, echoB2()
+      submitOnEvent pA, echoB1(pB1)
       submit echoA(pA)
 
       discard waitFor(done)
@@ -136,8 +136,8 @@ proc main() =
       let pB1 = newFlowEvent()
       let pB2 = newFlowEvent()
       let done = submitOnEvents(pB1, pB2, echoC12())
-      submitOnEvents pA, echoB2(pB2)
-      submitOnEvents pA, echoB1(pB1)
+      submitOnEvent pA, echoB2(pB2)
+      submitOnEvent pA, echoB1(pB1)
       submit echoA(pA)
 
       discard waitFor(done)
