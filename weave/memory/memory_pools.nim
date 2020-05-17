@@ -778,6 +778,9 @@ when isMainModule:
 
       Worker(Receiver):
         var counts: array[Sender1..Sender15, int]
+        var received: array[Sender1..Sender15, seq[int]]
+        var error, warning = false
+
         for j in 0 ..< 15 * NumVals:
           var val: Val
           args.chan[].recvLoop(val):
@@ -785,14 +788,38 @@ when isMainModule:
           # log("Receiver got: %d at address 0x%.08x\n", val.val, val)
           let sender = WorkerKind(val.val div Padding)
           let current = counts[sender] + ord(sender) * Padding
-          doAssert val.val == current,
-            "Incorrect value: " & $val.val &
-            ", sender counts was at " & $current
+          let value = val.val - ord(sender) * Padding
+
+          if val.val != current:
+            warning = true
+            echo "Incorrect value (or order): " & $val.val &
+              ", sender counts was at " & $current &
+              " (value: " & $value &
+              ", " & $sender & ", expected: " & $counts[sender] & ')'
+
+          received[sender].add value
           inc counts[sender]
           valFree(Alloc, val)
 
-        for count in counts:
-          doAssert count == NumVals
+        for sender, count in counts:
+          if count != NumVals:
+            error = true
+            echo "Error: count (", count, ") is not expected (", NumVals, ") for ", sender
+
+        proc genExpected(): seq[int] =
+          for i in 0 ..< NumVals:
+            result.add i
+
+        const expected = genExpected()
+
+        for sender, recvSeq in received:
+          if recvSeq != expected:
+            # warning = true
+            error = true # This may be a warning if only the order is incorrect (linearizability)
+            echo "Warning: seq from ", sender, " received in this order ", recvSeq
+            echo "We may have a non-linearizable queue."
+
+        doAssert not error
 
       Worker(Sender1..Sender15):
         for j in 0 ..< NumVals:
