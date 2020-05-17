@@ -296,7 +296,7 @@ func peek*(chan: var ChannelMpscUnboundedBatch): int32 {.inline.} =
 # Sanity checks
 # ------------------------------------------------------------------------------
 when isMainModule:
-  import strutils, system/ansi_c, times
+  import strutils, system/ansi_c, times, std/monotimes, strformat
 
   # Data structure test
   # --------------------------------------------------------
@@ -378,7 +378,7 @@ when isMainModule:
       let val = valAlloc()
       val.val = ord(args.ID) * Padding + j
 
-      # const pad = spaces(8)
+      const pad = spaces(8)
       # echo pad.repeat(ord(args.ID)), 'S', $ord(args.ID), ": ", val.val, " (0x", toHex(cast[uint32](val)), ')'
 
       args.chan[].sendLoop(val):
@@ -472,12 +472,17 @@ when isMainModule:
     echo "------------------------------------------------------------------------"
     echo "Success"
 
-  let startSingle = epochTime()
+  let startSingle = getMonoTime()
   main()
-  let stopSingle = epochTime()
-  let startBatch = epochTime()
+  let stopSingle = getMonoTime()
+  let startBatch = getMonoTime()
   mainBatch()
-  let stopBatch = epochTime()
+  let stopBatch = getMonoTime()
 
-  echo "Receive single time elapsed: ", stopSingle-startSingle, " seconds"
-  echo "Receive batch time elapsed: ", stopBatch-startBatch, " seconds"
+  let elapsedSingle = inMilliseconds(stopSingle - startSingle)
+  let throughputSingle = 15'f64 * (float64(NumVals) / float64 inMicroSeconds(stopSingle - startSingle))
+  let elapsedBatch = inMilliseconds(stopBatch - startBatch)
+  let throughputBatch = 15'f64 * (float64(NumVals) / float64 inMicroSeconds(stopBatch - startBatch))
+
+  echo &"Receive single - throughput {throughputSingle:>15.3f} items/µs - elapsed {elapsedSingle:>5} ms"
+  echo &"Receive batch  - throughput {throughputBatch:>15.3f} items/µs - elapsed {elapsedBatch:>5} ms"
