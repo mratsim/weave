@@ -37,12 +37,12 @@ the Nim and C++ versions are pixel equivalent.
   - `-03`
   - `-O3 -fopenmp`
 
-| Bench            | Nim         | Clang C++ | GCC C++     |
-|------------------|-------------|-----------|-------------|
+| Bench            |         Nim | Clang C++ |     GCC C++ |
+|------------------|------------:|----------:|------------:|
 | Single-threaded  | 4min43.369s | 4m51.052s | 4min50.934s |
-| Multithreaded    | 0min13.211s | 14.428s   | 2min14.616s |
-| Nested-parallel  | 0min12.981s |           |             |
-| Parallel speedup | 21.83x      | 20.17x    | 2.16x       |
+| Multithreaded    |     13.211s |   14.428s | 2min14.616s |
+| Nested-parallel  |     12.981s |           |             |
+| Parallel speedup |      21.83x |    20.17x |       2.16x |
 
 Single-threaded Nim is 2.7% faster than Clang C++
 Multithreaded Nim via Weave is 11.1% faster Clang C++
