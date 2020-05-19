@@ -65,6 +65,45 @@ A raytracing demo is available, head over to [demos/raytracing](demos/raytracing
 
 ![ray_trace_300samples_nim_threaded.png](demos/raytracing/ray_trace_300samples_nim_threaded.png)
 
+
+## Table of Contents
+
+- [Weave, a state-of-the-art multithreading runtime](#weave-a-state-of-the-art-multithreading-runtime)
+  - [Installation](#installation)
+  - [Changelog](#changelog)
+  - [Demos](#demos)
+  - [Table of Contents](#table-of-contents)
+  - [API](#api)
+    - [Task parallelism](#task-parallelism)
+    - [Data parallelism](#data-parallelism)
+      - [Strided loops](#strided-loops)
+    - [Complete list](#complete-list)
+      - [Root thread](#root-thread)
+      - [Weave worker thread](#weave-worker-thread)
+      - [Foreign thread & Background service (experimental)](#foreign-thread--background-service-experimental)
+  - [Platforms supported](#platforms-supported)
+    - [C++ compilation](#c-compilation)
+    - [Windows 32-bit](#windows-32-bit)
+    - [Resource-restricted devices](#resource-restricted-devices)
+  - [Backoff mechanism](#backoff-mechanism)
+    - [Weave using all CPUs](#weave-using-all-cpus)
+  - [Experimental features](#experimental-features)
+    - [Data parallelism (experimental features)](#data-parallelism-experimental-features)
+      - [Awaitable loop](#awaitable-loop)
+      - [Parallel For Staged](#parallel-for-staged)
+      - [Parallel Reduction](#parallel-reduction)
+    - [Dataflow parallelism](#dataflow-parallelism)
+      - [Delayed computation with single dependencies](#delayed-computation-with-single-dependencies)
+      - [Delayed computation with multiple dependencies](#delayed-computation-with-multiple-dependencies)
+      - [Delayed loop computation](#delayed-loop-computation)
+    - [Lazy Allocation of Flowvars](#lazy-allocation-of-flowvars)
+  - [Limitations](#limitations)
+  - [Statistics](#statistics)
+  - [Tuning](#tuning)
+  - [Unique features](#unique-features)
+  - [Research](#research)
+  - [License](#license)
+
 ## API
 
 ### Task parallelism
@@ -273,44 +312,6 @@ proc runInBackground*(
     exit(Weave)
   result.createThread(eventLoop, signalShutdown)
 ```
-
-## Table of Contents
-
-- [Weave, a state-of-the-art multithreading runtime](#weave-a-state-of-the-art-multithreading-runtime)
-  - [Installation](#installation)
-  - [Changelog](#changelog)
-  - [Demos](#demos)
-  - [API](#api)
-    - [Task parallelism](#task-parallelism)
-    - [Data parallelism](#data-parallelism)
-      - [Strided loops](#strided-loops)
-    - [Complete list](#complete-list)
-      - [Root thread](#root-thread)
-      - [Weave worker thread](#weave-worker-thread)
-      - [Foreign thread & Background service (experimental)](#foreign-thread--background-service-experimental)
-  - [Table of Contents](#table-of-contents)
-  - [Platforms supported](#platforms-supported)
-    - [C++ compilation](#c-compilation)
-    - [Windows 32-bit](#windows-32-bit)
-    - [Resource-restricted devices](#resource-restricted-devices)
-  - [Backoff mechanism](#backoff-mechanism)
-    - [Weave using all CPUs](#weave-using-all-cpus)
-  - [Experimental features](#experimental-features)
-    - [Data parallelism (experimental features)](#data-parallelism-experimental-features)
-      - [Awaitable loop](#awaitable-loop)
-      - [Parallel For Staged](#parallel-for-staged)
-      - [Parallel Reduction](#parallel-reduction)
-    - [Dataflow parallelism](#dataflow-parallelism)
-      - [Delayed computation with single dependencies](#delayed-computation-with-single-dependencies)
-      - [Delayed computation with multiple dependencies](#delayed-computation-with-multiple-dependencies)
-      - [Delayed loop computation](#delayed-loop-computation)
-    - [Lazy Allocation of Flowvars](#lazy-allocation-of-flowvars)
-  - [Limitations](#limitations)
-  - [Statistics](#statistics)
-  - [Tuning](#tuning)
-  - [Unique features](#unique-features)
-  - [Research](#research)
-  - [License](#license)
 
 ## Platforms supported
 
