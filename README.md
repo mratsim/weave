@@ -59,6 +59,12 @@ Weave requires at least Nim v1.2.0
 
 The latest changes are available in the ![changelog.md](changelog.md) file.
 
+## Demos
+
+A raytracing demo is available, head over to [demos/raytracing](demos/raytracing).
+
+![ray_trace_300samples_nim_threaded.png](ray_trace_300samples_nim_threaded.png)
+
 ## API
 
 ### Task parallelism
@@ -273,6 +279,7 @@ proc runInBackground*(
 - [Weave, a state-of-the-art multithreading runtime](#weave-a-state-of-the-art-multithreading-runtime)
   - [Installation](#installation)
   - [Changelog](#changelog)
+  - [Demos](#demos)
   - [API](#api)
     - [Task parallelism](#task-parallelism)
     - [Data parallelism](#data-parallelism)
