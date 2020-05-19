@@ -63,7 +63,7 @@ The latest changes are available in the ![changelog.md](changelog.md) file.
 
 A raytracing demo is available, head over to [demos/raytracing](demos/raytracing).
 
-![ray_trace_300samples_nim_threaded.png](ray_trace_300samples_nim_threaded.png)
+![ray_trace_300samples_nim_threaded.png](demos/raytracing/ray_trace_300samples_nim_threaded.png)
 
 ## API
 
