@@ -290,7 +290,7 @@ when compileOption("threads"):
 proc main() =
   const w = 1024
   const h = 768
-  var samples = 10
+  var samples = 1
   var outFile = "image.ppm"
   let exeName = getAppFilename().extractFilename()
   if paramCount() == 0:

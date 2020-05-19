@@ -55,6 +55,8 @@ task test, "Run Weave tests":
 
   test "-d:WV_LazyFlowvar", "tests/test_background_jobs.nim"
 
+  test "", "demos/raytracing/smallpt.nim"
+
   test "", "benchmarks/dfs/weave_dfs.nim"
   test "", "benchmarks/fibonacci/weave_fib.nim"
   test "", "benchmarks/heat/weave_heat.nim"
@@ -120,6 +122,8 @@ task test_gc_arc, "Run Weave tests with --gc:arc":
   test "--gc:arc -d:WV_LazyFlowvar", "weave/parallel_reduce.nim"
 
   test "--gc:arc -d:WV_LazyFlowvar", "tests/test_background_jobs.nim"
+
+  test "--gc:arc", "demos/raytracing/smallpt.nim"
 
   test "--gc:arc", "benchmarks/dfs/weave_dfs.nim"
   test "--gc:arc", "benchmarks/fibonacci/weave_fib.nim"
