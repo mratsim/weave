@@ -27,6 +27,9 @@ compared to the single-threaded or the single parallel-for versions.
 Note: except for the nested parallelism which has RNG issue,
 the Nim and C++ versions are pixel equivalent.
 
+CPU: i9-9980XE, 18 cores, overclocked at 4.1GHz all-core turbo (from 3.0 nominal)
+The code was compiled with default flag, hence x86-64, hence SSE2.
+
 - Nim devel (1.3.5 2020-05-16) + GCC v10.1.0
   - `nim c --threads:off -d:danger`
   - `nim c --threads:on -d:danger`
