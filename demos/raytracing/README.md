@@ -27,6 +27,8 @@ compared to the single-threaded or the single parallel-for versions.
 Note: except for the nested parallelism which has RNG issue,
 the Nim and C++ versions are pixel equivalent.
 
+### Setup
+
 CPU: i9-9980XE, 18 cores, overclocked at 4.1GHz all-core turbo (from 3.0 nominal)
 The code was compiled with default flag, hence x86-64, hence SSE2.
 
@@ -34,23 +36,62 @@ The code was compiled with default flag, hence x86-64, hence SSE2.
   - `nim c --threads:off -d:danger`
   - `nim c --threads:on -d:danger`
 - GCC v10.1.0
-  - `-03`
+  - `-O3`
+  - `-O3 -fopenmp`
+- GCC v8.4.0
+  - `-O3`
   - `-O3 -fopenmp`
 - Clang v10.0.0
-  - `-03`
+  - `-O3`
   - `-O3 -fopenmp`
 
-| Bench            |         Nim | Clang C++ |     GCC C++ |
-|------------------|------------:|----------:|------------:|
-| Single-threaded  | 4min43.369s | 4m51.052s | 4min50.934s |
-| Multithreaded    |     13.211s |   14.428s | 2min14.616s |
-| Nested-parallel  |     12.981s |           |             |
-| Parallel speedup |      21.83x |    20.17x |       2.16x |
+### Commands
 
-Single-threaded Nim is 2.7% faster than Clang C++
-Multithreaded Nim via Weave is 11.1% faster Clang C++
 
-Note: I only have 18 cores but we observe over 18x speedup
+```bash
+git clone https://github.com/mratsim/weave
+cd weave
+nimble install -y # install Weave dependencies, here synthesis, overwriting if asked.
+
+nim -v # Ensure you have nim 1.2.0 or more recent
+
+# Threads on (by default in this repo)
+nim c -d:danger -o:build/ray_threaded demos/raytracing/smallpt.nim
+
+# Threads off
+nim c -d:danger --threads:off -o:build/ray_single demos/raytracing/smallpt.nim
+
+g++ -O3 -o build/ray_gcc_single demos/raytracing/smallpt.cpp
+g++ -O3 -fopenmp -o build/ray_gcc_omp demos/raytracing/smallpt.cpp
+
+clang++ -O3 -o build/ray_clang_single demos/raytracing/smallpt.cpp
+clang++ -O3 -fopenmp -o build/ray_clang_single demos/raytracing/smallpt.cpp
+```
+
+### Results & Analysis
+
+GCC 10 has a significant OpenMP regression
+
+|      Bench       |     Nim     | Clang C++ OpenMP | GCC 10 C++ OpenMP | GCC 8 C++ OpenMP |
+| ---------------- | ----------: | ---------------: | ----------------: | ---------------: |
+| Single-threaded  | 4min43.369s |        4m51.052s |       4min50.934s |        4m50.648s |
+| Multithreaded    |     12.977s |          14.428s |       2min14.616s |          12.244s |
+| Nested-parallel  |     12.981s |                  |                   |                  |
+| Parallel speedup |      21.83x |           20.17x |             2.16x |           23.74x |
+
+Single-threaded Nim is 2.7% faster than Clang C++.
+Multithreaded Nim via Weave is 11.1% faster Clang C++.
+
+GCC 8 despite a simpler OpenMP design (usage of a global task queue instead of work-stealing)
+achieves a better speedup than both Weave and Clang.
+In that case, I expect it's because the tasks are so big that there is minimal contention
+on the task queue, furthermore the OpenMP schedule is "Dynamic" so we avoid the worst case scenario
+with static scheduling where a bunch of threads are assigned easy rays that never collide with a surface
+and a couple of threads are drowned in complex rays.
+
+I have absolutely no idea of what happened to OpenMP in GCC 10.
+
+Note: I only have 18 cores but we observe speedups in the 20x
 with Weave and LLVM. This is probably due to 2 factors:
 - Raytracing is pure compute, in particular contrary to high-performance computing
   and machine learning workloads which are also very memory-intensive (matrices and tensors with thousands to millions of elements)
@@ -65,7 +106,7 @@ with Weave and LLVM. This is probably due to 2 factors:
 
 ## License
 
-Kevin beason code is licensed under (mail redacted to avoid spam)
+Kevin Beason code is licensed under (mail redacted to avoid spam)
 
 ```
 LICENSE
