@@ -79,7 +79,7 @@ proc testVsReference*(M, N, K: int) =
 when isMainModule:
   randomize(42) # For reproducibility
 
-  const sizes = [2,3,9,37,129,700]
+  const sizes = [2,3,9,37,129,700] # TODO: random syncScope stalls in CI https://github.com/mratsim/weave/issues/149
 
   init(Weave)
   for M in sizes:
