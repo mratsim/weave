@@ -101,7 +101,15 @@ func intersect(r: Ray, t: var float64, id: var int32): bool =
       id = i.int32
   return t < inf
 
-proc erand48(xi: var array[3, cushort]): cdouble {.importc, header:"<stdlib.h>", sideeffect.} # Need the same RNG for comparison
+when defined(cpp):
+  # Seems like Nim codegen for mutable arrays is slightly different from the C++ API
+  # and needs a compatibility shim
+  proc erand48(xi: ptr cushort): cdouble {.importc, header:"<stdlib.h>", sideeffect.}
+  proc erand48(xi: var array[3, cushort]): float64 {.inline.} =
+    erand48(xi[0].addr)
+else:
+  # Need the same RNG for comparison
+  proc erand48(xi: var array[3, cushort]): cdouble {.importc, header:"<stdlib.h>", sideeffect.}
 
 proc radiance(r: Ray, depth: int32, xi: var array[3, cushort]): Vec =
   var t: float64                      # distance to intersection
