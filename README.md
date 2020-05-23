@@ -110,7 +110,7 @@ A raytracing demo is available, head over to [demos/raytracing](demos/raytracing
 
 Weave provides a simple API based on spawn/sync which works like async/await for IO-based futures.
 
-The traditional parallel recursive fibonacci would be written like this:
+The traditional parallel recursive Fibonacci would be written like this:
 ```Nim
 import weave
 
@@ -345,7 +345,7 @@ It can be disabled with `-d:WV_Backoff=off`.
 
 ### Weave using all CPUs
 
-Weave multithreading is cooperative, idle threads send steal requests instead of actively stealing in other workers queue. This is called "work-requesting" in the literatture as opposed to "work-stealing".
+Weave multithreading is cooperative, idle threads send steal requests instead of actively stealing in other workers queue. This is called "work-requesting" in the literature as opposed to "work-stealing".
 
 This means that a thread sleeping or stuck in a long computation may starve other threads and they will spin burning CPU cycles.
 
@@ -465,10 +465,10 @@ Or parallel reduce might be removed to only keep parallelForStaged.
 ### Dataflow parallelism
 
 Dataflow parallelism allows expressing fine-grained data dependencies between tasks.
-Concretly a task is delayed until all its dependencies are met and once met,
+Concretely a task is delayed until all its dependencies are met and once met,
 it is triggered immediately.
 
-This allows precising specification of data producer-consumer relationships.
+This allows precise specification of data producer-consumer relationships.
 
 In contrast, classic task parallelism can only express control-flow dependencies (i.e. parent-child function calls relationships) and classic tasks are eagerly scheduled.
 
@@ -628,7 +628,7 @@ This might improve with Nim ARC/newruntime.
 
 ## Statistics
 
-Curious minds can acces the low-level runtime statistic with the flag `-d:WV_metrics`
+Curious minds can access the low-level runtime statistic with the flag `-d:WV_metrics`
 which will give you the information on number of tasks executed, steal requests sent, etc.
 
 Very curious minds can also enable high resolution timers with `-d:WV_metrics -d:WV_profile -d:CpuFreqMhz=3000` assuming you have a 3GHz CPU.
