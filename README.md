@@ -269,7 +269,7 @@ and for shutdown
 Once setup, a foreign thread can submit jobs via:
 
 - `submit fnCall(args)` which submits a function to the Weave runtime and gives you an awaitable `Pending` handle.
-- `newFlowEvent`, `trigger` and `submitDelayed` (experimental) to delay a task until some dependencies are met. This allows expressing precise data dependencies and producer-consumer relationships.
+- `newFlowEvent`, `trigger`, `submitOnEvent` and `submitOnEvents` (experimental) to delay a task until some dependencies are met. This allows expressing precise data dependencies and producer-consumer relationships.
 - `waitFor(Pending)` which await a Pending job result and blocks the current thread
 - `isReady(Pending)` will check if `waitFor` will actually block or return the result immediately.
 - `isSubmitted(job)` allows you to build speculative algorithm where a job is submitted only if certain conditions are valid.

@@ -65,7 +65,15 @@ g++ -O3 -o build/ray_gcc_single demos/raytracing/smallpt.cpp
 g++ -O3 -fopenmp -o build/ray_gcc_omp demos/raytracing/smallpt.cpp
 
 clang++ -O3 -o build/ray_clang_single demos/raytracing/smallpt.cpp
-clang++ -O3 -fopenmp -o build/ray_clang_single demos/raytracing/smallpt.cpp
+clang++ -O3 -fopenmp -o build/ray_clang_omp demos/raytracing/smallpt.cpp
+```
+
+Then run for 300 samples with
+
+```
+build/ray_threaded 300
+# ...
+build/ray_clang_omp 300
 ```
 
 ### Results & Analysis
