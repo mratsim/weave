@@ -129,6 +129,7 @@ proc setupWorker*() =
   postCondition: myWorker().workSharingRequests.isEmpty()
   postCondition: not ctx.signaledTerminate
   postCondition: not myWorker().isWaiting
+  postCondition: localThreadKind == WorkerThread
 
   # Thread-Local Profiling
   # -----------------------------------------------------------

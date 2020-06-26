@@ -313,11 +313,13 @@ proc distributeWork*(req: sink StealRequest, workSharing: bool): bool =
     var firstJob, lastJob: Job
     let count = managerJobQueue.tryRecvBatch(firstJob, lastJob)
     if count != 0:
-      myWorker().deque.addListFirst(
-        cast[Task](firstJob),
-        cast[Task](lastJob),
-        count
-      )
+      # TODO: https://github.com/mratsim/weave/issues/155
+      # myWorker().deque.addListFirst(
+      #   cast[Task](firstJob),
+      #   cast[Task](lastJob),
+      #   count
+      # )
+      myWorker().deque.addListFirst(cast[Task](lastJob))
       req.dispatchElseDecline()
       return true
 

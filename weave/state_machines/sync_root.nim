@@ -49,7 +49,7 @@ setPrologue(syncRootFSA):
   Worker: return
   debugTermination:
     log(">>> Worker %2d enters barrier <<<\n", myID())
-  preCondition: myTask().isRootTask()
+  preCondition: onWeaveThread() and myTask().isRootTask()
 
   debug: log("Worker %2d: syncRoot 1 - task from local deque\n", myID())
   var task: Task

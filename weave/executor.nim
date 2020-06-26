@@ -96,6 +96,10 @@ proc processAllandTryPark*(_: typedesc[Weave]) =
   ## This `syncRoot` then put the Weave runtime to sleep
   ## if no job submission was received concurrently
   ##
+  ## This is only valid on Weave root thread.
+  ## Note that if you use `runInBackground`
+  ## this is what the background manager thread does automaticallu
+  ##
   ## This should be used if Weave root thread (that called init(Weave))
   ## is on a dedicated long-running thread
   ## in an event loop:
@@ -104,6 +108,7 @@ proc processAllandTryPark*(_: typedesc[Weave]) =
   ##   park(Weave)
   ##
   ## New job submissions will automatically wakeup the runtime
+  preCondition: onWeaveThread() and myTask().isRootTask()
 
   manager.jobNotifier[].prepareToPark()
   syncRoot(Weave)
@@ -148,8 +153,8 @@ proc runInBackground*(
     init(Weave)
     Weave.runUntil(shutdown)
     exit(Weave)
-  {.gcsafe.}: # Workaround regression - https://github.com/nim-lang/Nim/issues/14370
-    thr.createThread(eventLoop, signalShutdown)
+
+  thr.createThread(eventLoop, signalShutdown)
 
 proc runInBackground*(thr: var Thread[void], _: typedesc[Weave])  =
   ## Start the Weave runtime on a background thread.
@@ -159,6 +164,7 @@ proc runInBackground*(thr: var Thread[void], _: typedesc[Weave])  =
   proc eventLoop() {.thread.} =
     init(Weave)
     Weave.runForever()
+
   thr.createThread(eventLoop)
 
 proc submitJob*(job: sink Job) =
