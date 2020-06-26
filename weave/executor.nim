@@ -163,7 +163,6 @@ proc runInBackground*(thr: var Thread[void], _: typedesc[Weave])  =
   ## and spin down when there is no work anymore.
   proc eventLoop() {.thread.} =
     init(Weave)
-    echo myWorker()
     Weave.runForever()
 
   thr.createThread(eventLoop)
