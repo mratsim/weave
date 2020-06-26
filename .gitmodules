@@ -16,3 +16,6 @@
 [submodule "benchmarks/vendor/mkl-dnn"]
 	path = benchmarks/vendor/mkl-dnn
 	url = https://github.com/intel/mkl-dnn
+[submodule "thread_collider/greenlet"]
+	path = thread_collider/greenlet
+	url = https://github.com/treeform/greenlet
