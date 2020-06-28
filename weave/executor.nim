@@ -42,7 +42,7 @@
 # The ManagerContext can be extended further to support distributed computing
 # with Weave instances on muliple nodes of a cluster.
 # The manager thread can become a dedicated separate thread
-# if communication costs and jobs latnecy are high enough to justify it in the future.
+# if communication costs and jobs latency are high enough to justify it in the future.
 
 import
   # Standard library
@@ -76,7 +76,7 @@ proc setupSubmitterThread*(_: typedesc[Weave]) =
   ## to it instead of mixing
   ## logic or IO and Weave on the main thread.
   ##
-  ## This will block until Weave is ready to accet jobs
+  ## This will block until Weave is ready to access jobs
   preCondition: localThreadKind == Unknown
 
   jobProviderContext.mempool = wv_alloc(TLPoolAllocator)
@@ -98,7 +98,7 @@ proc processAllandTryPark*(_: typedesc[Weave]) =
   ##
   ## This is only valid on Weave root thread.
   ## Note that if you use `runInBackground`
-  ## this is what the background manager thread does automaticallu
+  ## this is what the background manager thread does automatically
   ##
   ## This should be used if Weave root thread (that called init(Weave))
   ## is on a dedicated long-running thread
