@@ -173,8 +173,8 @@ proc worker_entry_fn*(id: WorkerID) =
   setupWorker()
 
   # Unstealable user-definable procedure to be executed on all threads
-  if not globalCtx.auxiliaryInit.isNil:
-    globalCtx.auxiliaryInit()
+  {.gcsafe.}:
+    if not globalCtx.auxiliaryInit.isNil: globalCtx.auxiliaryInit[]()
 
   discard globalCtx.barrier.wait()
 
@@ -187,8 +187,8 @@ proc worker_entry_fn*(id: WorkerID) =
   workerMetrics()
 
   # Same as auxiliaryInit, but for cleanup
-  if not globalCtx.auxiliaryExit.isNil:
-    globalCtx.auxiliaryExit()
+  {.gcsafe.}:
+    if not globalCtx.auxiliaryExit.isNil: globalCtx.auxiliaryExit[]()
 
   teardownWorker()
   postCondition: localThreadKind == Unknown

@@ -29,7 +29,7 @@ else:
 # Runtime public routines
 # ----------------------------------------------------------------------------------
 
-proc init*(_: type Weave, auxiliary: proc() = nil) =
+proc init*(_: type Weave, auxiliary: proc() {.gcsafe.} = nil) =
   # TODO detect Hyper-Threading and NUMA domain
   manager.acceptsJobs.store(false, moRelaxed)
 
@@ -43,7 +43,7 @@ proc init*(_: type Weave, auxiliary: proc() = nil) =
     workforce() = int32 countProcessors()
 
   ## Allocation of the global context.
-  globalCtx.auxiliaryInit = auxiliary
+  globalCtx.auxiliaryInit = unsafeAddr auxiliary
   globalCtx.mempools = wv_alloc(TLPoolAllocator, workforce())
   globalCtx.threadpool = wv_alloc(Thread[WorkerID], workforce())
   globalCtx.com.tasksStolen = wv_alloc(Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]], workforce())
@@ -168,8 +168,8 @@ proc globalCleanup() =
   metrics:
     log("+========================================+\n")
 
-proc exit*(_: type Weave, auxiliary: proc() = nil) =
-  globalCtx.auxiliaryExit = auxiliary
+proc exit*(_: type Weave, auxiliary: proc() {.gcsafe.} = nil) =
+  globalCtx.auxiliaryExit = unsafeAddr auxiliary
   syncRoot(_)
   signalTerminate(nil)
   workerContext.signaledTerminate = true
