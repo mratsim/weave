@@ -55,7 +55,6 @@ task test, "Run Weave tests":
   test "-d:WV_LazyFlowvar", "weave/parallel_reduce.nim"
 
   test "-d:WV_LazyFlowvar", "tests/test_background_jobs.nim"
-  test "-d:WV_LazyFlowvar", "tests/test_background_jobs.nim"
 
   when not defined(windows): # Does not support erand48
     test "", "demos/raytracing/smallpt.nim"
