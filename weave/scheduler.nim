@@ -171,6 +171,11 @@ proc worker_entry_fn*(id: WorkerID) =
   myID() = id # If this crashes, you need --tlsemulation:off
   myMemPool().initialize()
   setupWorker()
+
+  # Unstealable user-definable procedure to be executed on all threads
+  if not globalCtx.auxiliaryInit.isNil:
+    globalCtx.auxiliaryInit()
+
   discard globalCtx.barrier.wait()
 
   eventLoop()
@@ -180,6 +185,10 @@ proc worker_entry_fn*(id: WorkerID) =
 
   # 1 matching barrier in init(Runtime) for lead thread
   workerMetrics()
+
+  # Same as auxiliaryInit, but for cleanup
+  if not globalCtx.auxiliaryExit.isNil:
+    globalCtx.auxiliaryExit()
 
   teardownWorker()
   postCondition: localThreadKind == Unknown
