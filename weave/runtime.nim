@@ -68,7 +68,7 @@ proc init*(_: type Weave, auxiliary: AuxiliaryProc = WV_NoAuxiliary) =
 
   # Create workforce() - 1 worker threads
   for i in 1 ..< workforce():
-    {.gcsafe.}: # Workaround regression - https://github.com/nim-lang/Nim/issues/1437
+    {.gcsafe.}: # Workaround regression - https://github.com/nim-lang/Nim/issues/14370
       createThread(globalCtx.threadpool[i], worker_entry_fn, WorkerID(i))
     # TODO: we might want to take into account Hyper-Threading (HT)
     #       and allow spawning tasks and pinning to cores that are not HT-siblings.
