@@ -50,7 +50,7 @@ type
     barrier*: SyncBarrier
       ## Barrier for initialization and teardown
     manager*: ManagerContext
-    auxiliaryInit*, auxiliaryExit*: ptr proc() {.gcsafe.}
+    auxiliaryInit*, auxiliaryExit*: proc() {.nimcall, gcsafe.}
 
   ManagerContext* = object
     ## Manager context

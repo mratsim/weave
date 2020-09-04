@@ -29,7 +29,10 @@ else:
 # Runtime public routines
 # ----------------------------------------------------------------------------------
 
-proc init*(_: type Weave, auxiliary: proc() {.gcsafe.} = nil) =
+type AuxiliaryProc* = proc() {.nimcall, gcsafe.} | proc() {.cdecl, gcsafe.}
+const WV_NoAuxiliary: proc() {.nimcall, gcsafe.} = nil # for type resolution
+
+proc init*(_: type Weave, auxiliary: AuxiliaryProc = WV_NoAuxiliary) =
   # TODO detect Hyper-Threading and NUMA domain
   manager.acceptsJobs.store(false, moRelaxed)
 
@@ -42,8 +45,12 @@ proc init*(_: type Weave, auxiliary: proc() {.gcsafe.} = nil) =
   else:
     workforce() = int32 countProcessors()
 
+  when auxiliary is proc() {.cdecl, gcsafe.}:
+    globalCtx.auxiliaryInit = proc() {.nimcall, gcsafe.} = auxiliary
+  else:
+    globalCtx.auxiliaryInit = auxiliary
+
   ## Allocation of the global context.
-  globalCtx.auxiliaryInit = unsafeAddr auxiliary
   globalCtx.mempools = wv_alloc(TLPoolAllocator, workforce())
   globalCtx.threadpool = wv_alloc(Thread[WorkerID], workforce())
   globalCtx.com.tasksStolen = wv_alloc(Persistack[WV_MaxConcurrentStealPerWorker, ChannelSpscSinglePtr[Task]], workforce())
@@ -61,7 +68,7 @@ proc init*(_: type Weave, auxiliary: proc() {.gcsafe.} = nil) =
 
   # Create workforce() - 1 worker threads
   for i in 1 ..< workforce():
-    {.gcsafe.}: # Workaround regression - https://github.com/nim-lang/Nim/issues/14370
+    {.gcsafe.}: # Workaround regression - https://github.com/nim-lang/Nim/issues/1437i
       createThread(globalCtx.threadpool[i], worker_entry_fn, WorkerID(i))
     # TODO: we might want to take into account Hyper-Threading (HT)
     #       and allow spawning tasks and pinning to cores that are not HT-siblings.
@@ -168,8 +175,12 @@ proc globalCleanup() =
   metrics:
     log("+========================================+\n")
 
-proc exit*(_: type Weave, auxiliary: proc() {.gcsafe.} = nil) =
-  globalCtx.auxiliaryExit = unsafeAddr auxiliary
+proc exit*(_: type Weave, auxiliary: AuxiliaryProc = WV_NoAuxiliary) =
+  when auxiliary is proc() {.cdecl, gcsafe.}:
+    globalCtx.auxiliaryExit = proc() {.nimcall, gcsafe.} = auxiliary
+  else:
+    globalCtx.auxiliaryExit = auxiliary
+
   syncRoot(_)
   signalTerminate(nil)
   workerContext.signaledTerminate = true
