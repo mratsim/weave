@@ -47,6 +47,7 @@ task test, "Run Weave tests":
   test "", "weave/parallel_reduce.nim"
 
   test "--debugger:native", "tests/test_background_jobs.nim"
+  test "--debugger:native", "tests/test_auxiliary_procs.nim"
 
   test "-d:WV_LazyFlowvar", "weave/parallel_tasks.nim"
   test "-d:WV_LazyFlowvar", "weave/parallel_for.nim"
@@ -117,6 +118,7 @@ task test_gc_arc, "Run Weave tests with --gc:arc":
   test "--gc:arc", "weave/parallel_reduce.nim"
 
   test "--gc:arc", "tests/test_background_jobs.nim"
+  test "--gc:arc", "tests/test_auxiliary_procs.nim"
 
   test "--gc:arc -d:WV_LazyFlowvar", "weave/parallel_tasks.nim"
   test "--gc:arc -d:WV_LazyFlowvar", "weave/parallel_for.nim"

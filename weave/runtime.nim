@@ -29,7 +29,10 @@ else:
 # Runtime public routines
 # ----------------------------------------------------------------------------------
 
-proc init*(_: type Weave) =
+type AuxiliaryProc* = proc() {.nimcall, gcsafe.} | proc() {.cdecl, gcsafe.}
+const WV_NoAuxiliary: proc() {.nimcall, gcsafe.} = nil # for type resolution
+
+proc init*(_: type Weave, auxiliary: AuxiliaryProc = WV_NoAuxiliary) =
   # TODO detect Hyper-Threading and NUMA domain
   manager.acceptsJobs.store(false, moRelaxed)
 
@@ -41,6 +44,11 @@ proc init*(_: type Weave) =
       echo "WEAVE_NUM_THREADS truncated to ", WV_MaxWorkers, " (WV_MaxWorkers)"
   else:
     workforce() = int32 countProcessors()
+
+  when auxiliary is proc() {.cdecl, gcsafe.}:
+    globalCtx.auxiliaryInit = proc() {.nimcall, gcsafe.} = auxiliary
+  else:
+    globalCtx.auxiliaryInit = auxiliary
 
   ## Allocation of the global context.
   globalCtx.mempools = wv_alloc(TLPoolAllocator, workforce())
@@ -167,7 +175,12 @@ proc globalCleanup() =
   metrics:
     log("+========================================+\n")
 
-proc exit*(_: type Weave) =
+proc exit*(_: type Weave, auxiliary: AuxiliaryProc = WV_NoAuxiliary) =
+  when auxiliary is proc() {.cdecl, gcsafe.}:
+    globalCtx.auxiliaryExit = proc() {.nimcall, gcsafe.} = auxiliary
+  else:
+    globalCtx.auxiliaryExit = auxiliary
+
   syncRoot(_)
   signalTerminate(nil)
   workerContext.signaledTerminate = true
