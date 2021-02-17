@@ -2,7 +2,7 @@
 
 version       = "0.4.9"
 author        = "Mamy André-Ratsimbazafy"
-description   = "a state-of-the-art ùultithreading runtime"
+description   = "a state-of-the-art multithreading runtime"
 license       = "MIT or Apache License 2.0"
 
 # Dependencies
