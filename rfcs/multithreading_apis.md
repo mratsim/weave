@@ -1,6 +1,6 @@
 ---
 rfc: -1
-title: Executors, multithreading, channels APIs
+title: Executors, task parallelism, channels APIs
 author: Mamy André-Ratsimbazafy (@mratsim)
 type: Library interoperability standard
 category: Multithreading
@@ -9,7 +9,7 @@ created: YYYY-MM-DD
 license: CC0 1.0 Universal
 ---
 
-# Executors, multithreading, channels APIs
+# Executors, task parallelism, channels APIs
 
 ## Abstract
 
@@ -21,7 +21,7 @@ This document:
 
 ## Table of Contents
 
-- [Executors, multithreading, channels APIs](#executors-multithreading-channels-apis)
+- [Executors, task parallelism, channels APIs](#executors-task-parallelism-channels-apis)
   - [Abstract](#abstract)
   - [Table of Contents](#table-of-contents)
   - [Introduction](#introduction)
@@ -41,8 +41,8 @@ This document:
   - [Task Parallelism API](#task-parallelism-api)
     - [Creating a task](#creating-a-task)
       - [`spawn`: scheduling left to the executor [REQUIRED]](#spawn-scheduling-left-to-the-executor-required)
-        - [Local executor](#local-executor)
-        - [Global executor](#global-executor)
+        - [Local executor API](#local-executor-api)
+        - [Global executor API](#global-executor-api)
         - [Future handle](#future-handle)
         - [Scheduling](#scheduling)
     - [Awaiting a future [REQUIRED]](#awaiting-a-future-required)
@@ -54,11 +54,17 @@ This document:
     - [Error handling](#error-handling)
     - [Thread-local variables](#thread-local-variables)
     - [Cancellation](#cancellation)
-  - [Experimental Task Parallelism API](#experimental-task-parallelism-api)
-    - [Creating a task](#creating-a-task-1)
-      - [`submit`: scheduling MUST NOT block the submitter thread [Experimental]](#submit-scheduling-must-not-block-the-submitter-thread-experimental)
-  - [Channels](#channels-1)
+  - [Buffered channels](#buffered-channels)
+    - [Non-blocking send [REQUIRED]](#non-blocking-send-required)
+    - [Non-blocking receive [REQUIRED]](#non-blocking-receive-required)
+    - [Blocking send [OPTIONAL]](#blocking-send-optional)
+    - [Blocking receive [OPTIONAL]](#blocking-receive-optional)
+    - [Batched operations [OPTIONAL]](#batched-operations-optional)
+    - [Element count [OPTIONAL]](#element-count-optional)
   - [Non-goals](#non-goals)
+    - [Experimental non-blocking Task Parallelism API](#experimental-non-blocking-task-parallelism-api)
+      - [Creating a task](#creating-a-task-1)
+        - [`submit`: scheduling MUST NOT block the submitter thread [Experimental]](#submit-scheduling-must-not-block-the-submitter-thread-experimental)
     - [Definitions](#definitions-1)
     - [Non-goals not covered](#non-goals-not-covered)
   - [References](#references)
@@ -132,6 +138,7 @@ A channel can come in many flavors:
   - no guarantees
   - serializability
   - linearizability
+- Buffered or unbuffered (rendez-vous)
 
 Note: not using locks does not imply that a channel is lockfree.
 `lockfree` is a progress guarantee, even without locks an implementation can block.
@@ -257,7 +264,10 @@ The API intentionally mirrors async/await without reusing the names to different
 
 #### `spawn`: scheduling left to the executor [REQUIRED]
 
-##### Local executor
+A task-parallel executor MUST implement either the local executor or the global executor API.
+It MAY implement both.
+
+##### Local executor API
 
 A new task MUST be created on a specific executor with a template or macro with the following signature
 
@@ -274,7 +284,7 @@ For example
 let fut = pool.spawn myFunc(a, b, c)
 ```
 
-##### Global executor
+##### Global executor API
 
 A new task MUST be created on a global executor with a template or macro with the following signature
 
@@ -321,6 +331,10 @@ At a `spawn` statement, the threadpool implementation may choose to have the cur
 Scheduling is done eagerly, there is no abstract computation graph being built that is launched at a later point in time.
 
 ### Awaiting a future [REQUIRED]
+
+The operation to await a task-parallel future is called `sync`.
+This leaves `await` open for async libraries and framework.
+It is also the usual name used in multithreading framework, going back to Cilk (1995).
 
 #### Awaiting a single future [REQUIRED]
 
@@ -385,14 +399,16 @@ proc isReady(fv: Flowvar): bool
 
 The `Flowvar` MUST be associated with a spawned task.
 
-This allows users to know if the current thread would block or not.
+This allows users to know if the current thread would block or not when calling `sync` on A Flowvar.
 
 ### Error handling
 
 Procs that are spawned MUST NOT throw an exception. They MAY throw `Defect` which would end the program.
-Exceptions must be trapped by `try/except` blocks and converted to another form of error handling such as status codes, error codes or `Result[T, E]` type.
+Exceptions MUST be trapped by `try/except` blocks and converted to another form of error handling such as status codes, error codes or `Result[T, E]` type.
 
 Threadpool and task parallelism libraries SHOULD document that constraint to end users and SHOULD enforce tht constraint with the effect system.
+
+Note: even assuming C++ exceptions, or exceptions that don't use the heap or a GC without thread-local heap, exceptions work by unwinding the stack. As each thread has its own stack, you cannot catch exceptions thrown in a thread in another.
 
 ### Thread-local variables
 
@@ -403,20 +419,164 @@ Threadpool and task parallelism libraries SHOULD document that constraint to end
 
 ### Cancellation
 
-This RFC does not require cancellation primitives.
+This RFC does not require cancellation primitives so that the caller can cancel the callee.
 
 Rationales:
 - no CPU-bound workflow expect cancellations.
-- without premptive multitasking, which can only be implemented in a kernel, an hardware thread cannot be suspended without cooperation.
+- without premptive multitasking, which can only be implemented in a kernel, a hardware thread cannot be suspended without cooperation.
 
 Alternative:
 - A cancellable computation should have a "cancellation token" parameter which would be a channel that would be checked at predetermined points in the computation.
 
-## Experimental Task Parallelism API
+## Buffered channels
 
-### Creating a task
+Channels are a basic inter-thread communication primitive.
+This specifies buffered channels, i.e. channels that can hold at least one item.
 
-#### `submit`: scheduling MUST NOT block the submitter thread [Experimental]
+Unbuffered channels, also called rendez-vous channels, are unspecified.
+
+The channel flavors should be communicated clearly in-particular:
+- whether it's single or multi producer and consumer.
+  - A single-producer single-consumer channel is called SPSC
+  - A multi-producer single-consumer channel is called MPSC
+  - A single-producer multi-consumer channel is called SPMC
+  - A multi-producer multi-consumer channel is called MPMC
+
+  There are 2 kinds of SPMC queues:
+  - a broadcast queue which duplicates all message enqueued to all consumers.
+  - a "racing" queue that gives the message to the first consumer to request it.
+
+  For channels we only specify the "racing" type, a broadcasting channel can be implemented on top of SPSC channels.
+- whether its bounded or unbounded
+  - The behavior (errors, blocks or overwrites oldest) if bound is reached
+- the progress guarantees
+  - no guarantees
+  - obstruction-free
+  - lock-free
+  - wait-free
+- the item ordering guarantees:
+  - no guarantees
+  - serializability
+  - linearizability
+- whether the channel is intrusive (requires a `next: Atomic[T]` with T a `ptr object`) or not
+
+### Non-blocking send [REQUIRED]
+
+```
+func trySend*[T](chan: var Chan, src: sink Isolated[T]): bool =
+  ## Try sending an item into the channel
+  ## Returns true if successful (channel had enough free slots)
+  ##
+  ## ⚠ Use only in the producer thread that writes from the channel.
+```
+### Non-blocking receive [REQUIRED]
+
+```
+proc tryRecv[T](chan: var Chan, dst: var Isolated[T]): bool =
+  ## Try receiving the next item buffered in the channel
+  ## returns true if an item was found and moved to `dst`
+  ##
+  ## ⚠ Use only in a consumer thread that reads from the channel.
+```
+### Blocking send [OPTIONAL]
+
+```
+func send*[T](chan: var Chan, src: sink Isolated[T]): bool =
+  ## Send an item into the channel
+  ## (Blocks/Overwrites oldest) if channel if full
+  ## Returns true if the channel was full and mitigation strategy was needed.
+  ##
+  ## ⚠ Use only in the producer thread that writes from the channel.
+```
+
+Blocking send still returns a bool for backpressure management.
+If blocking or overwriting the oldest is chosen, sending is always successful if the function returns.
+### Blocking receive [OPTIONAL]
+
+```
+proc recv[T](chan: var Chan, dst: var Isolated[T]): bool =
+  ## Receive the next item buffered in the channel
+  ## Blocks and returns true if no item is present
+  ## Returns the item immediately and returns false if no blocking was needed.
+  ##
+  ## ⚠ Use only in a consumer thread that reads from the channel.
+```
+
+Blocking receive still returns a bool for backpressure management.
+
+### Batched operations [OPTIONAL]
+
+We define batch operations for list-based channels.
+
+```Nim
+proc trySendBatch[T](chan: var Chan, bFirst, bLast: sink Isolated[T], count: SomeInteger): bool =
+  ## Send a linked list of items to the back of the channel
+  ## They should be linked together by their next field.
+  ## `count` refer to the number of items in the list.
+  ## Returns true if successful (channel had enough free slots)
+
+proc tryRecvBatch[T](chan: var Chan, bFirst, bLast: var Isolated[T]): int =
+  ## Try receiving all items buffered in the channel
+  ## Returns true if at least some items are dequeued.
+  ## There might be competition with producers for the last item
+  ##
+  ## Items are returned as a linked list
+  ## Returns the number of items received
+  ##
+  ## If no items are returned bFirst and bLast are undefined
+  ## and should not be used.
+  ##
+  ## The `next` field in `bLast` is undefined.
+  ## nil or overwrite it for further use in linked lists
+```
+
+Working with integers in a synchronization primitive like channel MUST NOT throw an exception.
+
+### Element count [OPTIONAL]
+
+Channels MAY keep track of the elements enqueued or dequeued.
+In that case they MAY provide an approximate count of items with `peek`.
+
+Working with integers in a synchronization primitive like channel MUST NOT throw an exception.
+
+`peek` MUST NOT block the caller.
+Due to the non-deterministic nature of multithreading, even if a channel is locked to get the exact count, it would become an approximation as soon as the channel is unlocked.
+
+If called on a channel with a single consumer, from the consumer thread, the approximation is a lower bound as producers can enqueue items concurrently.
+If called on a channel with a single producer, from the producer thread, the approximation is a lower bound as consumers can dequeue items concurrently.
+If called on a channel with multiple producers, from a producer thread, no conclusion is possible as other producers enqueues items and the consumer(s) thread dequeue(s) them concurrently.
+Similarly on a channel with multiple consumers, from a consumer thread.
+
+API + documentation on a MPSC channel.
+
+```Nim
+func peek*(chan: var Chan): int =
+  ## Estimates the number of items pending in the channel
+  ## - If called by the consumer the true number might be more
+  ##   due to producers adding items concurrently.
+  ## - If called by a producer the true number is undefined
+  ##   as other producers also add items concurrently and
+  ##   the consumer removes them concurrently.
+  ##
+  ## This is a non-locking operation.
+```
+
+## Non-goals
+### Experimental non-blocking Task Parallelism API
+
+In the proposed API, the scheduler may have the spawning thread participate in clearing the work queue(s)
+at `sync` statements.
+If the spawning thread is handling network or UI event this is would block network or UI handling,
+in that case it is desirable to ensure that the work cannot happen in the spawning thread.
+This proposes `submit`, `Job`, `Pending` that mirror `spawn`, `Task`, `Flowvar`.
+
+It is left unspecified for now as given the competing latency (IO schedulers) vs throughput (CPU schedulers) requirements, there might be no use case for `submit` that isn't better covered by allowing multiple specialized schedulers in a program.
+
+Alternatively, the application could be separated in an UI/networking thread and a heavy processing thread with the heavy processing thread managing a threadpool.
+
+#### Creating a task
+
+##### `submit`: scheduling MUST NOT block the submitter thread [Experimental]
 
 `submit` is a tentative alternative to `spawn` that guarantees execution on a different thread.
 Similar to `spawn` the API would be:
@@ -427,25 +587,17 @@ macro submit(procCall: typed{nkCall | nkCommand}): Pending or void
   ## Global submit
 ```
 
-It is left unspecified for now as given the competing latency (IO schedulers) vs throughput (CPU schedulers) requirements, there might be no use case for `submit` that isn't better covered by allowing multiple specialized schedulers in a program.
-
 `submit`, `Job`, `runInBackground(Weave)` and `setupSubmitterThread(Weave)` were added to Weave following
 - https://github.com/mratsim/weave/issues/132
 - https://github.com/mratsim/weave/pull/136
 to improve interoperability with async event loops by allowing a thread to submit `Job` to an executor
 while guaranteeing that execution always happens in a different thread from the async thread.
 
-## Channels
-
-TODO
-
-## Non-goals
-
 ### Definitions
 
 ### Non-goals not covered
 
-- Common closure, continuation and/or task type might
+- Common closure, continuation and/or task type
 - Structured parallelism
 - OpenMP
 - Services & producer-consumer architecture
@@ -453,9 +605,9 @@ TODO
 - Data parallelism
 - Dataflow parallelism
 - Async/await
+- Async Channels
 - Closures, Continuations & Tasks
 - Distributed computing
-
 ## References
 
 - Project Picasso
