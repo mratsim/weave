@@ -641,12 +641,12 @@ However it does not specify them.
 
 - **Data parallelism**\
   While task parallelism is the ability to run different tasks in parallel,
-  data parallelism is the ability to run the same task, but parallelizing at the data level,
+  [data parallelism](https://en.wikipedia.org/wiki/Data_parallelism) is the ability to run the same task, but parallelizing at the data level,
   for exemple dividing an array of size N so that each core receives an equal share of work.
   This is often presented as a parallel for loop.
 
 - **Dataflow parallelism**\
-  Dataflow parallelism is the ability to specify task or data dependencies and schedule the resulting computation graph in parallel.
+  [Dataflow parallelism](https://en.wikipedia.org/wiki/Dataflow) is the ability to specify task or data dependencies and schedule the resulting computation graph in parallel.
   Dataflow parallelism APIs present themselves under either:
   - an explicit graph builder with "precedes" and "succeeds" functions.
   - events associated with tasks and triggered or fired by other tasks.
@@ -660,6 +660,15 @@ However it does not specify them.
   - Graph parallelism
   - Data-driven task parallelism
 
+- **Communicating Sequential Processes**\
+  [CSP](https://en.wikipedia.org/wiki/Communicating_sequential_processes) is a model of computation based on message passing via rendez-vous channels (both sender and receiver must be available at the same time). CSP is a model that can be formally verified to be free of deadlocks and livelocks and so is suitable for safety-critical systems.
+  CSP uses named explicit channels for message passing that trigger anonymous behaviours.
+
+- **Actors**\
+  [Actors](https://en.wikipedia.org/wiki/Actor_model)
+  is a model of computation based on the actor primitive, a process with a set of behaviours and an inbox.
+  The actor model uses named behaviors that are passing messages via anonymous channels.
+
 ### Non-goals not covered in this specification
 
 - Closures, Continuations & Tasks
@@ -670,3 +679,5 @@ However it does not specify them.
 - Async/await interaction
 - Distributed computing
 - Spawning anonymous functions
+- Communicating Sequential Processes (Named channels + anonymous functions)
+- Actors (Named functions + anonymous channels)
