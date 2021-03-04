@@ -67,7 +67,6 @@ This document:
         - [`submit`: scheduling MUST NOT block the submitter thread [Experimental]](#submit-scheduling-must-not-block-the-submitter-thread-experimental)
     - [Definitions](#definitions-1)
     - [Non-goals not covered](#non-goals-not-covered)
-  - [References](#references)
 
 ## Introduction
 
@@ -595,21 +594,67 @@ while guaranteeing that execution always happens in a different thread from the 
 
 ### Definitions
 
+This section gives a definition of other terms related to multithreading and async so that there is common vocabulary within the Nim community to talk about those concepts.
+
+However it does not specify them.
+
+- **resumable functions**
+  Traditional functions have two effects on control flow:
+  1. On function call, suspend the caller, jump into the function body and run it.
+  2. On reaching "return", terminate the callee, resume the caller.
+
+  Resumable functions adds the following 2 key capabilities:
+  3. The callee can suspend itself, returning control to "something".
+  4. The current owner (not always the initial caller) of the function can suspend itself and resume the continuation (aka the unexecuted "rest of the function").
+
+- **coroutines**
+  Resumable functions are called coroutines if the continuation (aka the unexecuted "rest of the function") can only be called once and it is delimited in scope (we exit the function at the end and return control to the caller). "Coroutines are one-shot delimited continuations".
+  Coroutines that uses the stack of their caller (like a normal function) are called stackless coroutines.
+  As a reminder fibers (stackful coroutines or green threads) allocate some memory and move the stack pointer to it (with assembly) just like hardware thread.
+  **Closure iterators** are stackless coroutines.
+  Note: stackful vs stackless is about the function call stack (stacktraces) nor about stack vs heap allocation of the coroutine state.
+
+- **CPU-bound vs IO-bound tasks**:
+  See https://nim-lang.org/blog/2021/02/26/multithreading-flavors.html
+
+- **Latency**:
+  The time required to wait to receive the result of 1 unit of work.
+  Latency is often important for IO and most important for real-time.
+  A single client/consumer of a service only cares about its latency
+
+- **Throughput**
+  The time required to expedite all units of work.
+  Throughput is often important for CPU-bound tasks where all work need to be expedited,
+  and the order it is done is inconsequential, for example for batch transforming 1000 images,
+  it doesn't matter whether we start from the first or the last as long as all are done as fast as possible.
+
+- **Data parallelism**
+  While task parallelism is the ability to run different tasks in parallel,
+  data parallelism is the ability to run the same task, but parallelizing at the data level,
+  for exemple dividing an array of size N so that each core receives an equal share of work.
+  This is often presented as a parallel for loop.
+
+- **Dataflow parallelism**
+  Dataflow parallelism is the ability to specify task or data dependencies and schedule the resulting computation graph in parallel.
+  Dataflow parallelism is presented under either:
+  - building an explicit graph
+  - using events associated with tasks and triggered by other tasks
+  - declarative "in", "out", "depends", "inout" annotations
+  Dataflow parallelism is used to model complex pipelined computations, for example video processing
+  where certain areas of the video might be less complex and so, in that area, later steps of processing can start earlier.
+  Dataflow parallelism is also called:
+  - Stream parallelism
+  - Pipeline parallelism
+  - Graph parallelism
+  - Data-driven task parallelism
+
 ### Non-goals not covered
 
-- Common closure, continuation and/or task type
-- Structured parallelism
+- Closures, Continuations & Tasks
 - OpenMP
 - Services & producer-consumer architecture
-- Cancellation
 - Data parallelism
 - Dataflow parallelism
-- Async/await
-- Async Channels
-- Closures, Continuations & Tasks
+- Async/await interaction
 - Distributed computing
-## References
-
-- Project Picasso
-- Next steps for CPS
-- Completing the Async-Await
+- Spawning anonymous functions
