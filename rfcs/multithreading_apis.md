@@ -25,7 +25,7 @@ This document:
   - [Abstract](#abstract)
   - [Table of Contents](#table-of-contents)
   - [Introduction](#introduction)
-  - [Requirements Notation](#requirements-notation)
+  - [Requirements notation](#requirements-notation)
   - [Definitions](#definitions)
     - [Channels](#channels)
     - [Closures](#closures)
@@ -54,6 +54,8 @@ This document:
     - [Error handling](#error-handling)
     - [Thread-local variables](#thread-local-variables)
     - [Cancellation](#cancellation)
+      - [Caller -> Callee](#caller---callee)
+      - [Callee -> Caller](#callee---caller)
   - [Buffered channels](#buffered-channels)
     - [Non-blocking send [REQUIRED]](#non-blocking-send-required)
     - [Non-blocking receive [REQUIRED]](#non-blocking-receive-required)
@@ -66,7 +68,7 @@ This document:
       - [Creating a task](#creating-a-task-1)
         - [`submit`: scheduling MUST NOT block the submitter thread [Experimental]](#submit-scheduling-must-not-block-the-submitter-thread-experimental)
     - [Definitions](#definitions-1)
-    - [Non-goals not covered](#non-goals-not-covered)
+    - [Non-goals not covered in this specification](#non-goals-not-covered-in-this-specification)
 
 ## Introduction
 
@@ -103,9 +105,9 @@ Multithreading is a very large subject that cannot be covered in a single specif
 
 While channels and task parallelism API are presented in the specification document, they MAY be implemented in different libraries.
 
-## Requirements Notation
+## Requirements notation
 
-The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in the Internet Engineering Task Force (IETF) [BCP14](https://tools.ietf.org/html/bcp14) [RFC2119](https://tools.ietf.org/html/rfc2119) [RFC8174](https://tools.ietf.org/html/rfc8174) when, and only when, they appear in all capitals, as shown here.
+The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY", and "OPTIONAL" in this document are to be interpreted as described in the Internet Engineering Task Force (IETF) [BCP14](https://tools.ietf.org/html/bcp14), [RFC2119](https://tools.ietf.org/html/rfc2119), [RFC8174](https://tools.ietf.org/html/rfc8174) when, and only when, they appear in all capitals, as shown here.
 
 ## Definitions
 
@@ -145,8 +147,11 @@ We call such channels `lockless`. It is worth noting that usually the stronger t
 
 For reference types, a channel transfers ownership of the reference.
 A channel MUST NOT copy, this is required for both correctness and performance.
+In terms of distributed systems, we require that shared-memory channels achieve **exactly-once delivery**.
+This ensures that producer and consumer can rely on the message being sent and received.
+It also prevents side-effect being executed twice if a message is duplicated for example sending "launch missiles!".
 
-Shared ownership requires ensuring that the shared object is not freed twice and not freed before its last users.
+A channel is shared by at least 2 threads. Shared ownership requires ensuring that the shared object is not freed twice and not freed before its last users.
 - One solution requires manually managed `ptr object` and ensuring that the thread that will free the shared object awaits all child tasks.
 - Another solution requires wrapping the type in an atomic reference-counted pointer. Its implementation is left as an exercise to the reader.
 
@@ -266,6 +271,8 @@ The API intentionally mirrors async/await without reusing the names to different
 A task-parallel executor MUST implement either the local executor or the global executor API.
 It MAY implement both.
 
+`spawn` eagerly adds the task to the executor for execution as soon as an execution resource is available. Scheduling is not delayed until a graph of tasks is built (see dataflow parallelism in [Non-goals](#non-goals)).
+
 ##### Local executor API
 
 A new task MUST be created on a specific executor with a template or macro with the following signature
@@ -323,7 +330,7 @@ If the future of a void procedure is needed, the end user SHOULD wrap that funct
 ##### Scheduling
 
 `spawn` is a hint to the executor that processing MAY happen in parallel.
-The executor is free to schedule the code on a different thread or not depending on hardware resources, current load and other factors.
+The executor is free to schedule the task on a different thread or not depending on hardware resources, current load and other factors.
 
 At a `spawn` statement, the threadpool implementation may choose to have the current thread execute the child task (continuation-stealing) or the continuation (child-stealing).
 
@@ -344,11 +351,10 @@ proc sync(fv: sink FlowVar[T]): T
   ## Global spawn
 ```
 
-The `Flowvar` MUST be associated with a spawned task.
-
 A `Flowvar` can only by synced once, hence the return value within the `FlowVar[T]` can be moved.
+Assuming the task completes this ensure **exactly-once** delivery for Flowvars.
 
-A `Flowvar` MUST NOT be copied, only moved. This SHOULD be enforced by overloading `=copy`
+A `Flowvar` MUST NOT be copied, only moved. This SHOULD be enforced by overloading `=copy`.
 
 ```Nim
 proc `=copy`(dst: var FlowVar[T], src: FlowVar[T]) {.error: "A FlowVar cannot be copied".}
@@ -356,7 +362,7 @@ proc `=copy`(dst: var FlowVar[T], src: FlowVar[T]) {.error: "A FlowVar cannot be
 
 If a `Flowvar` is created and awaited within the same procedure, the `Flowvar` MAY use heap allocation elision as an optimization to reduce heap allocation.
 
-At a `sync` statement, the current thread SHOULD participate in running the executor tasks. The current thread MAY choose to only take tasks that the awaited `Flowvar` depends on.
+At a `sync` statement, the current thread SHOULD participate in running the executor tasks. The current thread MAY choose to only process tasks that the awaited `Flowvar` depends on to optimize latency.
 
 #### Awaiting multiple futures [UNSPECIFIED]
 
@@ -405,7 +411,7 @@ This allows users to know if the current thread would block or not when calling 
 Procs that are spawned MUST NOT throw an exception. They MAY throw `Defect` which would end the program.
 Exceptions MUST be trapped by `try/except` blocks and converted to another form of error handling such as status codes, error codes or `Result[T, E]` type.
 
-Threadpool and task parallelism libraries SHOULD document that constraint to end users and SHOULD enforce tht constraint with the effect system.
+Threadpool and task parallelism libraries SHOULD document that constraint to end users and SHOULD enforce that constraint with the effect system.
 
 Note: even assuming C++ exceptions, or exceptions that don't use the heap or a GC without thread-local heap, exceptions work by unwinding the stack. As each thread has its own stack, you cannot catch exceptions thrown in a thread in another.
 
@@ -418,6 +424,8 @@ Threadpool and task parallelism libraries SHOULD document that constraint to end
 
 ### Cancellation
 
+#### Caller -> Callee
+
 This RFC does not require cancellation primitives so that the caller can cancel the callee.
 
 Rationales:
@@ -427,6 +435,9 @@ Rationales:
 Alternative:
 - A cancellable computation should have a "cancellation token" parameter which would be a channel that would be checked at predetermined points in the computation.
 
+#### Callee -> Caller
+
+The callee can notify the caller that it was cancelled with boolean, enums or Result[T, E]
 ## Buffered channels
 
 Channels are a basic inter-thread communication primitive.
@@ -529,7 +540,7 @@ proc tryRecvBatch[T](chan: var Chan, bFirst, bLast: var Isolated[T]): int =
   ## nil or overwrite it for further use in linked lists
 ```
 
-Working with integers in a synchronization primitive like channel MUST NOT throw an exception.
+Working with integers in a synchronization primitive like channels MUST NOT throw an exception.
 
 ### Elements count [OPTIONAL]
 
@@ -598,7 +609,7 @@ This section gives a definition of other terms related to multithreading and asy
 
 However it does not specify them.
 
-- **resumable functions**
+- **resumable functions**\
   Traditional functions have two effects on control flow:
   1. On function call, suspend the caller, jump into the function body and run it.
   2. On reaching "return", terminate the callee, resume the caller.
@@ -607,39 +618,40 @@ However it does not specify them.
   3. The callee can suspend itself, returning control to "something".
   4. The current owner (not always the initial caller) of the function can suspend itself and resume the continuation (aka the unexecuted "rest of the function").
 
-- **coroutines**
+- **coroutines**\
   Resumable functions are called coroutines if the continuation (aka the unexecuted "rest of the function") can only be called once and it is delimited in scope (we exit the function at the end and return control to the caller). "Coroutines are one-shot delimited continuations".
   Coroutines that uses the stack of their caller (like a normal function) are called stackless coroutines.
   As a reminder fibers (stackful coroutines or green threads) allocate some memory and move the stack pointer to it (with assembly) just like hardware thread.
   **Closure iterators** are stackless coroutines.
   Note: stackful vs stackless is about the function call stack (stacktraces) nor about stack vs heap allocation of the coroutine state.
 
-- **CPU-bound vs IO-bound tasks**:
+- **CPU-bound vs IO-bound tasks**:\
   See https://nim-lang.org/blog/2021/02/26/multithreading-flavors.html
 
-- **Latency**:
+- **Latency**:\
   The time required to wait to receive the result of 1 unit of work.
   Latency is often important for IO and most important for real-time.
   A single client/consumer of a service only cares about its latency
 
-- **Throughput**
+- **Throughput**\
   The time required to expedite all units of work.
   Throughput is often important for CPU-bound tasks where all work need to be expedited,
   and the order it is done is inconsequential, for example for batch transforming 1000 images,
   it doesn't matter whether we start from the first or the last as long as all are done as fast as possible.
 
-- **Data parallelism**
+- **Data parallelism**\
   While task parallelism is the ability to run different tasks in parallel,
   data parallelism is the ability to run the same task, but parallelizing at the data level,
   for exemple dividing an array of size N so that each core receives an equal share of work.
   This is often presented as a parallel for loop.
 
-- **Dataflow parallelism**
+- **Dataflow parallelism**\
   Dataflow parallelism is the ability to specify task or data dependencies and schedule the resulting computation graph in parallel.
-  Dataflow parallelism is presented under either:
-  - building an explicit graph
-  - using events associated with tasks and triggered by other tasks
+  Dataflow parallelism APIs present themselves under either:
+  - an explicit graph builder with "precedes" and "succeeds" functions.
+  - events associated with tasks and triggered or fired by other tasks.
   - declarative "in", "out", "depends", "inout" annotations
+
   Dataflow parallelism is used to model complex pipelined computations, for example video processing
   where certain areas of the video might be less complex and so, in that area, later steps of processing can start earlier.
   Dataflow parallelism is also called:
@@ -648,7 +660,7 @@ However it does not specify them.
   - Graph parallelism
   - Data-driven task parallelism
 
-### Non-goals not covered
+### Non-goals not covered in this specification
 
 - Closures, Continuations & Tasks
 - OpenMP
