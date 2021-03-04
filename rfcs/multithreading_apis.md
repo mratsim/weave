@@ -15,9 +15,9 @@ license: CC0 1.0 Universal
 
 This document:
 - introduces common vocabulary related to multithreading, managing tasks and execution resources.
-- defines an API for fork-join parallelism. Threadpools and parallelism libraries SHOULD implement this API.
+- defines an API for task parallelism via the fork-join model. Threadpools and parallelism libraries SHOULD implement this API.
 - defines an API for inter-thread communication via channels.
-  Channels library SHOULD implement this API.
+  Channels libraries SHOULD implement this API.
 
 ## Table of Contents
 
@@ -60,7 +60,7 @@ This document:
     - [Blocking send [OPTIONAL]](#blocking-send-optional)
     - [Blocking receive [OPTIONAL]](#blocking-receive-optional)
     - [Batched operations [OPTIONAL]](#batched-operations-optional)
-    - [Element count [OPTIONAL]](#element-count-optional)
+    - [Elements count [OPTIONAL]](#elements-count-optional)
   - [Non-goals](#non-goals)
     - [Experimental non-blocking Task Parallelism API](#experimental-non-blocking-task-parallelism-api)
       - [Creating a task](#creating-a-task-1)
@@ -81,10 +81,10 @@ Since then, few projects actually used channels or threadpools in part due to:
 
 With the progress of core low-level primitives and compiler guarantees, Nim foundations are becoming solid enough to build an ergonomic and safe multithreading ecosystem.
 
-This document specifies the multithreading interfaces related to channels and threadpools so that they can be evolved or replaced with principled foundations.
-This document is interested in the public user API and does not specify the underlying implementation.
-This document does not require compiler support. Primitives can be implemented as a library.
-This document also defines related multithreaded concepts that may be implemented in some libraries without specifying them. The interface is left open until more feedback is gathered.
+This document specifies the multithreading interfaces related to channels and threadpools so that they can be evolved or replaced with principled foundations.\
+This document is interested in the public user API and does not specify the underlying implementation.\
+This document does not require compiler support. Primitives can be implemented as a library.\
+This document also defines related multithreaded concepts that may be implemented in some libraries without specifying them. The interface is left open until more feedback is gathered.\
 This document is written under the assumptions that there is no one-size-fits-all and that projects may want to use multiple threadpools, executors or schedulers within the same application or library. Furthermore, libraries may offer to support multiple parallelism backends and as a project evolves dedicated specialized threadpools may be written that are tuned to specific workloads.
 
 The core primitives mentioned that facilitate multithreading are:
@@ -531,7 +531,7 @@ proc tryRecvBatch[T](chan: var Chan, bFirst, bLast: var Isolated[T]): int =
 
 Working with integers in a synchronization primitive like channel MUST NOT throw an exception.
 
-### Element count [OPTIONAL]
+### Elements count [OPTIONAL]
 
 Channels MAY keep track of the elements enqueued or dequeued.
 In that case they MAY provide an approximate count of items with `peek`.
