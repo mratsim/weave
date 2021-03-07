@@ -35,9 +35,11 @@ proc cpu_set(cpu: cint, cpuset: var CpuSet) {.importc: "CPU_SET", header: "<sche
 # Nim doesn't allow the main thread to set its own affinity
 
 proc set_thread_affinity(t: Pthread, cpu: int32) {.inline.}=
-  when defined(osx):
+  when defined(osx) or defined(android):
     {.warning: "To improve performance we should pin threads to cores.\n" &
-                "This is not possible with MacOS.".}
+                "This is not possible with MacOS or Android.".}
+    # Note: on Android it's even more complex due to the Big.Little architecture
+    #       with cores with different performance profiles to save on battery
   else:
     var cpuset {.noinit.}: CpuSet
 
