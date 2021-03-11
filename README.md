@@ -378,7 +378,7 @@ This blocks the thread that spawned the parallel loop from continuing until the 
 Calling `sync` on the awaitable loop Flowvar will return `true` for the last thread to exit the loop and `false` for the others.
 - Due to dynamic load-balancing, an unknown amount of threads will execute the loop.
 - It's the thread that spawned the loop task that will always be the last thread to exit.
-  The `false` value is only internal to `Weave`
+  The `false` value is only internal to `Weave`.
 
 > ⚠️ This is not a barrier: if that loop spawns tasks (including via a nested loop) and exits, the thread will continue, it will not wait for the grandchildren tasks to be finished. Use a `syncScope` section to wait on all tasks and descendants including grandchildren.
 
@@ -407,8 +407,10 @@ A parallel sum would look like this:
 ```Nim
 proc sumReduce(n: int): int =
   let res = result.addr # For mutation we need to capture the address.
+
   parallelForStaged i in 0 .. n:
     captures: {res}
+    awaitable: iLoop
     prologue:
       var localSum = 0
     loop:
@@ -417,7 +419,7 @@ proc sumReduce(n: int): int =
       echo "Thread ", getThreadID(Weave), ": localsum = ", localSum
       res[].atomicInc(localSum)
 
-  sync(Weave)
+  let wasLastThread = sync(iLoop)
 
 init(Weave)
 let sum1M = sumReduce(1000000)

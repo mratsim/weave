@@ -472,7 +472,7 @@ The channel flavors should be communicated clearly in-particular:
 
 ### Non-blocking send [REQUIRED]
 
-```
+```Nim
 func trySend*[T](chan: var Chan, src: sink Isolated[T]): bool =
   ## Try sending an item into the channel
   ## Returns true if successful (channel had enough free slots)
@@ -481,7 +481,7 @@ func trySend*[T](chan: var Chan, src: sink Isolated[T]): bool =
 ```
 ### Non-blocking receive [REQUIRED]
 
-```
+```Nim
 proc tryRecv[T](chan: var Chan, dst: var Isolated[T]): bool =
   ## Try receiving the next item buffered in the channel
   ## returns true if an item was found and moved to `dst`
@@ -490,7 +490,7 @@ proc tryRecv[T](chan: var Chan, dst: var Isolated[T]): bool =
 ```
 ### Blocking send [OPTIONAL]
 
-```
+```Nim
 func send*[T](chan: var Chan, src: sink Isolated[T]): bool =
   ## Send an item into the channel
   ## (Blocks/Overwrites oldest) if channel if full
@@ -503,7 +503,7 @@ Blocking send still returns a bool for backpressure management.
 If blocking or overwriting the oldest is chosen, sending is always successful if the function returns.
 ### Blocking receive [OPTIONAL]
 
-```
+```Nim
 proc recv[T](chan: var Chan, dst: var Isolated[T]): bool =
   ## Receive the next item buffered in the channel
   ## Blocks and returns true if no item is present

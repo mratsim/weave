@@ -240,7 +240,7 @@ proc generateHistogramWeaveStaged[T](matrix: Matrix[T], hist: Histogram): T =
       lockAddr[].release()
       wv_free(threadHist.buffer)
 
-  sync(histoLoop)
+  let waslastThread = sync(histoLoop)
   lock.deinitLock()
   return max
 
