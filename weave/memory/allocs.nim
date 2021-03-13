@@ -99,7 +99,8 @@ template alloca*(T: typedesc, len: Natural): ptr UncheckedArray[T] =
   cast[ptr UncheckedArray[T]](alloca(sizeof(T) * len))
 
 when defined(windows):
-  proc aligned_alloc(alignment, size: csize_t): pointer {.sideeffect,importc:"_aligned_malloc", header:"<malloc.h>".}
+  proc aligned_alloc_windows(size, alignment: csize_t): pointer {.sideeffect,importc:"_aligned_malloc", header:"<malloc.h>".}
+    # Beware of the arg order!
   proc wv_freeAligned*[T](p: ptr T){.sideeffect,importc:"_aligned_free", header:"<malloc.h>".}
 elif defined(osx):
   proc posix_memalign(mem: var pointer, alignment, size: csize_t){.sideeffect,importc, header:"<stdlib.h>".}
@@ -119,4 +120,8 @@ proc wv_allocAligned*(T: typedesc, alignment: static Natural): ptr T {.inline.} 
   let # TODO - cannot use a const due to https://github.com/nim-lang/Nim/issues/12726
     size = sizeof(T)
     requiredMem = size.roundNextMultipleOf(alignment)
-  cast[ptr T](aligned_alloc(csize_t alignment, csize_t requiredMem))
+
+  when defined(windows):
+    cast[ptr T](aligned_alloc(csize_t requiredMem, csize_t alignment))
+  else:
+    cast[ptr T](aligned_alloc(csize_t alignment, csize_t requiredMem))
