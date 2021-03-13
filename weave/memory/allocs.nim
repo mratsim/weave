@@ -122,6 +122,6 @@ proc wv_allocAligned*(T: typedesc, alignment: static Natural): ptr T {.inline.} 
     requiredMem = size.roundNextMultipleOf(alignment)
 
   when defined(windows):
-    cast[ptr T](aligned_alloc(csize_t requiredMem, csize_t alignment))
+    cast[ptr T](aligned_alloc_windows(csize_t requiredMem, csize_t alignment))
   else:
     cast[ptr T](aligned_alloc(csize_t alignment, csize_t requiredMem))
