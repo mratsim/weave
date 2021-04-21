@@ -183,7 +183,7 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
   # as iterations cannot be scheduled at the same type
   # It also cannot be awaited with regular sync.
 
-  when (NimMajor, NimMinor) >= (1, 5):
+  when (NimMajor, NimMinor) >= (1, 5): # see https://github.com/nim-lang/Nim/pull/13793
     if dependsOnEvent.kind == nnkTupleConstr and dependsOnEvent[1].eqIdent(idx):
       return parallelForSplitted(idx, start, stop, stride, captured, capturedTy, dependsOnEvent, body)
   else:
