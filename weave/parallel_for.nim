@@ -183,8 +183,12 @@ macro parallelForImpl(loopParams: untyped, stride: int, body: untyped): untyped 
   # as iterations cannot be scheduled at the same type
   # It also cannot be awaited with regular sync.
 
-  if dependsOnEvent.kind == nnkTupleConstr and dependsOnEvent[1].eqIdent(idx):
-    return parallelForSplitted(idx, start, stop, stride, captured, capturedTy, dependsOnEvent, body)
+  when (NimMajor, NimMinor) >= (1, 5):
+    if dependsOnEvent.kind == nnkTupleConstr and dependsOnEvent[1].eqIdent(idx):
+      return parallelForSplitted(idx, start, stop, stride, captured, capturedTy, dependsOnEvent, body)
+  else:
+    if dependsOnEvent.kind == nnkPar and dependsOnEvent[1].eqIdent(idx):
+      return parallelForSplitted(idx, start, stop, stride, captured, capturedTy, dependsOnEvent, body)
 
   # Package the body in a proc
   # --------------------------------------------------------
