@@ -1,4 +1,4 @@
-# Travis config for Synthesis
+# Travis config for Weave
 language: c
 
 cache:
@@ -90,7 +90,7 @@ install:
     if [ ! -x "nim-${CHANNEL}/bin/nim" ]; then
       git clone -b "${BRANCH}" https://github.com/nim-lang/nim "nim-${CHANNEL}/"
       pushd "nim-${CHANNEL}"
-      git clone --depth 1 https://github.com/nim-lang/csources csources/
+      git clone --depth 1 https://github.com/nim-lang/csources_v1 csources/
       pushd csources
       sh build.sh
       popd
