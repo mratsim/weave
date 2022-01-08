@@ -244,7 +244,7 @@ proc gemm_strided_nestable*[T: SomeNumber](
       apply(ukernel)
 
   when defined(i386) or defined(amd64):
-    # disable avx512: ref https://github.com/mratsim/Arraymancer/pull/542/files
+    # disable avx512: ref https://github.com/mratsim/Arraymancer/pull/542
     when T is float32:
       # if hasAvx512f():   dispatch(x86_AVX512)
       if hasFma3():   dispatch(x86_AVX_FMA)
