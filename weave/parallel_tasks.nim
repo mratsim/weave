@@ -259,7 +259,7 @@ when isMainModule:
 
   block: # Async/Await
 
-    proc async_fib(n: int): int =
+    proc async_fib(n: int): int {.gcsafe.} =
 
       if n < 2:
         return n
