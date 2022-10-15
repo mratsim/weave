@@ -131,7 +131,7 @@ var
   odd: Matrix[float64]
   even: Matrix[float64]
 
-proc heat(m: Matrix[float64], il, iu: int32): bool {.discardable.}=
+proc heat(m: Matrix[float64], il, iu: int32): bool {.discardable, gcsafe.}=
   # TODO to allow awaiting `heat` we return a dummy bool
   # The parallel spawns are updating the same matrix cells otherwise
   if iu - il > 1:
@@ -158,7 +158,7 @@ proc heat(m: Matrix[float64], il, iu: int32): bool {.discardable.}=
       row[j] = f(xu + i*dx, yu + j*dy)
     row[ny - 1] = randb(xu + i*dx, 0)
 
-proc diffuse(output: Matrix[float64], input: Matrix[float64], il, iu: int32, t: float64): bool {.discardable.} =
+proc diffuse(output: Matrix[float64], input: Matrix[float64], il, iu: int32, t: float64): bool {.discardable, gcsafe.} =
   # TODO to allow awaiting `diffuse` we return a dummy bool
   # The parallel spawns are updating the same matrix cells otherwise
   if iu - il > 1:

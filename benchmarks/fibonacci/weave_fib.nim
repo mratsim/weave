@@ -8,7 +8,7 @@ when not defined(windows):
   # bench
   import ../wtime, ../resources
 
-proc fib(n: int): int =
+proc fib(n: int): int {.gcsafe.} =
   # int64 on x86-64
   if n < 2:
     return n

@@ -14,7 +14,7 @@ when not defined(windows):
   # bench
   import ../wtime
 
-proc dfs(depth, breadth: int): uint32 =
+proc dfs(depth, breadth: int): uint32 {.gcsafe.} =
   if depth == 0:
     return 1
 
