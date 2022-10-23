@@ -110,7 +110,7 @@ proc nqueens_ser(n, j: int32, a: CharArray): int32 =
     if isValid(j+1, a):
       result += nqueens_ser(n, j+1, a)
 
-proc nqueens_par(n, j: int32, a: CharArray): int32 =
+proc nqueens_par(n, j: int32, a: CharArray): int32 {.gcsafe.} =
 
   if n == j:
     # Good solution, count it
