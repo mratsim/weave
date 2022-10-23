@@ -14,6 +14,8 @@ import
 
 {.push gcsafe.}
 
+const WV_UseLazyFlowvar* = defined(WV_LazyFlowvar) and sizeof(pointer) == 8
+
 type
   LazyChannel* {.union.} = object
     chan*: ptr ChannelSPSCSingle
@@ -44,7 +46,7 @@ type
     #       but we now carry the type size in the task.
     #       Also a side benefit is LazyFlowvar for FlowvarNode requires 3 allocations,
     #       while eager requires 2.
-    when defined(WV_LazyFlowvar):
+    when WV_UseLazyFlowvar:
       lfv*: ptr LazyFlowVar # usually alloca allocated
     else:
       chan: ptr ChannelSPSCSingle
@@ -57,7 +59,7 @@ type
     # TODO: Can we avoid the 3 allocations for lazy flowvars?
 
     next*: FlowvarNode
-    when defined(WV_LazyFlowvar):
+    when WV_UseLazyFlowvar:
       lfv*: ptr LazyFlowVar
     else:
       chan*: ptr ChannelSPSCSingle
@@ -67,7 +69,7 @@ func isSpawned*(fv: Flowvar): bool {.inline.} =
   ## This may be useful for recursive algorithms that
   ## may or may not spawn a flowvar depending on a condition.
   ## This is similar to Option or Maybe types
-  when defined(WV_LazyFlowVar):
+  when WV_UseLazyFlowvar:
     return not fv.lfv.isNil
   else:
     return not fv.chan.isNil
