@@ -124,11 +124,11 @@ template StealAdaptative*(body: untyped): untyped =
     body
 
 template LazyFV*(body: untyped): untyped =
-  when defined(WV_LazyFlowvar):
+  when defined(WV_LazyFlowvar) and sizeof(pointer) == 8:
     body
 
 template EagerFV*(body: untyped): untyped =
-  when not defined(WV_LazyFlowvar):
+  when not defined(WV_LazyFlowvar) or sizeof(pointer) != 8:
     body
 
 template Backoff*(body: untyped): untyped =
