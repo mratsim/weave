@@ -13,11 +13,7 @@ jobs:
             cpu: amd64
           - os: linux
             cpu: i386
-          - os: linux
-            cpu: amd64
           - os: windows
-            cpu: amd64
-          - os: macos
             cpu: amd64
           - os: macos
             cpu: amd64
