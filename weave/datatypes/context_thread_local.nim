@@ -96,7 +96,7 @@ type
       stealHalf*: int
       shareOne*: int
       shareHalf*: int
-    when WV_UseLazyFlowvar:
+    when defined(WV_LazyFlowvar) and sizeof(pointer) == 8: # cicular dependency if checking WV_UseLazyFlowvar
       futuresConverted*: int
 
   JobProviderContext* = object
