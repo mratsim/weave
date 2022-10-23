@@ -777,7 +777,7 @@ when isMainModule:
           createShared(ValObj)
         else:
           # workaround sizeof atomics
-          assert sizeof(ValObj) == 16
+          assert sizeof(ValObj) == 2*sizeof(int)
           cast[Val](pool[].borrow0(array[16, byte]))
 
       template valFree(kind: static AllocKind, val: Val) =

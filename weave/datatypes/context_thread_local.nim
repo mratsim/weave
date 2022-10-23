@@ -96,7 +96,7 @@ type
       stealHalf*: int
       shareOne*: int
       shareHalf*: int
-    when defined(WV_LazyFlowvar):
+    when WV_UseLazyFlowvar:
       futuresConverted*: int
 
   JobProviderContext* = object
