@@ -14,8 +14,6 @@ import
 
 {.push gcsafe.}
 
-const WV_UseLazyFlowvar* = defined(WV_LazyFlowvar) and sizeof(pointer) == 8
-
 type
   LazyChannel* {.union.} = object
     chan*: ptr ChannelSPSCSingle

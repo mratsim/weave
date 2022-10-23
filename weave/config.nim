@@ -91,6 +91,8 @@ const
   SplitStrategy* = parseEnum[SplitKind](WV_Split)
   FirstVictim* = parseEnum[VictimSelection](WV_Target)
 
+const WV_UseLazyFlowvar* = defined(WV_LazyFlowvar) and sizeof(pointer) == 8
+
 # Static scopes
 # ----------------------------------------------------------------------------------
 
