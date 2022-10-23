@@ -91,6 +91,8 @@ const
   SplitStrategy* = parseEnum[SplitKind](WV_Split)
   FirstVictim* = parseEnum[VictimSelection](WV_Target)
 
+const WV_UseLazyFlowvar* = defined(WV_LazyFlowvar) and sizeof(pointer) == 8
+
 # Static scopes
 # ----------------------------------------------------------------------------------
 
@@ -124,11 +126,11 @@ template StealAdaptative*(body: untyped): untyped =
     body
 
 template LazyFV*(body: untyped): untyped =
-  when defined(WV_LazyFlowvar):
+  when WV_UseLazyFlowvar:
     body
 
 template EagerFV*(body: untyped): untyped =
-  when not defined(WV_LazyFlowvar):
+  when not WV_UseLazyFlowvar:
     body
 
 template Backoff*(body: untyped): untyped =

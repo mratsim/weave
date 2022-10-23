@@ -239,10 +239,10 @@ when isMainModule:
       syncRoot(Weave)
 
     init(Weave)
-    let sum1M = sumReduce(1000000)
-    echo "syncRoot - Sum reduce(0..1000000): ", sum1M
+    let sum10k = sumReduce(10000)
+    echo "syncRoot - Sum reduce(0..10000): ", sum10k
     echo "\n====================================================\n"
-    doAssert sum1M == 500_000_500_000
+    doAssert sum10k == 50_005_000
     exit(Weave)
 
   block: # Awaitable version
@@ -264,7 +264,7 @@ when isMainModule:
       discard sync(paraSum)
 
     init(Weave)
-    let sum1M = sumReduce(1000000)
-    echo "awaitable loop - Sum reduce(0..1000000): ", sum1M
-    doAssert sum1M == 500_000_500_000
+    let sum10k = sumReduce(10000)
+    echo "awaitable loop - Sum reduce(0..10000): ", sum10k
+    doAssert sum10k == 50_005_000
     exit(Weave)

@@ -59,7 +59,8 @@ task test, "Run Weave tests":
   # Anti-regression
   test "", "tests/t180.nim"
 
-  when not defined(windows): # Does not support erand48
+  when not defined(windows) and # Does not support erand48
+       sizeof(pointer) == 8:    # assumes 64-bit
     test "", "demos/raytracing/smallpt.nim"
 
   test "", "benchmarks/dfs/weave_dfs.nim"

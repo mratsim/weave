@@ -235,16 +235,16 @@ when isMainModule:
   import ./runtime, ./state_machines/sync_root, ./state_machines/sync
 
   block:
-    proc sumReduce(n: int): int =
-      var waitableSum: Flowvar[int]
+    proc sumReduce(n: int): int64 =
+      var waitableSum: Flowvar[int64]
 
       # expandMacros:
       parallelReduceImpl i in 0 .. n, stride = 1:
         reduce(waitableSum):
           prologue:
-            var localSum = 0
+            var localSum = 0'i64
           fold:
-            localSum += i
+            localSum += int64(i)
           merge(remoteSum):
             localSum += sync(remoteSum)
           return localSum
@@ -254,5 +254,5 @@ when isMainModule:
     init(Weave)
     let sum1M = sumReduce(1000000)
     echo "Sum reduce(0..1000000): ", sum1M
-    doAssert sum1M == 500_000_500_000
+    doAssert sum1M == 500_000_500_000'i64
     exit(Weave)
