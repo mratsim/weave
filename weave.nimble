@@ -56,6 +56,9 @@ task test, "Run Weave tests":
 
   test "-d:WV_LazyFlowvar", "tests/test_background_jobs.nim"
 
+  # Anti-regression
+  test "", "tests/t180.nim"
+
   when not defined(windows) and # Does not support erand48
        sizeof(pointer) == 8:    # assumes 64-bit
     test "", "demos/raytracing/smallpt.nim"
