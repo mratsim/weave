@@ -41,19 +41,15 @@ elif (defined(gcc) or defined(clang) or defined(llvm_gcc)) and
     # Thread-Local-Storage register on x86 is in the FS or GS register
     # see: https://akkadia.org/drepper/tls.pdf
     when defined(i386):
-      asm """
-        "movl %%gs:0, %0":"=r"(`result`)::"""
-    elif defined(osx):
-      asm """
-        "movq %%gs:0, %0":"=r"(`result`)::"""
+      asm """ "movl %%gs:0, %0":"=r"(`result`):: """
+    elif defined(amd64) and defined(osx):
+      asm """ "movq %%gs:0, %0":"=r"(`result`):: """
     elif defined(amd64):
-      asm """
-        "movq %%fs:0, %0":"=r"(`result`)::"""
+      asm """ "movq %%fs:0, %0":"=r"(`result`):: """
     elif defined(arm):
-      {.emit: ["""asm volatile(
-        "mrc p15, 0, %0, c13, c0, 3"
-        :"=r"(""", result, """)
-      );"""].}
+      {.emit: ["""asm volatile("mrc p15, 0, %0, c13, c0, 3":"=r"(""", result, "));"].}
+    elif defined(arm64) and defined(osx):
+      {.emit: ["""asm volatile("mrs %0, tpidrro_el0 \n bic %0, %0, #7":"=r"(""",result,"));"].}
     elif defined(arm64):
       {.emit: ["""asm volatile("mrs %0, tpidr_el0":"=r"(""",result,"));"].}
     else:
