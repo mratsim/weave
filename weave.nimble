@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.4.9"
+version       = "0.4.10"
 author        = "Mamy André-Ratsimbazafy"
 description   = "a state-of-the-art multithreading runtime"
 license       = "MIT or Apache License 2.0"
@@ -99,6 +99,7 @@ task test, "Run Weave tests":
         test "-d:danger", "benchmarks/matmul_gemm_blas/test_gemm_output.nim"
 
 task test_gc_arc, "Run Weave tests with --gc:arc":
+  exec "nimble install cligen"
   test "--gc:arc", "weave/cross_thread_com/channels_spsc_single.nim"
   test "--gc:arc", "weave/cross_thread_com/channels_spsc_single_ptr.nim"
   test "--gc:arc", "weave/cross_thread_com/channels_mpsc_unbounded_batch.nim"
