@@ -175,13 +175,13 @@ proc globalCleanup() =
   metrics:
     log("+========================================+\n")
 
-proc exit*(_: type Weave, auxiliary: AuxiliaryProc = WV_NoAuxiliary) =
+proc exit*(W: type Weave, auxiliary: AuxiliaryProc = WV_NoAuxiliary) =
   when auxiliary is proc() {.cdecl, gcsafe.}:
     globalCtx.auxiliaryExit = proc() {.nimcall, gcsafe.} = auxiliary
   else:
     globalCtx.auxiliaryExit = auxiliary
 
-  syncRoot(_)
+  syncRoot(W)
   signalTerminate(nil)
   workerContext.signaledTerminate = true
 
