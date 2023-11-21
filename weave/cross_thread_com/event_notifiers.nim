@@ -103,12 +103,18 @@ func initialize*(en: var EventNotifier) {.inline.} =
   en.phase.store(0, moRelaxed)
   en.signaled.store(false, moRelaxed)
 
-func `=destroy`*(en: var EventNotifier) {.inline.} =
-  when not supportsFutex:
-    en.cond.deinitCond()
-    en.lock.deinitLock()
+when defined(nimAllowNonVarDestructor):
+  func `=destroy`*(en: EventNotifier) {.inline.} =
+    when not supportsFutex:
+      en.cond.deinitCond()
+      en.lock.deinitLock()
+else:
+  func `=destroy`*(en: var EventNotifier) {.inline.} =
+    when not supportsFutex:
+      en.cond.deinitCond()
+      en.lock.deinitLock()
 
-func `=`*(dst: var EventNotifier, src: EventNotifier) {.error: "An event notifier cannot be copied".}
+func `=copy`*(dst: var EventNotifier, src: EventNotifier) {.error: "An event notifier cannot be copied".}
 func `=sink`*(dst: var EventNotifier, src: EventNotifier) {.error: "An event notifier cannot be moved".}
 
 func prepareToPark*(en: var EventNotifier) {.inline.} =
