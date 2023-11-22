@@ -7,7 +7,7 @@ jobs:
       fail-fast: false
       max-parallel: 20
       matrix:
-        nim_version: [version-1-6] # [version-1-4, devel]
+        nim_version: [version-1-6, version-2-0, devel] # [version-1-4, devel]
         target:
           - os: linux
             cpu: amd64
